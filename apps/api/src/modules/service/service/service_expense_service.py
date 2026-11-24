@@ -1,4 +1,4 @@
-"""Service expense service - posts via Finance PostingService only."""
+"""Service expense service — posts via Finance PostingService only."""
 
 from decimal import Decimal
 from uuid import UUID
@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
-from modules.platform.compat.audit_facade import PlatformAuditFacade
+from modules.foundation.service.audit_service import AuditService
 from modules.service.adapters.finance_port import ServiceFinanceAdapter
 from modules.service.domain.enums import SvcEntityType
 from modules.service.models import SvcServiceExpense
@@ -24,10 +24,10 @@ class ServiceExpenseService:
         self._numbers = DocumentNumberService(db)
         self._engine = ServiceExpenseEngine()
         self._finance = ServiceFinanceAdapter(db)
-        self._audit = PlatformAuditFacade(db)
+        self._audit = AuditService(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
-        cid = self._scope.resolve_list_company_id(ctx, company_id)
+        cid = self._scope.resolve_company_id(ctx, company_id)
         return self._repo.list_rows(ctx, cid)
 
     def get(self, ctx: TenantContext, row_id: UUID) -> SvcServiceExpense:

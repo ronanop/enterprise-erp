@@ -8,7 +8,6 @@ import { AssetOperationsContainer } from "@/components/assets/asset-operations-c
 import { BRANCH_ALL_VALUE } from "@/components/assets/shared";
 
 const fetchMock = vi.fn();
-const listBranchesMock = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
@@ -16,10 +15,6 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/components/assets/asset-operations-fetch", () => ({
   fetchAssetOperationsData: (...args: unknown[]) => fetchMock(...args),
-}));
-
-vi.mock("@/lib/org-options", () => ({
-  listBranchOptions: () => listBranchesMock(),
 }));
 
 const successPayload = {
@@ -32,30 +27,6 @@ const successPayload = {
     pending_disposal: 1,
     disposed: 0,
   },
-  transfersList: {
-    items: [
-      {
-        id: "t1",
-        document_number: "TRF-1",
-        asset_id: "asset-1",
-        from_location_label: "New Delhi · CRC2",
-        to_location_label: "Mumbai · CRC-1",
-        from_branch_id: "b1",
-        to_branch_id: "b1",
-        status: "submitted",
-        reason: "Move",
-      },
-    ],
-    total: 1,
-    page: 1,
-    page_size: 50,
-  },
-  assetsList: {
-    items: [{ id: "asset-1", asset_code: "AST-1", asset_name: "Laptop", branch_id: "b1" }],
-    total: 1,
-    page: 1,
-    page_size: 200,
-  },
   errors: {},
 };
 
@@ -65,7 +36,6 @@ afterEach(() => {
 });
 
 beforeEach(() => {
-  listBranchesMock.mockResolvedValue([{ id: "b1", label: "Noida" }]);
   fetchMock.mockResolvedValue(successPayload);
 });
 
@@ -78,26 +48,23 @@ describe("AssetOperationsContainer", () => {
     expect(screen.getByText("2")).toBeInTheDocument();
   });
 
-  it("renders transfer row from API", async () => {
+  it("does not render transfers section", async () => {
     render(<AssetOperationsContainer />);
     await waitFor(() => {
-      expect(screen.getByText("TRF-1")).toBeInTheDocument();
+      expect(screen.getByText("12")).toBeInTheDocument();
     });
-    expect(screen.getByText("Laptop")).toBeInTheDocument();
-    expect(screen.getByText("AST-1")).toBeInTheDocument();
+    expect(screen.queryByTestId("asset-ops-transfers")).not.toBeInTheDocument();
   });
 
   it("shows loading skeletons initially", () => {
-    fetchMock.mockImplementation(() => new Promise(() => { }));
+    fetchMock.mockImplementation(() => new Promise(() => {}));
     render(<AssetOperationsContainer />);
     expect(screen.getAllByLabelText("Loading statistic").length).toBeGreaterThan(0);
   });
 
-  it("shows error card when all requests fail", async () => {
+  it("shows error card when summary fails", async () => {
     fetchMock.mockResolvedValue({
       summary: null,
-      transfersList: null,
-      assetsList: null,
       errors: { summary: "Network error" },
     });
     render(<AssetOperationsContainer />);
@@ -114,8 +81,6 @@ describe("AssetOperationsContainer", () => {
       if (!allowSuccess) {
         return {
           summary: null,
-          transfersList: null,
-          assetsList: null,
           errors: { summary: "fail" },
         };
       }
@@ -133,22 +98,11 @@ describe("AssetOperationsContainer", () => {
     });
   });
 
-  it("loads dashboard for all locations", async () => {
+  it("loads dashboard for all locations without a location selector", async () => {
     render(<AssetOperationsContainer />);
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(BRANCH_ALL_VALUE);
     });
     expect(screen.queryByRole("group", { name: "Location" })).not.toBeInTheDocument();
-  });
-
-  it("shows empty transfer copy when list is empty", async () => {
-    fetchMock.mockResolvedValue({
-      ...successPayload,
-      transfersList: { items: [], total: 0, page: 1, page_size: 50 },
-    });
-    render(<AssetOperationsContainer />);
-    await waitFor(() => {
-      expect(screen.getByText("No transfers found.")).toBeInTheDocument();
-    });
   });
 });

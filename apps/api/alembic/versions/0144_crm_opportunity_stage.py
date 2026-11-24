@@ -1,14 +1,8 @@
 """Create CrmOpportunityStage table."""
 
-import sys
 from collections.abc import Sequence
-from pathlib import Path
 
 from alembic import op
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-
-from modules.crm.models.opportunity_stage import CrmOpportunityStage  # noqa: F401
 
 revision: str = "0144_crm_opportunity_stage"
 down_revision: str | None = "0143_crm_opportunity"
@@ -17,8 +11,16 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    try:
+        from modules.crm.models.opportunity_stage import CrmOpportunityStage  # noqa: F401
+    except ModuleNotFoundError:
+        return
     CrmOpportunityStage.__table__.create(bind=op.get_bind(), checkfirst=True)
 
 
 def downgrade() -> None:
+    try:
+        from modules.crm.models.opportunity_stage import CrmOpportunityStage  # noqa: F401
+    except ModuleNotFoundError:
+        return
     CrmOpportunityStage.__table__.drop(bind=op.get_bind(), checkfirst=True)

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeftRight, Boxes, Clock, RefreshCw, ShieldAlert, Tag, TriangleAlert, Unlock } from "lucide-react";
+import { ArrowLeftRight, Boxes, RefreshCw, ShieldAlert, TriangleAlert, Unlock } from "lucide-react";
 
 import { CrmErrorBanner, CrmListPanel, CrmPage, CrmSection, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { FinanceField, FinanceTextarea } from "@/components/finance/journals/finance-form-field";
@@ -15,13 +15,11 @@ import { ApiClientError } from "@/services/api-client";
 import {
   assignInventoryOwner,
   decideInventoryTransfer,
-  getInventoryAging,
   inventorySelection,
   listInventoryTransfers,
   listInventoryUnits,
   requestInventoryTransfer,
   setInventoryOpenForSale,
-  type InventoryAgingReport,
   type InventoryTransfer,
   type InventoryUnit,
 } from "@/services/crm-deal-controls-service";
@@ -38,23 +36,12 @@ const BUCKET_CLASS: Record<string, string> = {
   "365+": "bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-100",
 };
 
-function Stat({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: "danger" }) {
-  return (
-    <div className="rounded-xl border border-border/80 bg-card px-4 py-3 shadow-sm">
-      <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{label}</p>
-      <p className={`mt-1 text-xl font-bold tabular-nums ${tone === "danger" ? "text-red-700 dark:text-red-400" : ""}`}>{value}</p>
-      {hint ? <p className="text-[11px] text-muted-foreground">{hint}</p> : null}
-    </div>
-  );
-}
-
 /**
  * Organisation-wide stock: who owns it, how old it is, what it costs to keep,
  * and warranty left. Owners release stock for sale; others request it.
  */
 export function InventoryAgingPage() {
   const { user } = useAuthUser();
-  const [report, setReport] = useState<InventoryAgingReport | null>(null);
   const [units, setUnits] = useState<InventoryUnit[]>([]);
   const [transfers, setTransfers] = useState<InventoryTransfer[]>([]);
   const [members, setMembers] = useState<Option[]>([]);
@@ -74,13 +61,11 @@ export function InventoryAgingPage() {
     setLoading(true);
     setError(null);
     try {
-      const [agingRow, unitRows, transferRows, memberRows] = await Promise.all([
-        getInventoryAging(),
+      const [unitRows, transferRows, memberRows] = await Promise.all([
         listInventoryUnits(),
         listInventoryTransfers().catch(() => []),
         listCrmMemberOptions().catch(() => [] as Option[]),
       ]);
-      setReport(agingRow);
       setUnits(unitRows);
       setTransfers(transferRows);
       setMembers(memberRows);
@@ -149,88 +134,6 @@ export function InventoryAgingPage() {
       />
       {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
       {notice ? <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">{notice}</p> : null}
-
-      {report ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label="Stock value (cost)" value={formatInr(report.total.value)} hint={`${Number(report.total.units)} units on hand`} />
-          <Stat
-            label={`Older than ${report.target_max_age_days} days`}
-            value={formatInr(report.over_target.value)}
-            hint={`${Number(report.over_target.units)} units - target is under ${report.target_max_age_days} days`}
-            tone={Number(report.over_target.value) > 0 ? "danger" : undefined}
-          />
-          <Stat label="Carrying cost to date" value={formatInr(report.total.holding_cost)} hint="1% a month on purchase cost" />
-          <Stat
-            label="Warranty expired"
-            value={String(report.warranty_expired_units)}
-            hint="Units whose OEM warranty has already run out"
-            tone={report.warranty_expired_units > 0 ? "danger" : undefined}
-          />
-        </div>
-      ) : loading ? (
-        <div className="h-24 animate-pulse rounded-xl bg-muted/60" />
-      ) : null}
-
-      {report ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <CrmSection title="Aging" icon={Clock}>
-            <table className="w-full text-left text-[13px]">
-              <thead className="text-[11px] text-muted-foreground uppercase">
-                <tr>
-                  <th className="py-1.5 pr-3 font-semibold">Age (days)</th>
-                  <th className="py-1.5 pr-3 text-right font-semibold">Units</th>
-                  <th className="py-1.5 pr-3 text-right font-semibold">Value</th>
-                  <th className="py-1.5 text-right font-semibold">Carrying cost</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report.buckets.map((b) => (
-                  <tr
-                    key={b.bucket}
-                    className={`cursor-pointer border-t border-border/60 transition-colors duration-150 hover:bg-accent/30 ${bucket === b.bucket ? "bg-accent/40" : ""}`}
-                    onClick={() => setBucket((cur) => (cur === b.bucket ? "" : b.bucket))}
-                  >
-                    <td className="py-1.5 pr-3">
-                      <Badge className={`rounded-full border-transparent px-2.5 py-0.5 text-[11px] font-semibold ${BUCKET_CLASS[b.bucket] ?? ""}`}>
-                        {b.bucket}
-                      </Badge>
-                    </td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums">{Number(b.units)}</td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums">{formatInr(b.value)}</td>
-                    <td className="py-1.5 text-right tabular-nums">{formatInr(b.holding_cost)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </CrmSection>
-          <CrmSection title="By Owner" icon={Tag}>
-            <table className="w-full text-left text-[13px]">
-              <thead className="text-[11px] text-muted-foreground uppercase">
-                <tr>
-                  <th className="py-1.5 pr-3 font-semibold">Salesperson</th>
-                  <th className="py-1.5 pr-3 text-right font-semibold">Units</th>
-                  <th className="py-1.5 pr-3 text-right font-semibold">Value</th>
-                  <th className="py-1.5 text-right font-semibold">Oldest</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report.by_owner.slice(0, 12).map((o) => (
-                  <tr
-                    key={o.owner_employee_id ?? "open"}
-                    className="cursor-pointer border-t border-border/60 transition-colors duration-150 hover:bg-accent/30"
-                    onClick={() => setOwnerFilter(o.owner_employee_id ?? "open")}
-                  >
-                    <td className="py-1.5 pr-3">{o.owner_name}</td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums">{Number(o.units)}</td>
-                    <td className="py-1.5 pr-3 text-right tabular-nums">{formatInr(o.value)}</td>
-                    <td className="py-1.5 text-right tabular-nums">{o.oldest_age_days} d</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </CrmSection>
-        </div>
-      ) : null}
 
       {pendingForMe.length > 0 || pendingOther.length > 0 ? (
         <CrmSection title="Stock Requests" icon={ArrowLeftRight}>
@@ -352,7 +255,7 @@ export function InventoryAgingPage() {
         ) : null}
 
         <div className="erp-scroll overflow-x-auto">
-          <table className="w-full min-w-[1080px] text-left text-sm">
+          <table className="w-full min-w-[860px] text-left text-sm">
             <thead>
               <tr className={CRM_TABLE_HEAD_ROW}>
                 <th className="w-10 px-3 py-2.5">
@@ -366,21 +269,19 @@ export function InventoryAgingPage() {
                 </th>
                 <th className="px-3 py-2.5">Product</th>
                 <th className="px-3 py-2.5">Serial</th>
-                <th className="px-3 py-2.5">Owner</th>
                 <th className="px-3 py-2.5">Age</th>
                 <th className="px-3 py-2.5 text-right">Cost</th>
-                <th className="px-3 py-2.5 text-right">Today&apos;s value</th>
                 <th className="px-3 py-2.5">Warranty</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">Loading stock…</td>
+                  <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Loading stock…</td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">No stock matches these filters.</td>
+                  <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">No stock matches these filters.</td>
                 </tr>
               ) : (
                 filtered.map((u) => (
@@ -397,21 +298,11 @@ export function InventoryAgingPage() {
                     <td className="px-3 py-2">{u.product_name ?? "-"}</td>
                     <td className="px-3 py-2 font-mono text-xs">{u.serial_number ?? "-"}</td>
                     <td className="px-3 py-2">
-                      {u.status === "open_for_sale" ? (
-                        <Badge className="rounded-full border-transparent bg-sky-100 px-2.5 py-0.5 text-[11px] font-semibold text-sky-800 dark:bg-sky-900/50 dark:text-sky-200">
-                          Open for sale
-                        </Badge>
-                      ) : (
-                        u.owner_name ?? "-"
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
                       <Badge className={`rounded-full border-transparent px-2.5 py-0.5 text-[11px] font-semibold tabular-nums ${BUCKET_CLASS[u.aging_bucket] ?? ""}`}>
                         {u.age_days} d
                       </Badge>
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">{formatInr(u.unit_cost)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{formatInr(u.current_value)}</td>
                     <td className="px-3 py-2 text-xs">
                       {u.warranty_valid_till ? (
                         <span className={u.warranty_expired ? "inline-flex items-center gap-1 font-semibold text-red-700 dark:text-red-400" : ""}>

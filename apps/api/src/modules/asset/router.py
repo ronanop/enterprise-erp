@@ -4,6 +4,8 @@ from fastapi import APIRouter
 
 from modules.asset.routers.dc_challan import dc_challan_router
 from modules.asset.routers.domain_membership import domain_membership_router
+from modules.asset.routers.department_directory import department_directory_router
+from modules.asset.routers.employee_directory import employee_directory_router
 from modules.asset.routers.asset_type import asset_types_router
 from modules.asset.nonit.router import nonit_router
 from modules.asset.routers.site_location import site_buildings_router, site_locations_router
@@ -37,6 +39,8 @@ asset_router.include_router(asset_categories_router)
 asset_router.include_router(asset_types_router)
 asset_router.include_router(assets_router)
 asset_router.include_router(domain_membership_router)
+asset_router.include_router(employee_directory_router)
+asset_router.include_router(department_directory_router)
 asset_router.include_router(site_locations_router)
 asset_router.include_router(site_buildings_router)
 asset_router.include_router(nonit_router)

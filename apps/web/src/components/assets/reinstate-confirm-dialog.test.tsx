@@ -96,7 +96,7 @@ describe("ReinstateConfirmDialog", () => {
 
     expect(screen.getByTestId("reinstate-confirm-dialog")).toBeInTheDocument();
     expect(screen.getByText(/MacBook Pro/)).toBeInTheDocument();
-    expect(screen.getByText(/return the asset to Ready to Move/i)).toBeInTheDocument();
+    expect(screen.getByText(/return the asset to In Stock/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("reinstate-confirm-button"));
     expect(onConfirm).toHaveBeenCalledTimes(1);

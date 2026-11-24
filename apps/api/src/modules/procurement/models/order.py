@@ -42,6 +42,25 @@ class ProcOrderHeader(Base, *ProcTransactionMixin):
             "'received_at_warehouse','dispatched_to_site','reached_site','installed')",
             name="ck_proc_oh_delivery_milestone",
         ),
+        CheckConstraint(
+            "scm_approval_stage IS NULL OR scm_approval_stage IN ('accept_po', 'management')",
+            name="ck_proc_oh_scm_approval_stage",
+        ),
+        CheckConstraint(
+            "order_kind IN ('product', 'vendor_service', 'internal_service')",
+            name="ck_proc_oh_order_kind",
+        ),
+        CheckConstraint(
+            "fulfillment_stage IS NULL OR fulfillment_stage IN ("
+            "'awaiting_vendor_send','awaiting_vendor_response','vendor_rejected',"
+            "'vendor_accepted','customer_notified','vendor_dispatch_recorded',"
+            "'grn_in_stock','customer_delivery_ready','customer_dispatched','delivered')",
+            name="ck_proc_oh_fulfillment_stage",
+        ),
+        CheckConstraint(
+            "vendor_response_status IN ('pending', 'accepted', 'rejected')",
+            name="ck_proc_oh_vendor_response_status",
+        ),
         {"schema": "procurement"},
     )
 
@@ -88,6 +107,8 @@ class ProcOrderHeader(Base, *ProcTransactionMixin):
     invoiced_amount: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft", index=True)
     workflow_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # Two-stage SCM issue path: accept_po → management → issued (null).
+    scm_approval_stage: Mapped[str | None] = mapped_column(String(32), nullable=True)
     workflow_instance_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("foundation.wf_instance.id", ondelete="RESTRICT"),
@@ -96,6 +117,10 @@ class ProcOrderHeader(Base, *ProcTransactionMixin):
     source_module: Mapped[str | None] = mapped_column(String(50), nullable=True)
     source_document_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     source_document_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    # product (default OVF/inventory) | vendor_service | internal_service (Cache Service).
+    order_kind: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="product", server_default="product", index=True
+    )
     # Entity-based company PO number, e.g. PO/CDT/001 (assigned on finalize).
     company_po_number: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     entity_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
@@ -152,6 +177,30 @@ class ProcOrderHeader(Base, *ProcTransactionMixin):
     delivery_milestone: Mapped[str | None] = mapped_column(String(40), nullable=True)
     delivery_milestone_history: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     actual_delivery_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Post-issue fulfillment wizard (CRM POs): vendor send → response → customer mail →
+    # vendor dispatch → GRN → customer delivery / POD.
+    fulfillment_stage: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    vendor_response_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending", server_default="pending"
+    )
+    vendor_response_remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+    vendor_responded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    customer_promised_delivery_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    po_sent_to_vendor_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    customer_order_processed_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    customer_dispatch_shared_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    customer_pod_uploaded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    customer_delivery_meta: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     lines: Mapped[list["ProcOrderLine"]] = relationship(
         back_populates="order_header",
@@ -187,6 +236,8 @@ class ProcOrderLine(Base, *ProcTransactionMixin):
     )
     product_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
     product_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Item description entered on Create PO (kept separate from the product name).
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     quantity: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False)
     uom_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),

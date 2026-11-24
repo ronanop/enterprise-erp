@@ -52,9 +52,15 @@ class OrgScopeRepository:
         return self.db.scalar(stmt) is not None
 
     def user_has_branch_access(self, ctx: TenantContext, branch_id: UUID) -> bool:
+        """Branch access follows company access — never the parked session branch.
+
+        Cross-entity users must open CT/VAPL branches while Redis still holds
+        a CDPL HQ session branch from HRMS entity switching.
+        """
         if is_platform_admin(ctx) or ctx.user_type == "company_admin":
             return True
-        if ctx.branch_id and ctx.branch_id == branch_id:
+        # Module admins with no entity scopes keep full branch access.
+        if ctx.admin_module_keys and not ctx.scoped_company_ids:
             return True
         # Explicit assignment to this branch
         stmt = select(SecUserOrgScope).where(
@@ -63,10 +69,6 @@ class OrgScopeRepository:
             SecUserOrgScope.branch_id == branch_id,
         )
         if self.db.scalar(stmt) is not None:
-            return True
-        # Company-scoped users may manage every branch under companies they access.
-        # Module admins with no entity scopes keep full branch access.
-        if ctx.admin_module_keys and not ctx.scoped_company_ids:
             return True
         from modules.organization.models.branch import OrgBranch
 

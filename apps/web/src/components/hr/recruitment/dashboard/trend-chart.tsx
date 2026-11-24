@@ -18,7 +18,8 @@ import {
   type TrendRangeKey,
 } from "@/components/hr/recruitment/dashboard/dashboard-model";
 
-const PURPLE = "#9B5BB8";
+/** Deep teal — matches `--primary` (oklch 0.42 0.08 210) for SVG/chart fills */
+const CHART_PRIMARY = "#2A6B73";
 
 function TrendTooltip({
   active,
@@ -33,8 +34,8 @@ function TrendTooltip({
   return (
     <div className="rounded-[12px] border border-[#EEEFF3] bg-white px-3 py-2 shadow-[0_8px_24px_rgba(15,23,42,0.08)]">
       <p className="text-[11px] text-[#9CA3AF]">{point?.fullLabel}</p>
-      <p className="mt-1 flex items-center gap-1.5 text-[12px] font-medium text-[#7C3AED]">
-        <span className="size-2 rounded-full bg-[#7C3AED]" />
+      <p className="mt-1 flex items-center gap-1.5 text-[12px] font-medium text-primary">
+        <span className="size-2 rounded-full bg-primary" />
         {value} Applications
       </p>
     </div>
@@ -76,8 +77,8 @@ export function TrendChart({
             <AreaChart data={rows} margin={{ top: 18, right: 12, left: -18, bottom: 0 }}>
               <defs>
                 <linearGradient id={`rec-trend-${gradId}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={PURPLE} stopOpacity={0.28} />
-                  <stop offset="100%" stopColor={PURPLE} stopOpacity={0.02} />
+                  <stop offset="0%" stopColor={CHART_PRIMARY} stopOpacity={0.28} />
+                  <stop offset="100%" stopColor={CHART_PRIMARY} stopOpacity={0.02} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#EEF0F4" vertical={false} />
@@ -97,18 +98,18 @@ export function TrendChart({
               />
               <Tooltip
                 content={<TrendTooltip />}
-                cursor={{ stroke: PURPLE, strokeDasharray: "3 3", strokeOpacity: 0.45 }}
+                cursor={{ stroke: CHART_PRIMARY, strokeDasharray: "3 3", strokeOpacity: 0.45 }}
                 defaultIndex={lastIndex}
               />
               <Area
                 type="monotone"
                 dataKey="value"
                 name="Applications"
-                stroke={PURPLE}
+                stroke={CHART_PRIMARY}
                 strokeWidth={2.4}
                 fill={`url(#rec-trend-${gradId})`}
-                dot={{ r: 3.5, fill: "#fff", stroke: PURPLE, strokeWidth: 2 }}
-                activeDot={{ r: 5, fill: PURPLE, stroke: "#fff", strokeWidth: 2 }}
+                dot={{ r: 3.5, fill: "#fff", stroke: CHART_PRIMARY, strokeWidth: 2 }}
+                activeDot={{ r: 5, fill: CHART_PRIMARY, stroke: "#fff", strokeWidth: 2 }}
                 isAnimationActive={false}
               />
             </AreaChart>

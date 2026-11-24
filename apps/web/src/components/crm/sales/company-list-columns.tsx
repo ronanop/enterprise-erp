@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Columns3 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { useCrmSettingsEffective } from "@/hooks/use-crm-settings";
+import { visibleTableColumns, type CrmSettingsConfig } from "@/services/crm-settings-service";
 
 export const COMPANY_LIST_COLUMN_IDS = [
   "customer_name",
@@ -15,9 +17,9 @@ export const COMPANY_LIST_COLUMN_IDS = [
   "source",
 ] as const;
 
-export type CompanyListColumnId = (typeof COMPANY_LIST_COLUMN_IDS)[number];
+export type CompanyListColumnId = string;
 
-export const COMPANY_LIST_COLUMN_LABELS: Record<CompanyListColumnId, string> = {
+export const COMPANY_LIST_COLUMN_LABELS: Record<string, string> = {
   customer_name: "Company Name",
   phone: "Phone",
   customer_email: "Email",
@@ -29,26 +31,24 @@ export const COMPANY_LIST_COLUMN_LABELS: Record<CompanyListColumnId, string> = {
 
 const STORAGE_KEY = "crm.company-list.visible-columns";
 
-const DEFAULT_VISIBLE = new Set<CompanyListColumnId>(COMPANY_LIST_COLUMN_IDS);
+const DEFAULT_VISIBLE = new Set<string>(COMPANY_LIST_COLUMN_IDS);
 
-function loadVisibleColumns(): Set<CompanyListColumnId> {
-  if (typeof window === "undefined") return new Set(DEFAULT_VISIBLE);
+function loadUserOverride(): Set<string> | null {
+  if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return new Set(DEFAULT_VISIBLE);
+    if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return new Set(DEFAULT_VISIBLE);
-    const valid = parsed.filter((id): id is CompanyListColumnId =>
-      COMPANY_LIST_COLUMN_IDS.includes(id as CompanyListColumnId),
-    );
+    if (!Array.isArray(parsed)) return null;
+    const valid = parsed.map((id) => String(id)).filter(Boolean);
     if (valid.length === 0) return new Set(["customer_name"]);
     return new Set(valid);
   } catch {
-    return new Set(DEFAULT_VISIBLE);
+    return null;
   }
 }
 
-function saveVisibleColumns(cols: Set<CompanyListColumnId>) {
+function saveVisibleColumns(cols: Set<string>) {
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify([...cols]));
   } catch {
@@ -56,12 +56,41 @@ function saveVisibleColumns(cols: Set<CompanyListColumnId>) {
   }
 }
 
+function tenantDefaultVisible(settingsColumns: Array<{ key: string; visible?: boolean }>): Set<string> {
+  if (!settingsColumns.length) return new Set(DEFAULT_VISIBLE);
+  const next = settingsColumns.filter((c) => c.visible !== false).map((c) => c.key);
+  return next.length > 0 ? new Set(next) : new Set(["customer_name"]);
+}
+
+export function companyTableColumnDefs(settings: CrmSettingsConfig | null | undefined) {
+  const fromSettings = visibleTableColumns(settings, "company");
+  if (fromSettings.length) return fromSettings;
+  return COMPANY_LIST_COLUMN_IDS.map((key, order) => ({
+    key,
+    label: COMPANY_LIST_COLUMN_LABELS[key] ?? key,
+    visible: true,
+    order,
+  }));
+}
+
+export function companyColumnLabel(
+  settings: CrmSettingsConfig | null | undefined,
+  key: string,
+): string {
+  const row = companyTableColumnDefs(settings).find((c) => c.key === key);
+  return row?.label ?? COMPANY_LIST_COLUMN_LABELS[key] ?? key;
+}
+
 export function CompanyListColumnPicker({
   visible,
   onChange,
+  columnKeys,
+  settings,
 }: {
-  visible: Set<CompanyListColumnId>;
-  onChange: (next: Set<CompanyListColumnId>) => void;
+  visible: Set<string>;
+  onChange: (next: Set<string>) => void;
+  columnKeys: string[];
+  settings: CrmSettingsConfig | null | undefined;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -78,7 +107,7 @@ export function CompanyListColumnPicker({
   }, [open]);
 
   const toggle = useCallback(
-    (id: CompanyListColumnId) => {
+    (id: string) => {
       const next = new Set(visible);
       if (next.has(id)) {
         if (next.size <= 1) return;
@@ -115,7 +144,7 @@ export function CompanyListColumnPicker({
             Show columns
           </p>
           <ul className="space-y-0.5">
-            {COMPANY_LIST_COLUMN_IDS.map((id) => (
+            {columnKeys.map((id) => (
               <li key={id}>
                 <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/60">
                   <input
@@ -124,7 +153,7 @@ export function CompanyListColumnPicker({
                     checked={visible.has(id)}
                     onChange={() => toggle(id)}
                   />
-                  {COMPANY_LIST_COLUMN_LABELS[id]}
+                  {companyColumnLabel(settings, id)}
                 </label>
               </li>
             ))}
@@ -135,12 +164,26 @@ export function CompanyListColumnPicker({
   );
 }
 
+/** Tenant Settings defaults first; localStorage user override wins when present. */
 export function useCompanyListVisibleColumns() {
-  const [visible, setVisible] = useState<Set<CompanyListColumnId>>(() => new Set(DEFAULT_VISIBLE));
+  const { settings } = useCrmSettingsEffective();
+  const columnKeys = useMemo(
+    () => companyTableColumnDefs(settings).map((c) => c.key),
+    [settings],
+  );
+  const [visible, setVisible] = useState<Set<string>>(() => new Set(DEFAULT_VISIBLE));
 
   useEffect(() => {
-    setVisible(loadVisibleColumns());
-  }, []);
+    const override = loadUserOverride();
+    if (override) {
+      setVisible(override);
+      return;
+    }
+    const tenantCols = visibleTableColumns(settings, "company");
+    setVisible(
+      tenantDefaultVisible(tenantCols.length ? tenantCols : companyTableColumnDefs(settings)),
+    );
+  }, [settings]);
 
-  return [visible, setVisible] as const;
+  return [visible, setVisible, columnKeys] as const;
 }

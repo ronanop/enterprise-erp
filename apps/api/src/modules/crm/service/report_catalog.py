@@ -315,7 +315,7 @@ COLUMNS: dict[str, list[dict[str, str]]] = {
         _col("quote_stage", "Quote Stage"),
         _col("approval_status", "Approval Status"),
         _col("locked", "Locked"),
-        _col("valid_until", "Valid Until"),
+        _col("valid_until", "Price Validity Date"),
         _col("owner_name", "Owner Name"),
         _col("service_type", "Service Type"),
         _col("grand_total", "Grand Total"),

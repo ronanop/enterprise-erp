@@ -9,6 +9,7 @@ import {
 import { FinanceField, FinanceSelect } from "@/components/finance/journals/finance-form-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CrmCustomFieldsSection } from "@/components/crm/sales/crm-custom-fields-section";
 import { ApiClientError } from "@/services/api-client";
 import {
   createContact,
@@ -41,6 +42,7 @@ export function ContactFormDialog({
   onSaved?: () => void;
 }) {
   const [form, setForm] = useState<ContactFormInput>(EMPTY);
+  const [customFields, setCustomFields] = useState<Record<string, unknown>>({});
   const [companies, setCompanies] = useState<Company[]>([]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -52,6 +54,7 @@ export function ContactFormDialog({
   useEffect(() => {
     if (!open) return;
     setFormError(null);
+    setCustomFields({});
     if (companyAccount) {
       setForm({
         ...EMPTY,
@@ -93,7 +96,10 @@ export function ContactFormDialog({
     setSaving(true);
     setFormError(null);
     try {
-      await createContact(form);
+      await createContact({
+        ...form,
+        custom_fields: Object.keys(customFields).length > 0 ? customFields : null,
+      });
       onClose();
       onSaved?.();
     } catch (err) {
@@ -186,6 +192,10 @@ export function ContactFormDialog({
               />
               Primary contact for this company
             </label>
+          </div>
+
+          <div className="mt-3">
+            <CrmCustomFieldsSection entity="contact" values={customFields} onChange={setCustomFields} />
           </div>
 
           <div className="mt-4 flex justify-end gap-2">

@@ -258,7 +258,32 @@ class Settings(BaseSettings):
         alias="PROJECT_STAGE_EMAIL_NOTIFICATIONS_ENABLED",
     )
 
-    # Email → Service Request Ticket automation (inbox read via IMAP_*)
+    # Microsoft Graph / Entra (optional aliases for Graph mailbox + OAuth apps)
+    microsoft_tenant_id: str = Field(default="", alias="MICROSOFT_TENANT_ID")
+    microsoft_client_id: str = Field(default="", alias="MICROSOFT_CLIENT_ID")
+    microsoft_client_secret: str = Field(default="", alias="MICROSOFT_CLIENT_SECRET")
+    microsoft_redirect_uri: str = Field(default="", alias="MICROSOFT_REDIRECT_URI")
+    microsoft_user_email_domain: str = Field(default="", alias="MICROSOFT_USER_EMAIL_DOMAIN")
+    microsoft_platform_admin_emails: str = Field(
+        default="", alias="MICROSOFT_PLATFORM_ADMIN_EMAILS"
+    )
+    azure_tenant_id: str = Field(default="", alias="AZURE_TENANT_ID")
+    azure_client_id: str = Field(default="", alias="AZURE_CLIENT_ID")
+    azure_client_secret: str = Field(default="", alias="AZURE_CLIENT_SECRET")
+    azure_from_email: str = Field(default="", alias="AZURE_FROM_EMAIL")
+    graph_mailbox_email: str = Field(default="", alias="GRAPH_MAILBOX_EMAIL")
+    graph_mail_poll_enabled: bool = Field(default=True, alias="GRAPH_MAIL_POLL_ENABLED")
+
+    # MailAPI — local M365 mail proxy (preferred without Graph secrets)
+    mailapi_enabled: bool = Field(default=False, alias="MAILAPI_ENABLED")
+    mailapi_base_url: str = Field(default="", alias="MAILAPI_BASE_URL")
+    mailapi_api_key: str = Field(default="", alias="MAILAPI_API_KEY")
+    mailapi_mailbox: str = Field(default="", alias="MAILAPI_MAILBOX")
+    mailapi_poll_interval_seconds: int = Field(
+        default=120, alias="MAILAPI_POLL_INTERVAL_SECONDS"
+    )
+
+    # Email → Service Request Ticket automation (IMAP / Graph / MailAPI)
     email_ticket_enabled: bool = Field(default=False, alias="EMAIL_TICKET_ENABLED")
     email_inbound_webhook_secret: str = Field(default="", alias="EMAIL_INBOUND_WEBHOOK_SECRET")
     email_ticket_default_branch_id: str | None = Field(
@@ -270,13 +295,18 @@ class Settings(BaseSettings):
     email_ticket_default_customer_id: str | None = Field(
         default=None, alias="EMAIL_TICKET_DEFAULT_CUSTOMER_ID"
     )
-    email_ticket_subject_patterns: str = Field(default="", alias="EMAIL_TICKET_SUBJECT_PATTERNS")
+    email_ticket_subject_patterns: str = Field(
+        default="ticket", alias="EMAIL_TICKET_SUBJECT_PATTERNS"
+    )
+    email_ticket_accept_all: bool = Field(default=False, alias="EMAIL_TICKET_ACCEPT_ALL")
     smtp_host: str = Field(default="", alias="SMTP_HOST")
     smtp_port: int = Field(default=587, alias="SMTP_PORT")
     smtp_user: str = Field(default="", alias="SMTP_USER")
     smtp_password: str = Field(default="", alias="SMTP_PASSWORD")
     smtp_from_address: str = Field(default="", alias="SMTP_FROM_ADDRESS")
     smtp_use_tls: bool = Field(default=True, alias="SMTP_USE_TLS")
+    # Minimum seconds between SMTP sends (rate-limit friendly; Hostinger etc.)
+    smtp_send_delay_seconds: float = Field(default=2.0, alias="SMTP_SEND_DELAY_SECONDS")
     imap_enabled: bool = Field(default=False, alias="IMAP_ENABLED")
     imap_host: str = Field(default="", alias="IMAP_HOST")
     imap_port: int = Field(default=993, alias="IMAP_PORT")
@@ -284,7 +314,91 @@ class Settings(BaseSettings):
     imap_password: str = Field(default="", alias="IMAP_PASSWORD")
     imap_mailbox: str = Field(default="INBOX", alias="IMAP_MAILBOX")
     imap_poll_interval_seconds: int = Field(default=120, alias="IMAP_POLL_INTERVAL_SECONDS")
+    sms_gateway_enabled: bool = Field(default=False, alias="SMS_GATEWAY_ENABLED")
+    sms_gateway_url: str = Field(default="", alias="SMS_GATEWAY_URL")
+    sms_gateway_api_key: str = Field(default="", alias="SMS_GATEWAY_API_KEY")
+    whatsapp_gateway_enabled: bool = Field(default=False, alias="WHATSAPP_GATEWAY_ENABLED")
+    whatsapp_gateway_url: str = Field(default="", alias="WHATSAPP_GATEWAY_URL")
+    whatsapp_gateway_api_key: str = Field(default="", alias="WHATSAPP_GATEWAY_API_KEY")
     service_followup_hours: int = Field(default=24, alias="SERVICE_FOLLOWUP_HOURS")
+    service_reopen_restart_sla: bool = Field(default=False, alias="SERVICE_REOPEN_RESTART_SLA")
+    service_roster_visibility_enabled: bool = Field(
+        default=False, alias="SERVICE_ROSTER_VISIBILITY_ENABLED"
+    )
+    service_roster_open_reminder_enabled: bool = Field(
+        default=True, alias="SERVICE_ROSTER_OPEN_REMINDER_ENABLED"
+    )
+    service_roster_open_reminder_seconds: int = Field(
+        default=600, alias="SERVICE_ROSTER_OPEN_REMINDER_SECONDS"
+    )
+    service_working_day_start_hour: int = Field(
+        default=9, alias="SERVICE_WORKING_DAY_START_HOUR"
+    )
+    service_working_day_end_hour: int = Field(default=18, alias="SERVICE_WORKING_DAY_END_HOUR")
+    service_business_utc_offset_minutes: int = Field(
+        default=330, alias="SERVICE_BUSINESS_UTC_OFFSET_MINUTES"
+    )
+
+    def resolved_graph_tenant_id(self) -> str:
+        return (self.azure_tenant_id or self.microsoft_tenant_id or "").strip()
+
+    def resolved_graph_client_id(self) -> str:
+        return (self.azure_client_id or self.microsoft_client_id or "").strip()
+
+    def resolved_graph_client_secret(self) -> str:
+        return (self.azure_client_secret or self.microsoft_client_secret or "").strip()
+
+    def resolved_graph_mailbox(self) -> str:
+        return (
+            self.graph_mailbox_email
+            or self.azure_from_email
+            or self.imap_user
+            or ""
+        ).strip()
+
+    def resolved_support_mailbox(self) -> str:
+        return (
+            self.mailapi_mailbox
+            or self.resolved_graph_mailbox()
+            or ""
+        ).strip()
+
+    @property
+    def mailapi_configured(self) -> bool:
+        return bool(
+            self.email_ticket_enabled
+            and self.mailapi_enabled
+            and (self.mailapi_base_url or "").strip()
+            and (self.mailapi_api_key or "").strip()
+        )
+
+    @property
+    def graph_mail_configured(self) -> bool:
+        return bool(
+            self.email_ticket_enabled
+            and self.graph_mail_poll_enabled
+            and self.resolved_graph_tenant_id()
+            and self.resolved_graph_client_id()
+            and self.resolved_graph_client_secret()
+            and self.resolved_graph_mailbox()
+        )
+
+    def graph_credential_diagnostics(self) -> dict:
+        present: list[str] = []
+        missing: list[str] = []
+        checks = {
+            "tenant_id": self.resolved_graph_tenant_id(),
+            "client_id": self.resolved_graph_client_id(),
+            "client_secret": self.resolved_graph_client_secret(),
+            "mailbox": self.resolved_graph_mailbox(),
+        }
+        for key, value in checks.items():
+            (present if value else missing).append(key)
+        return {
+            "present": present,
+            "missing": missing,
+            "hint": "Set MICROSOFT_* or AZURE_* plus GRAPH_MAILBOX_EMAIL / AZURE_FROM_EMAIL",
+        }
 
     # ElevenLabs Conversational AI (voice agent - server-side only)
     xi_api_key: str = Field(
@@ -441,6 +555,7 @@ class Settings(BaseSettings):
             "use_tls": self.smtp_use_tls,
             "auth": bool(self.smtp_user.strip()),
             "from_email": self.smtp_from_address.strip() or None,
+            "send_delay_seconds": self.smtp_send_delay_seconds,
             "env_files_found": [p for p in _ENV_FILES if Path(p).is_file()],
             "hint": (
                 None

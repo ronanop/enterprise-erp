@@ -288,6 +288,12 @@ services:
       PORT: "3000"
       HOSTNAME: 0.0.0.0
       API_INTERNAL_URL: http://api:8000
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_ADDRESS: ${SMTP_FROM_ADDRESS:-}
     ports:
       - "3000:3000"
     depends_on:

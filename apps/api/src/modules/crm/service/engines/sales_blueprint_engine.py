@@ -6,17 +6,17 @@ legacy CRM lead & opportunity flows:
 
     LEAD:        open -> converted | lost
     OPPORTUNITY: open -> boq_pending -> boq_approval -> deal_reg ->
-                 oem_pending -> oem_attached -> quote_ready ->
+                 oem_pending -> quote_ready ->
                  quote_in_progress -> po_pending -> po_approval
                  (finance -> legal terms -> management) ->
-                 ovf_ready -> won | lost
+                 ovf_ready -> won
     QUOTE:       draft -> internal_approval -> approved_internal ->
                  sent_to_customer -> negotiation | follow_up | accepted | lost
-    OVF:         draft -> approval -> approved -> shared_scm -> deal_won
+    OVF:         draft -> approval -> approved -> shared_scm (CRM terminal; deal_won kept for legacy rows)
 
-Every entity also supports a universal "lost" action from any non-terminal
-state (per product rule: "Lost available until Deal Won"), except OVF which
-has no lost state (it only exists after the deal is effectively secured).
+Deal won is set when the customer accepts the quote; PO/OVF continue as
+fulfilment. Lost is available until quote acceptance (not after). OVF has no
+lost state.
 
 This module is intentionally free of DB/session concerns: it operates on
 plain (entity_type, state, action) values so it can be unit tested in
@@ -121,14 +121,18 @@ _TRANSITIONS: dict[str, dict[str, dict[str, str]]] = {
             "send_boq_for_attachment": "boq_attachment_pending",
             "send_sow_for_attachment": "sow_attachment_pending",
         },
-        "oem_pending": {"oem_received": "oem_attached", "lost": "lost"},
+        # After BOQ/SOW (and Deal Reg when needed), attach the vendor quotation
+        # directly — no separate "Vendor Quotation Received" acknowledgement.
+        "oem_pending": {"attach_oem_quote": "quote_ready", "lost": "lost"},
+        # Legacy: opportunities already marked received before the attach-only flow.
         "oem_attached": {"attach_oem_quote": "quote_ready", "lost": "lost"},
         "quote_ready": {"create_quote": "quote_in_progress", "lost": "lost"},
+        # Quote acceptance wins the deal commercially; PO/OVF continue as
+        # fulfilment. Deal Lost is not offered after the quote is accepted.
         "quote_in_progress": {"quote_accepted": "po_pending", "lost": "lost"},
         "po_pending": {
-            "attach_po": "po_pending",
-            "send_po_approval": "po_approval",
-            "lost": "lost",
+            # Attach Customer PO also starts the Finance → Legal → Management chain.
+            "attach_po": "po_approval",
         },
         # Customer PO validation runs Finance (tax/GST) → Legal (terms &
         # conditions) → Management. The first two stages stay in ``po_approval``
@@ -140,9 +144,8 @@ _TRANSITIONS: dict[str, dict[str, dict[str, str]]] = {
             "reject_po_terms": "po_pending",
             "approve_po": "ovf_ready",
             "reject_po": "po_pending",
-            "lost": "lost",
         },
-        "ovf_ready": {"create_ovf": "ovf_ready", "deal_won": "won", "lost": "lost"},
+        "ovf_ready": {"create_ovf": "ovf_ready", "deal_won": "won"},
         "won": {},
         "lost": {},
     },
@@ -159,23 +162,28 @@ _TRANSITIONS: dict[str, dict[str, dict[str, str]]] = {
             "reject_internally": "draft",
             "lost": "lost",
         },
-        "approved_internal": {"send_to_customer": "sent_to_customer", "lost": "lost"},
+        "approved_internal": {
+            "send_to_customer": "sent_to_customer",
+            # Edit (and negotiate) freezes this version and opens the next draft for re-approval.
+            "negotiate": "draft",
+            "lost": "lost",
+        },
         "sent_to_customer": {
-            "negotiate": "negotiation",
-            "follow_up": "follow_up",
+            # Create Quote Vn (negotiate) → next draft; Deal Won (accept); Deal Lost.
+            "negotiate": "draft",
             "accept": "accepted",
             "lost": "lost",
         },
         "negotiation": {
-            "follow_up": "follow_up",
+            # Legacy rows stuck in negotiation: same three outcomes as sent_to_customer.
+            "negotiate": "draft",
             "accept": "accepted",
-            "negotiate": "negotiation",
             "lost": "lost",
         },
         "follow_up": {
-            "negotiate": "negotiation",
+            # Legacy follow-up rows: Create Quote Vn / Deal Won / Deal Lost.
+            "negotiate": "draft",
             "accept": "accepted",
-            "follow_up": "follow_up",
             "lost": "lost",
         },
         "accepted": {},
@@ -185,7 +193,8 @@ _TRANSITIONS: dict[str, dict[str, dict[str, str]]] = {
         "draft": {"send_for_approval": "approval"},
         "approval": {"approve": "approved", "reject": "draft"},
         "approved": {"share_to_scm": "shared_scm"},
-        "shared_scm": {"deal_won": "deal_won"},
+        # Shared to SCM is the last CRM step — no further blueprint transitions.
+        "shared_scm": {},
         "deal_won": {},
     },
 }
@@ -194,31 +203,72 @@ TERMINAL_STATES: dict[str, set[str]] = {
     LEAD: {"converted", "lost"},
     OPPORTUNITY: {"won", "lost"},
     QUOTE: {"accepted", "lost"},
-    OVF: {"deal_won"},
+    OVF: {"shared_scm", "deal_won"},
 }
 
 
-def allowed_actions(entity: str, state: str) -> list[str]:
-    """Return the list of action names valid from ``state`` for ``entity``."""
+def _merged_state_actions(
+    entity: str,
+    state: str,
+    overlay_transitions: list[dict[str, Any]] | None = None,
+) -> dict[str, str]:
+    """Stock transitions for ``state``, plus Settings overlay rows for the entity.
+
+    Overlay rows look like ``{from, action, to, approval_step_key?}``. When
+    ``entity`` is omitted on a row it applies to opportunity (sales-flow builder).
+    """
     table = _TRANSITIONS.get(entity)
     if table is None:
         raise InvalidBlueprintState(f"Unknown blueprint entity '{entity}'")
-    return sorted(table.get(state, {}).keys())
+    merged = dict(table.get(state, {}))
+    if not overlay_transitions:
+        return merged
+    for raw in overlay_transitions:
+        if not isinstance(raw, dict):
+            continue
+        row_entity = str(raw.get("entity") or "opportunity").strip().lower()
+        if row_entity != entity:
+            continue
+        from_state = str(raw.get("from") or "").strip()
+        action = str(raw.get("action") or "").strip()
+        to_state = str(raw.get("to") or "").strip()
+        if not from_state or not action or not to_state:
+            continue
+        if from_state != state:
+            continue
+        merged[action] = to_state
+    return merged
 
 
-def transition(entity: str, state: str, action: str, ctx: Any = None) -> str:
+def allowed_actions(
+    entity: str,
+    state: str,
+    overlay_transitions: list[dict[str, Any]] | None = None,
+) -> list[str]:
+    """Return the list of action names valid from ``state`` for ``entity``."""
+    return sorted(
+        _merged_state_actions(entity, state, overlay_transitions=overlay_transitions).keys()
+    )
+
+
+def transition(
+    entity: str,
+    state: str,
+    action: str,
+    ctx: Any = None,
+    overlay_transitions: list[dict[str, Any]] | None = None,
+) -> str:
     """Return the resulting state for ``action`` taken from ``state``.
 
     Raises :class:`InvalidBlueprintState` if the action is not permitted from
     the current state. ``ctx`` is accepted (and currently unused) so callers
     can pass request/service context for future extension without changing
-    the call signature.
+    the call signature. Optional ``overlay_transitions`` merges tenant Settings
+    custom edges onto the stock table.
     """
-    table = _TRANSITIONS.get(entity)
-    if table is None:
-        raise InvalidBlueprintState(f"Unknown blueprint entity '{entity}'")
-    state_actions = table.get(state)
-    if state_actions is None or action not in state_actions:
+    _ = ctx
+    state_actions = _merged_state_actions(entity, state, overlay_transitions=overlay_transitions)
+    if action not in state_actions:
         raise InvalidBlueprintState(
             f"Action '{action}' is not allowed for {entity} in state '{state}'"
         )

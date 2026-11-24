@@ -32,6 +32,92 @@ def _category(company_id):
     return cat
 
 
+def test_active_update_ignores_unchanged_asset_type_id() -> None:
+    """Edit Asset echoes asset_type_id; unchanged value must not fail draft-only lock."""
+    validator = RegistrationValidator(MagicMock())
+    ctx = _ctx()
+    type_id = uuid4()
+    row = MagicMock()
+    row.status = "active"
+    row.company_id = ctx.company_id
+    row.asset_type_id = type_id
+    row.asset_name = "Laptop"
+    row.asset_category_id = uuid4()
+    row.asset_type = "fixed"
+    row.purchase_date = date.today()
+    row.purchase_cost = Decimal("0")
+    row.currency_code = "INR"
+    row.supplier_vendor_id = None
+    row.department_id = None
+    row.custodian_employee_id = None
+    row.serial_number = None
+    row.barcode = None
+    row.purchase_order_id = None
+    row.grn_id = None
+    fields = {"asset_name": "Laptop", "asset_type_id": str(type_id), "make": "Apple"}
+    with patch.object(validator, "_validate_common") as common:
+        validator.validate_update_fields(ctx, row, fields)
+    assert "asset_type_id" not in fields
+    assert fields["make"] == "Apple"
+    common.assert_called_once()
+
+
+def test_active_update_allows_changed_asset_type_id() -> None:
+    validator = RegistrationValidator(MagicMock())
+    ctx = _ctx()
+    row = MagicMock()
+    row.status = "active"
+    row.company_id = ctx.company_id
+    row.asset_type_id = uuid4()
+    row.asset_name = "Laptop"
+    row.asset_category_id = uuid4()
+    row.asset_type = "fixed"
+    row.purchase_date = date.today()
+    row.purchase_cost = Decimal("0")
+    row.currency_code = "INR"
+    row.supplier_vendor_id = None
+    row.department_id = None
+    row.custodian_employee_id = None
+    row.serial_number = None
+    row.barcode = None
+    row.purchase_order_id = None
+    row.grn_id = None
+    new_type = uuid4()
+    fields = {"asset_type_id": str(new_type), "asset_name": "Desktop"}
+    with patch.object(validator, "_validate_common") as common:
+        validator.validate_update_fields(ctx, row, fields)
+    assert fields["asset_type_id"] == str(new_type)
+    common.assert_called_once()
+
+
+def test_active_update_skips_stale_custodian_validation() -> None:
+    """Existing soft-deleted custodian must not block unrelated Edit Asset fields."""
+    validator = RegistrationValidator(MagicMock())
+    ctx = _ctx()
+    stale = uuid4()
+    row = MagicMock()
+    row.status = "active"
+    row.company_id = ctx.company_id
+    row.asset_type_id = uuid4()
+    row.asset_name = "Laptop"
+    row.asset_category_id = uuid4()
+    row.asset_type = "fixed"
+    row.purchase_date = date.today()
+    row.purchase_cost = Decimal("0")
+    row.currency_code = "INR"
+    row.supplier_vendor_id = None
+    row.department_id = None
+    row.custodian_employee_id = stale
+    row.serial_number = None
+    row.barcode = None
+    row.purchase_order_id = None
+    row.grn_id = None
+    fields = {"make": "Dell"}
+    with patch.object(validator._master, "get_employee") as get_emp:
+        validator.validate_update_fields(ctx, row, fields)
+    get_emp.assert_not_called()
+
+
 def test_rejects_client_supplied_asset_code() -> None:
     db = MagicMock()
     validator = RegistrationValidator(db)

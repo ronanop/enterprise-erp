@@ -83,7 +83,7 @@ export type EmployeeDocumentItem = {
   uploadedBy: string;
   uploadedAt: string;
   /** Where the file came from - onboarding portal vs HR/manual. */
-  source?: "onboarding" | "hr" | "manual";
+  source?: "onboarding" | "bg_check" | "hr" | "manual";
 };
 
 export type EducationEntry = {

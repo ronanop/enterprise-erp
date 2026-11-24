@@ -2,11 +2,12 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { ArrowLeft, ClipboardCheck, UserRound } from "lucide-react";
+import { ArrowLeft, ClipboardCheck, PackageCheck } from "lucide-react";
 
 import {
   EmptyState,
   StatusBadge,
+  formatDropdownLabel,
 } from "@/components/assets/shared";
 import {
   ASSETS_ACCENT_BTN,
@@ -72,8 +73,8 @@ export type UserTransferWorkspaceProps = {
 
 function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="grid gap-1 border-b border-border/40 py-3 last:border-b-0 sm:grid-cols-[10rem_1fr] sm:gap-4">
-      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+    <div className="grid gap-1 border-b border-border/40 py-2.5 last:border-b-0 sm:grid-cols-[9.5rem_1fr] sm:gap-4">
+      <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </dt>
       <dd className="text-sm text-foreground">{value || "—"}</dd>
@@ -95,6 +96,57 @@ function componentLabel(row: NonNullable<UserTransferContext["components"]>[numb
     row.component_code ||
     row.component_type ||
     row.component_id
+  );
+}
+
+function TransferStepRail({ stage }: { stage: UserTransferStage }) {
+  const steps = [
+    { id: "verification" as const, label: "Verify" },
+    { id: "destination" as const, label: "Destination" },
+  ];
+  return (
+    <ol
+      className="flex flex-wrap items-center gap-2"
+      aria-label="Transfer steps"
+      data-testid="user-transfer-steps"
+    >
+      {steps.map((step, index) => {
+        const active = stage === step.id;
+        const done = stage === "destination" && step.id === "verification";
+        return (
+          <li key={step.id} className="flex items-center gap-2">
+            {index > 0 ? (
+              <span aria-hidden className="h-px w-6 bg-border sm:w-10" />
+            ) : null}
+            <span
+              className={cn(
+                "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-200",
+                active
+                  ? "border-primary/40 bg-primary/10 text-foreground"
+                  : done
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-border bg-muted/40 text-muted-foreground",
+              )}
+              aria-current={active ? "step" : undefined}
+            >
+              <span
+                className={cn(
+                  "flex size-5 items-center justify-center rounded-full text-[10px] font-semibold tabular-nums",
+                  active
+                    ? "bg-primary text-primary-foreground"
+                    : done
+                      ? "bg-emerald-600 text-white"
+                      : "bg-muted text-muted-foreground",
+                )}
+              >
+                {index + 1}
+              </span>
+              {step.label}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -138,7 +190,6 @@ export function UserTransferWorkspace({
     <AssetsPremiumPage testId="user-transfer-workspace">
       <PageHeader
         title="Transfer Asset"
-        description="Verify the asset before choosing the next custody step."
         actions={
           <Button
             type="button"
@@ -198,13 +249,17 @@ export function UserTransferWorkspace({
       ) : null}
 
       {assetId && !loading && !errorMessage && context ? (
-        <div className="space-y-5">
+        <div className="space-y-4">
+          <TransferStepRail stage={stage} />
+
           <Card className={ASSETS_SURFACE_CARD} data-testid="user-transfer-asset-summary">
-            <CardHeader className="border-b border-border/60 pb-4">
-              <CardTitle className="text-base font-semibold">Asset details</CardTitle>
+            <CardHeader className="border-b border-border/60 pb-3">
+              <CardTitle className="text-base font-semibold tracking-tight">
+                Asset & assignment
+              </CardTitle>
             </CardHeader>
-            <CardContent className="pt-2">
-              <dl>
+            <CardContent className="grid gap-0 pt-1 lg:grid-cols-2 lg:gap-x-8">
+              <dl data-testid="user-transfer-assignment">
                 <DetailRow
                   label="Asset Code"
                   value={<span className="font-mono text-xs">{context.asset_code}</span>}
@@ -216,64 +271,48 @@ export function UserTransferWorkspace({
                     isOperationalStatus(context.operational_status) ? (
                       <StatusBadge kind="operational" status={context.operational_status} />
                     ) : (
-                      context.operational_status
+                      formatDropdownLabel(context.operational_status)
                     )
                   }
                 />
                 <DetailRow label="Current User" value={context.current_user ?? "—"} />
+              </dl>
+              <dl>
+                <DetailRow
+                  label="Status"
+                  value={formatDropdownLabel(context.assignment_status ?? "active")}
+                />
+                <DetailRow
+                  label="Allocated at"
+                  value={formatAllocatedAt(context.assignment_allocated_at)}
+                />
                 <DetailRow label="Department" value={context.department_name ?? "—"} />
                 <DetailRow label="Location" value={context.location_label ?? "—"} />
               </dl>
             </CardContent>
           </Card>
 
-          <Card className={ASSETS_SURFACE_CARD} data-testid="user-transfer-assignment">
-            <CardHeader className="border-b border-border/60 pb-4">
-              <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                <UserRound className="size-4 text-[#0369A1]" aria-hidden />
-                Current assignment
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-2">
-              <dl>
-                <DetailRow
-                  label="Document"
-                  value={
-                    <span className="font-mono text-xs">
-                      {context.assignment_document_number ?? context.assignment_id}
-                    </span>
-                  }
-                />
-                <DetailRow label="Status" value={context.assignment_status ?? "active"} />
-                <DetailRow
-                  label="Allocated at"
-                  value={formatAllocatedAt(context.assignment_allocated_at)}
-                />
-                <DetailRow label="Holder" value={context.current_user ?? "—"} />
-              </dl>
-            </CardContent>
-          </Card>
-
           {stage === "verification" ? (
             <Card className={ASSETS_SURFACE_CARD} data-testid="user-transfer-verification">
-              <CardHeader className="border-b border-border/60 pb-4">
-                <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                  <ClipboardCheck className="size-4 text-[#0369A1]" aria-hidden />
+              <CardHeader className="border-b border-border/60 pb-3">
+                <CardTitle className="flex items-center gap-2 text-base font-semibold tracking-tight">
+                  <ClipboardCheck className="size-4 text-primary" aria-hidden />
                   Pre-transfer verification
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-6 pt-5">
-                <section className="space-y-3" data-testid="verification-data-backup">
-                  <h3 className="text-sm font-medium text-foreground">
-                    Previous user data backup
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    Previous user:{" "}
-                    <span className="font-medium text-foreground">
-                      {context.current_user ?? "—"}
-                    </span>
-                  </p>
-                  <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border px-3 py-3 transition-colors duration-200 hover:bg-muted/30">
+              <CardContent className="space-y-5 pt-4">
+                <section
+                  className="grid gap-3 sm:grid-cols-2"
+                  data-testid="verification-data-backup"
+                >
+                  <label
+                    className={cn(
+                      "flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-3 transition-colors duration-200",
+                      verification.dataBackupVerified
+                        ? "border-primary/40 bg-primary/5"
+                        : "border-border hover:bg-muted/30",
+                    )}
+                  >
                     <input
                       type="checkbox"
                       className="mt-0.5 size-4 cursor-pointer"
@@ -283,18 +322,23 @@ export function UserTransferWorkspace({
                       }
                       data-testid="check-data-backup"
                     />
-                    <span className="text-sm">
-                      <span className="font-medium">Data backup verified</span>
-                      <span className="mt-0.5 block text-xs text-muted-foreground">
-                        Confirm important data for the previous user has been backed up.
+                    <span className="min-w-0 text-sm">
+                      <span className="font-medium text-foreground">Data backup verified</span>
+                      <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                        Previous user: {context.current_user ?? "—"}
                       </span>
                     </span>
                   </label>
-                </section>
 
-                <section className="space-y-3" data-testid="verification-qc">
-                  <h3 className="text-sm font-medium text-foreground">QC testing</h3>
-                  <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border px-3 py-3 transition-colors duration-200 hover:bg-muted/30">
+                  <label
+                    className={cn(
+                      "flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-3 transition-colors duration-200",
+                      verification.qcCompleted
+                        ? "border-primary/40 bg-primary/5"
+                        : "border-border hover:bg-muted/30",
+                    )}
+                    data-testid="verification-qc"
+                  >
                     <input
                       type="checkbox"
                       className="mt-0.5 size-4 cursor-pointer"
@@ -304,30 +348,28 @@ export function UserTransferWorkspace({
                       }
                       data-testid="check-qc"
                     />
-                    <span className="text-sm">
-                      <span className="font-medium">QC testing completed</span>
-                      <span className="mt-0.5 block text-xs text-muted-foreground">
-                        Asset has been checked and is suitable for the next step.
-                      </span>
+                    <span className="text-sm font-medium text-foreground">
+                      QC testing completed
                     </span>
                   </label>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="qc-remarks">QC remarks (optional)</Label>
-                    <Input
-                      id="qc-remarks"
-                      value={verification.qcRemarks}
-                      onChange={(e) => onVerificationChange({ qcRemarks: e.target.value })}
-                      placeholder="Notes from QC check"
-                      className="transition-colors duration-200"
-                      data-testid="qc-remarks"
-                    />
-                  </div>
                 </section>
 
-                <section className="space-y-3" data-testid="verification-condition">
+                <div className="space-y-1.5">
+                  <Label htmlFor="qc-remarks">QC remarks (optional)</Label>
+                  <Input
+                    id="qc-remarks"
+                    value={verification.qcRemarks}
+                    onChange={(e) => onVerificationChange({ qcRemarks: e.target.value })}
+                    placeholder="Notes from QC check"
+                    className="transition-colors duration-200"
+                    data-testid="qc-remarks"
+                  />
+                </div>
+
+                <section className="space-y-2.5" data-testid="verification-condition">
                   <h3 className="text-sm font-medium text-foreground">Physical condition</h3>
                   <div
-                    className="grid gap-2"
+                    className="grid gap-2 sm:grid-cols-2"
                     role="radiogroup"
                     aria-label="Physical condition"
                   >
@@ -337,9 +379,9 @@ export function UserTransferWorkspace({
                         <label
                           key={opt.value}
                           className={cn(
-                            "flex cursor-pointer gap-3 rounded-lg border px-3 py-3 transition-colors duration-200",
+                            "flex cursor-pointer gap-3 rounded-xl border px-3.5 py-3 transition-colors duration-200",
                             checked
-                              ? "border-primary bg-primary/5"
+                              ? "border-primary bg-primary/5 shadow-sm"
                               : "border-border hover:bg-muted/30",
                           )}
                         >
@@ -365,21 +407,22 @@ export function UserTransferWorkspace({
                   </div>
                 </section>
 
-                <section className="space-y-3" data-testid="verification-components">
-                  <h3 className="text-sm font-medium text-foreground">
+                <section className="space-y-2.5" data-testid="verification-components">
+                  <h3 className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <PackageCheck className="size-3.5 text-muted-foreground" aria-hidden />
                     Components / accessories
                   </h3>
                   {components.length === 0 ? (
                     <p
-                      className="rounded-lg border border-dashed border-border px-3 py-4 text-sm text-muted-foreground"
+                      className="rounded-xl border border-dashed border-border/80 bg-muted/20 px-3 py-4 text-sm text-muted-foreground"
                       data-testid="no-components"
                     >
                       No components currently assigned.
                     </p>
                   ) : (
-                    <div className="overflow-x-auto rounded-lg border border-border">
+                    <div className="overflow-x-auto rounded-xl border border-border/80">
                       <table className="min-w-full text-sm">
-                        <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                        <thead className="bg-muted/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                           <tr>
                             <th className="px-3 py-2 font-medium">Verified</th>
                             <th className="px-3 py-2 font-medium">Component</th>
@@ -395,7 +438,7 @@ export function UserTransferWorkspace({
                             return (
                               <tr
                                 key={row.component_id}
-                                className="border-t border-border/60"
+                                className="border-t border-border/60 transition-colors duration-200 hover:bg-muted/30"
                                 data-testid={`component-row-${row.component_id}`}
                               >
                                 <td className="px-3 py-2.5">
@@ -419,14 +462,16 @@ export function UserTransferWorkspace({
                                   {componentLabel(row)}
                                   {row.component_type ? (
                                     <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
-                                      {row.component_type}
+                                      {formatDropdownLabel(row.component_type)}
                                     </span>
                                   ) : null}
                                 </td>
                                 <td className="px-3 py-2.5 font-mono text-xs">
                                   {row.serial_number || "—"}
                                 </td>
-                                <td className="px-3 py-2.5">{row.issue_status}</td>
+                                <td className="px-3 py-2.5">
+                                  {formatDropdownLabel(row.issue_status)}
+                                </td>
                               </tr>
                             );
                           })}
@@ -442,14 +487,12 @@ export function UserTransferWorkspace({
                   </p>
                 ) : null}
 
-                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
-                  <p className="text-xs text-muted-foreground">
-                    Continue stays disabled until all required checks are complete.
-                  </p>
+                <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border/60 pt-4">
                   <Button
                     type="button"
                     className={cn(
                       ASSETS_ACCENT_BTN,
+                      "min-w-[8.5rem] cursor-pointer transition-colors duration-200",
                       (!canContinue || submitBusy) && "cursor-not-allowed opacity-60",
                     )}
                     disabled={!canContinue || Boolean(submitBusy)}
@@ -484,7 +527,7 @@ export function UserTransferWorkspace({
           <p className="text-center text-xs text-muted-foreground">
             <Link
               href="/assets/assets"
-              className="text-primary underline-offset-4 hover:underline"
+              className="cursor-pointer text-primary underline-offset-4 transition-colors duration-200 hover:underline"
             >
               Back to inventory
             </Link>

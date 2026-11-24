@@ -48,10 +48,17 @@ class AssetTypeService:
         ensure_site_admin(ctx, self._db, permission)
 
     def ensure_defaults(self, ctx: TenantContext, company_id: UUID) -> None:
+        """Seed the standard IT type catalog for a company.
+
+        Companies that only have a partial catalog (e.g. a single ``laptop`` row
+        from Excel import) still receive every missing default name so Add/Edit
+        Asset Name dropdowns stay complete.
+        """
         existing = self._repo.list_rows(ctx, company_id)
-        if existing:
-            return
+        have = {(row.name or "").strip().lower() for row in existing}
         for name, requires_hw, eligible in DEFAULT_TYPES:
+            if name.strip().lower() in have:
+                continue
             self._repo.create(
                 ctx,
                 company_id=company_id,
@@ -60,6 +67,7 @@ class AssetTypeService:
                 eligible_as_component=eligible,
                 active=True,
             )
+            have.add(name.strip().lower())
 
     def list(
         self,
@@ -190,13 +198,34 @@ class AssetTypeService:
         )
         return self._to_dict(updated)
 
+    def delete(self, ctx: TenantContext, row_id: UUID) -> None:
+        """Soft-delete an asset type (any active/inactive row with no asset refs)."""
+        self._ensure_write(ctx, "asset.type:update")
+        row = self._repo.get(ctx, row_id)
+        if row is None:
+            raise NotFoundException("Asset type not found")
+        self._assert_no_asset_refs(ctx, row, action="delete")
+        self._repo.soft_delete(ctx, row)
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="ast_asset_type",
+            entity_id=row_id,
+            operation="delete",
+            performed_by=ctx.user_id,
+        )
+
     def _assert_can_deactivate(self, ctx: TenantContext, row) -> None:
+        self._assert_no_asset_refs(ctx, row, action="deactivate")
+
+    def _assert_no_asset_refs(
+        self, ctx: TenantContext, row, *, action: str
+    ) -> None:
         count = self._repo.count_assets_by_type(
             ctx, company_id=row.company_id, asset_type_id=row.id
         )
         if count > 0:
             raise AppException(
-                f"Cannot deactivate type while {count} asset(s) reference it"
+                f"Cannot {action} type while {count} asset(s) reference it"
             )
 
     @staticmethod

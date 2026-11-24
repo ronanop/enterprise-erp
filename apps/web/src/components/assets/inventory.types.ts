@@ -12,7 +12,7 @@ export type InventoryPresetId =
 
 export const INVENTORY_PRESETS: Array<{ id: InventoryPresetId; label: string }> = [
   { id: "all", label: "All Assets" },
-  { id: "ready", label: "Ready To Move" },
+  { id: "ready", label: "In Stock" },
   { id: "assigned", label: "Assigned" },
   { id: "in_maintenance", label: "In Maintenance" },
   { id: "in_use_as_component", label: "In Use as Component" },
@@ -54,12 +54,12 @@ export const PRESET_EMPTY_COPY: Record<
     description: "Adjust filters or register a new asset.",
   },
   ready: {
-    title: "No ready assets",
-    description: "No assets ready for assignment in this branch.",
+    title: "No in-stock assets",
+    description: "No assets in stock for assignment in this branch.",
   },
   assigned: {
     title: "No assigned assets",
-    description: "Check the Ready To Move queue to assign assets.",
+    description: "Check the In Stock queue to assign assets.",
   },
   in_maintenance: {
     title: "No assets in maintenance",

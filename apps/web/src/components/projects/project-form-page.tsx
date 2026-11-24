@@ -61,7 +61,8 @@ const EMPTY_CREATE: FormValues = {
   customer_po_number: "",
   customer_id: "",
   customer_label: "",
-  delivery_type: "server_os_rack",
+  // Projects selects delivery type — do not default from CRM/SCM.
+  delivery_type: "",
   project_name: "",
   rack_qty: "",
   server_qty: "",
@@ -71,6 +72,17 @@ const EMPTY_CREATE: FormValues = {
   rfai_request_done: "",
   rfai_number: "",
 };
+
+/** Handoff stubs like "N/A" / "-" should not populate qty fields. */
+function qtyPrefill(value: string | number | null | undefined): string {
+  const digits = digitsOnly(value);
+  if (digits) return digits;
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (!raw || raw === "n/a" || raw === "-" || raw === "na" || raw === "tbd") {
+    return "";
+  }
+  return "";
+}
 
 const EMPTY_EDIT: FormValues = {
   ...EMPTY_CREATE,
@@ -83,6 +95,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
   const searchParams = useSearchParams();
   const poId = searchParams.get("po_id");
   const handoffId = searchParams.get("handoff_id");
+  const fromCloudQueue = searchParams.get("cloud") === "1";
   const [linkedPoId, setLinkedPoId] = useState<string | null>(poId);
 
   const load = useCallback(async (): Promise<{ values?: FormValues; lookups?: Lookups }> => {
@@ -216,53 +229,84 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
       }
     }
 
-    const projectTitle =
-      scmInstall?.projectName?.trim() ||
-      prefill?.project_title?.trim() ||
-      ovfProjectTitle ||
-      "";
-    const rackQty =
-      digitsOnly(prefill?.rack_quantity) || digitsOnly(scmInstall?.rackQuantity);
-    const serverQty =
-      digitsOnly(prefill?.server_quantity) ||
-      digitsOnly(scmInstall?.serverQuantity) ||
-      receivedQtyDigits;
-    const serverType =
-      prefill?.server_type?.trim() ||
-      scmInstall?.serverType?.trim() ||
-      ovfOemName ||
-      "";
-
     const handoff = handoffId
       ? await getProjectPoHandoffById(handoffId).catch(() => null)
       : poId
         ? await getProjectPoHandoff(poId).catch(() => null)
         : null;
+
+    // Cloud-wise queue: project is named after the unique cloud, not wave/PO.
+    const projectTitle =
+      handoff?.cloud_name?.trim() ||
+      prefill?.project_title?.trim() ||
+      scmInstall?.projectName?.trim() ||
+      ovfProjectTitle ||
+      "";
+    const rackQty =
+      qtyPrefill(prefill?.rack_quantity) || qtyPrefill(scmInstall?.rackQuantity);
+    const serverQty =
+      qtyPrefill(prefill?.server_quantity) ||
+      qtyPrefill(scmInstall?.serverQuantity) ||
+      receivedQtyDigits;
+    const rawServerType =
+      prefill?.server_type?.trim() ||
+      scmInstall?.serverType?.trim() ||
+      ovfOemName ||
+      "";
+    const serverType =
+      rawServerType && !["-", "n/a", "na", "service", "tbd"].includes(rawServerType.toLowerCase())
+        ? rawServerType
+        : "";
+
     const customerPoNumber =
-      (handoff?.customer_po_number || "").trim() ||
       (prefill?.customer_po_number || "").trim() ||
+      (handoff?.customer_po_number || "").trim() ||
       orderCustomerPo ||
       "";
+
+    const handoffCircle = (handoff?.circle_name || "").trim();
+    const circleFromHandoff =
+      handoffCircle && handoffCircle.toLowerCase() !== "service" ? handoffCircle : "";
+    // Circle = implementation city from CRM (lead.city / account city).
+    const circle =
+      prefill?.circle_name?.trim() ||
+      circleFromHandoff ||
+      scmInstall?.circleName?.trim() ||
+      "";
+
+    const handoffSite = (handoff?.site_name || "").trim();
+    const siteFromHandoff =
+      handoffSite &&
+        handoffSite.toLowerCase() !== "tbd" &&
+        handoffSite.toLowerCase() !== "customer site"
+        ? handoffSite
+        : "";
 
     return {
       values: {
         branch_id: prefill?.branch_id || branches[0]?.id || "",
-        // Circle shows the lead entity state (GST / address), falling back to entity name.
-        circle:
-          handoff?.circle_name?.trim() ||
-          scmInstall?.circleName?.trim() ||
-          prefill?.entity_state?.trim() ||
-          prefill?.circle_name?.trim() ||
-          "",
+        circle,
         company_po_number: prefill?.company_po_number?.trim() || "",
         customer_po_number: customerPoNumber,
         customer_id: prefill?.customer_id || "",
         customer_label: resolvedCustomerLabel || (handoff?.customer_name || "").trim() || "",
-        project_name: handoff?.project_name?.trim() || projectTitle,
-        rack_qty: digitsOnly(handoff?.rack_quantity) || rackQty,
-        server_qty: digitsOnly(handoff?.server_quantity) || serverQty,
-        server_type: handoff?.server_type?.trim() || serverType,
-        site_name: handoff?.site_name?.trim() || scmInstall?.site?.trim() || prefill?.site_name || "",
+        delivery_type: "",
+        project_name: projectTitle || handoff?.project_name?.trim() || "",
+        rack_qty: qtyPrefill(handoff?.rack_quantity) || rackQty,
+        server_qty: qtyPrefill(handoff?.server_quantity) || serverQty,
+        server_type:
+          (() => {
+            const ht = (handoff?.server_type || "").trim();
+            if (ht && !["-", "n/a", "na", "service", "tbd"].includes(ht.toLowerCase())) {
+              return ht;
+            }
+            return serverType;
+          })(),
+        site_name:
+          prefill?.site_name?.trim() ||
+          siteFromHandoff ||
+          scmInstall?.site?.trim() ||
+          "",
         project_manager_employee_id: team[0]?.id ?? "",
         rfai_request_done: "false",
       },
@@ -276,6 +320,15 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
         const siteName = v.site_name.trim();
         const projectTitle = v.project_name.trim();
         const rfaiYes = v.rfai_request_done === "true";
+        if ((poId || handoffId) && !projectTitle) {
+          throw new Error("Project title is missing from CRM — update the lead/opportunity first.");
+        }
+        if ((poId || handoffId) && !siteName) {
+          throw new Error("Site address is missing from CRM — update the customer account address first.");
+        }
+        if (!v.delivery_type.trim()) {
+          throw new Error("Select a Delivery Type before creating the project.");
+        }
         const saved = await createProject({
           branch_id: v.branch_id,
           project_name: projectTitle || undefined,
@@ -284,9 +337,10 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
           proc_order_id: poId || undefined,
           po_queue_handoff_id: !poId && handoffId ? handoffId : undefined,
           site_installation: {
-            delivery_type: v.delivery_type || "server_os_rack",
+            delivery_type: v.delivery_type,
             site_name: orNull(siteName),
             circle: orNull(v.circle),
+            cloud_name: fromCloudQueue ? orNull(v.project_name) : undefined,
             application: orNull(v.server_type),
             server_qty: intOrNull(v.server_qty),
             rack_qty: intOrNull(v.rack_qty),
@@ -349,15 +403,15 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
       {
         name: "project_name",
         label: "Project Title",
-        type: "text" as const,
-        required: true,
+        type: showPoReadonlyIntake ? ("readonly" as const) : ("text" as const),
+        required: !showPoReadonlyIntake,
         placeholder: "Project title",
       },
       {
         name: "circle",
         label: "Circle",
-        type: "text" as const,
-        placeholder: "Telecom circle…",
+        type: showPoReadonlyIntake ? ("readonly" as const) : ("text" as const),
+        placeholder: "Implementation city…",
       },
       {
         name: "delivery_type",
@@ -365,6 +419,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
         type: "select",
         required: true,
         options: SITE_DELIVERY_TYPES,
+        placeholder: "Select…",
       },
       {
         name: "rack_qty",
@@ -449,7 +504,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
     ];
 
     const poIntakeSubtitle =
-      "Step 1 - Prefills from CRM (title) and SCM Installation / GRN quantities when available.";
+      "Step 1 - Title, circle (city), customer, site, and customer PO come from CRM. Projects picks Delivery Type; SCM/Projects can fill rack/server qty.";
 
     return [
       {
@@ -463,7 +518,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
         fields: intakeFields,
       },
     ];
-  }, [isEdit, poId, handoffId, linkedPoId]);
+  }, [isEdit, poId, handoffId, fromCloudQueue, linkedPoId]);
 
   return (
     <ProjectsRecordForm

@@ -14,7 +14,6 @@ import {
   Activity,
   Briefcase,
   Calendar,
-  Check,
   ChevronLeft,
   ChevronRight,
   CircleAlert,
@@ -23,15 +22,12 @@ import {
   ExternalLink,
   FileCheck2,
   FileText,
-  GraduationCap,
   Link,
-  List,
   Mail,
   MapPin,
   MoreHorizontal,
   Pencil,
   Plus,
-  Puzzle,
   StickyNote,
   User,
   Video,
@@ -43,6 +39,11 @@ import { InitialsAvatar } from "@/components/hr/recruitment/dashboard/status-bad
 import { Button } from "@/components/ui/button";
 import { PIPELINE_STAGES, STATUS_LABELS } from "@/config/pipeline-config";
 import { cn } from "@/lib/utils";
+import { getAccessToken } from "@/lib/auth";
+import {
+  isPdfHref,
+  resolvePreviewSrc,
+} from "@/lib/recruitment/document-preview";
 import {
   formatInr,
   formatInrGrouping,
@@ -51,6 +52,8 @@ import {
   isValidIndianMobile,
   parseInrInput,
 } from "@/services/recruitment-ats-lookups";
+import { getDocumentHref } from "@/services/recruitment-ats-service";
+import { env } from "@/utils/env";
 import type {
   AtsCandidate,
   AtsDocument,
@@ -124,15 +127,15 @@ const TABS: { id: ProfileTab; label: string; icon: typeof User }[] = [
 ];
 
 const TAG_TONES = [
-  "bg-[#F5F3FF] text-[#7C3AED]",
+  "bg-primary/10 text-primary",
   "bg-[#FFF4E5] text-[#C2410C]",
   "bg-[#ECFDF5] text-[#00A866]",
-  "bg-[#F4EDFB] text-[#7C3AED]",
+  "bg-primary/10 text-primary",
   "bg-[#FCE7F3] text-[#DB2777]",
 ] as const;
 
 const FIELD_INPUT =
-  "h-7 w-full rounded-md border border-[#E5E7EB] bg-white px-2 text-[12px] text-[#111827] outline-none transition-colors duration-150 focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20";
+  "h-7 w-full rounded-md border border-[#E5E7EB] bg-white px-2 text-[12px] text-[#111827] outline-none transition-colors duration-150 focus:border-primary focus:ring-2 focus:ring-primary/20";
 
 function statusChip(status: CandidatePipelineStatus | null): {
   label: string;
@@ -141,7 +144,7 @@ function statusChip(status: CandidatePipelineStatus | null): {
   if (!status) return { label: "No application", className: "bg-[#F3F4F6] text-[#6B7280]" };
   switch (status) {
     case "active":
-      return { label: "Active", className: "bg-[#F5F3FF] text-[#7C3AED]" };
+      return { label: "Active", className: "bg-primary/10 text-primary" };
     case "hired":
       return { label: "Hired", className: "bg-[#ECFDF5] text-[#00A866]" };
     case "rejected":
@@ -163,6 +166,42 @@ function notesKey(candidateId: string) {
 
 function tagsKey(candidateId: string) {
   return `erp_ats_candidate_tags_${candidateId}`;
+}
+
+async function openCandidateResume(candidate: AtsCandidate, download = false) {
+  const url = candidate.resumeUrl || "";
+  if (url.startsWith("data:")) {
+    if (download) {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = candidate.resumeName || "resume.pdf";
+      a.click();
+      return;
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
+    return;
+  }
+  const candidateId =
+    url.startsWith("recruitment-resume:")
+      ? url.slice("recruitment-resume:".length)
+      : candidate.id;
+  const base = env.apiUrl.replace(/\/$/, "");
+  const token = getAccessToken();
+  const res = await fetch(`${base}/recruitment/candidates/${candidateId}/resume-file`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error("Could not open resume file");
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  if (download) {
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = candidate.resumeName || "resume.pdf";
+    a.click();
+  } else {
+    window.open(objectUrl, "_blank", "noopener,noreferrer");
+  }
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
 }
 
 function draftFromCandidate(c: AtsCandidate): CandidateDraft {
@@ -213,45 +252,6 @@ function displayUrl(url: string): string {
   return url.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/$/, "");
 }
 
-function completionItems(
-  candidate: AtsCandidate,
-  tags: string[],
-  hasEducationDoc: boolean,
-) {
-  return [
-    {
-      label: "Personal Information",
-      icon: User,
-      done: Boolean(candidate.fullName && candidate.email && candidate.phone),
-    },
-    {
-      label: "Resume",
-      icon: FileText,
-      done: Boolean(candidate.resumeName || candidate.resumeUrl),
-    },
-    {
-      label: "Work Experience",
-      icon: Briefcase,
-      done: Boolean(candidate.currentCompany || candidate.experienceYears > 0),
-    },
-    {
-      label: "Education",
-      icon: GraduationCap,
-      done: hasEducationDoc,
-    },
-    {
-      label: "Skills",
-      icon: Puzzle,
-      done: tags.length > 0,
-    },
-    {
-      label: "Additional Details",
-      icon: List,
-      done: Boolean(candidate.expectedSalary || candidate.noticePeriodDays),
-    },
-  ];
-}
-
 export function CandidateViewDrawer({
   open,
   onClose,
@@ -288,14 +288,21 @@ export function CandidateViewDrawer({
       setNotes(localStorage.getItem(notesKey(candidate.id)) ?? application?.notes ?? "");
       const raw = localStorage.getItem(tagsKey(candidate.id));
       const stored = raw ? (JSON.parse(raw) as string[]) : [];
-      const fromJob = job?.skills?.slice(0, 4) ?? [];
-      setTags(stored.length ? stored : fromJob);
+      const fromCandidate = (candidate.skills ?? []).map((s) => s.trim()).filter(Boolean);
+      const fromJob = job?.skills ?? [];
+      // Prefer candidate skills from LLM parse, then saved tags, then job skills.
+      setTags(
+        fromCandidate.length ? fromCandidate : stored.length ? stored : fromJob,
+      );
+      if (fromCandidate.length) {
+        localStorage.setItem(tagsKey(candidate.id), JSON.stringify(fromCandidate));
+      }
     } catch {
       setNotes(application?.notes ?? "");
-      setTags(job?.skills?.slice(0, 4) ?? []);
+      setTags((candidate.skills ?? []).length ? (candidate.skills ?? []) : (job?.skills ?? []));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- candidate.id is the switch key
-  }, [open, candidate?.id]);
+  }, [open, candidate?.id, candidate?.skills?.join("|")]);
 
   useEffect(() => {
     if (!open || !candidate || editing) return;
@@ -319,17 +326,6 @@ export function CandidateViewDrawer({
     if (!candidate || !candidates.length) return -1;
     return candidates.findIndex((c) => c.id === candidate.id);
   }, [candidates, candidate]);
-
-  const hasEducationDoc = candDocs.some((d) => d.kind === "education");
-  const completion = useMemo(
-    () => (candidate ? completionItems(candidate, tags, hasEducationDoc) : []),
-    [candidate, tags, hasEducationDoc],
-  );
-  const completionPct = useMemo(() => {
-    if (!completion.length) return 0;
-    const done = completion.filter((c) => c.done).length;
-    return Math.round((done / completion.length) * 100);
-  }, [completion]);
 
   if (!open || !candidate) return null;
 
@@ -469,6 +465,21 @@ export function CandidateViewDrawer({
                     {job?.title || candidate.currentDesignation || "Candidate"} ·{" "}
                     {candidate.candidateCode}
                   </p>
+                  {(candidate.currentCompany ||
+                    candidate.currentDesignation ||
+                    candidate.experienceYears > 0) && (
+                    <p className="mt-1 flex items-center gap-1.5 truncate text-[11px] text-[#4B5563]">
+                      <Briefcase className="size-3 shrink-0 text-[#9CA3AF]" />
+                      <span className="truncate">
+                        {[candidate.currentDesignation, candidate.currentCompany]
+                          .filter(Boolean)
+                          .join(" · ") || "Experience"}
+                        {candidate.experienceYears > 0
+                          ? ` · ${candidate.experienceYears} yrs`
+                          : ""}
+                      </span>
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <span
@@ -502,13 +513,18 @@ export function CandidateViewDrawer({
                   href={candidate.linkedinUrl || undefined}
                   external
                 />
-                <ActionChip
-                  icon={Download}
-                  label="Download Resume"
-                  href={candidate.resumeUrl || undefined}
-                  external
+                <button
+                  type="button"
                   disabled={!candidate.resumeUrl && !candidate.resumeName}
-                />
+                  className={cn(
+                    "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full border border-[#E5E7EB] bg-white px-2.5 text-[11px] font-medium text-[#374151] transition-colors duration-150 hover:bg-[#F9FAFB]",
+                    !candidate.resumeUrl && !candidate.resumeName && "cursor-not-allowed opacity-50",
+                  )}
+                  onClick={() => void openCandidateResume(candidate, true)}
+                >
+                  <Download className="size-3.5" />
+                  Download Resume
+                </button>
                 <div className="relative">
                   <button
                     type="button"
@@ -555,7 +571,7 @@ export function CandidateViewDrawer({
                   className={cn(
                     "inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap px-3 py-2 text-[12px] font-medium transition-colors duration-150",
                     active
-                      ? "border-b-2 border-[#7C3AED] text-[#7C3AED]"
+                      ? "border-b-2 border-primary text-primary"
                       : "border-b-2 border-transparent text-[#6B7280] hover:text-[#374151]",
                   )}
                   onClick={() => setTab(t.id)}
@@ -586,7 +602,7 @@ export function CandidateViewDrawer({
                     ) : (
                       <button
                         type="button"
-                        className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-medium text-[#7C3AED] transition-colors duration-150 hover:underline"
+                        className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-medium text-primary transition-colors duration-150 hover:underline"
                         onClick={startEdit}
                       >
                         <Pencil className="size-3" />
@@ -781,45 +797,6 @@ export function CandidateViewDrawer({
 
                 <div className="space-y-4">
                   <section className="rounded-xl border border-[#E5E7EB] bg-white p-4">
-                    <div className="mb-2 flex items-center justify-between">
-                      <p className="text-[12px] font-semibold text-[#111827]">Profile Completion</p>
-                      <span className="text-[12px] font-semibold text-[#7C3AED]">
-                        {completionPct}%
-                      </span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-[#F3F4F6]">
-                      <div
-                        className="h-full rounded-full bg-[#7C3AED] transition-all duration-200"
-                        style={{ width: `${completionPct}%` }}
-                      />
-                    </div>
-                    <ul className="mt-3 space-y-1.5">
-                      {completion.map((item) => {
-                        const Icon = item.icon;
-                        return (
-                          <li
-                            key={item.label}
-                            className="flex items-center gap-2 text-[11px] text-[#374151]"
-                          >
-                            <Icon className="size-3.5 shrink-0 text-[#7C3AED]" />
-                            <span className="flex-1">{item.label}</span>
-                            <span
-                              className={cn(
-                                "inline-flex size-4 items-center justify-center rounded-full",
-                                item.done
-                                  ? "bg-[#ECFDF5] text-[#00A866]"
-                                  : "bg-[#F3F4F6] text-[#9CA3AF]",
-                              )}
-                            >
-                              <Check className="size-2.5" />
-                            </span>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </section>
-
-                  <section className="rounded-xl border border-[#E5E7EB] bg-white p-4">
                     <p className="mb-3 text-[12px] font-semibold text-[#111827]">Quick Info</p>
                     <div className="space-y-2.5 text-[11px]">
                       <QuickRow
@@ -866,22 +843,21 @@ export function CandidateViewDrawer({
                       </div>
                       {candidate.resumeUrl ? (
                         <div className="mt-2 flex gap-1.5">
-                          <a
-                            href={candidate.resumeUrl}
-                            target="_blank"
-                            rel="noreferrer"
+                          <button
+                            type="button"
                             className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-[#E5E7EB] bg-white px-2 text-[10px] font-medium text-[#374151] transition-colors duration-150 hover:bg-[#F9FAFB]"
+                            onClick={() => void openCandidateResume(candidate)}
                           >
                             View
-                          </a>
-                          <a
-                            href={candidate.resumeUrl}
-                            download
+                          </button>
+                          <button
+                            type="button"
                             className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-[#E5E7EB] bg-white px-2 text-[10px] font-medium text-[#374151] transition-colors duration-150 hover:bg-[#F9FAFB]"
+                            onClick={() => void openCandidateResume(candidate, true)}
                           >
                             <Download className="size-3" />
                             Download
-                          </a>
+                          </button>
                         </div>
                       ) : null}
                     </div>
@@ -900,7 +876,7 @@ export function CandidateViewDrawer({
                     />
                   ) : candidate.linkedinUrl ? (
                     <div className="rounded-lg border border-[#E5E7EB] bg-[#FAFBFC] px-3 py-2.5">
-                      <p className="truncate text-[11px] font-medium text-[#7C3AED]">
+                      <p className="truncate text-[11px] font-medium text-primary">
                         {displayUrl(candidate.linkedinUrl)}
                       </p>
                       <a
@@ -923,7 +899,7 @@ export function CandidateViewDrawer({
                     <p className="text-[12px] font-semibold text-[#111827]">Skills</p>
                     <button
                       type="button"
-                      className="cursor-pointer text-[10px] font-medium text-[#7C3AED] transition-colors duration-150 hover:underline"
+                      className="cursor-pointer text-[10px] font-medium text-primary transition-colors duration-150 hover:underline"
                       onClick={() => skillInputRef.current?.focus()}
                     >
                       + Add Skill
@@ -961,11 +937,11 @@ export function CandidateViewDrawer({
                         value={tagDraft}
                         onChange={(e) => setTagDraft(e.target.value)}
                         placeholder="+ Add Skill"
-                        className="h-6 w-24 rounded-full border border-dashed border-[#D1D5DB] bg-transparent px-2 text-[10px] outline-none focus:border-[#7C3AED]"
+                        className="h-6 w-24 rounded-full border border-dashed border-[#D1D5DB] bg-transparent px-2 text-[10px] outline-none focus:border-primary"
                       />
                       <button
                         type="submit"
-                        className="inline-flex size-6 cursor-pointer items-center justify-center rounded-full text-[#7C3AED] transition-colors duration-150 hover:bg-[#F5F3FF]"
+                        className="inline-flex size-6 cursor-pointer items-center justify-center rounded-full text-primary transition-colors duration-150 hover:bg-primary/10"
                         aria-label="Add skill"
                       >
                         <Plus className="size-3" />
@@ -988,7 +964,7 @@ export function CandidateViewDrawer({
               <ol className="space-y-3">
                 {history.map((h, i) => (
                   <li key={`${h.stage}-${i}`} className="flex gap-3 text-[12px]">
-                    <span className="mt-1.5 size-2 shrink-0 rounded-full bg-[#7C3AED]" />
+                    <span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" />
                     <div>
                       <p className="font-medium text-[#111827]">{h.label}</p>
                       <p className="text-[10px] text-[#9CA3AF]">
@@ -1006,7 +982,7 @@ export function CandidateViewDrawer({
             <div className="space-y-2">
               <p className="text-[12px] font-semibold text-[#111827]">Internal Notes</p>
               <textarea
-                className="min-h-[180px] w-full rounded-xl border border-[#E5E7EB] px-3 py-2 text-[12px] text-[#111827] outline-none transition-colors duration-150 focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                className="min-h-[180px] w-full rounded-xl border border-[#E5E7EB] px-3 py-2 text-[12px] text-[#111827] outline-none transition-colors duration-150 focus:border-primary focus:ring-2 focus:ring-primary/20"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Add notes about this candidate…"
@@ -1049,8 +1025,8 @@ export function CandidateViewDrawer({
             </Button>
             <Button
               type="button"
-              className="h-9 cursor-pointer !bg-[#7C3AED] text-white hover:!bg-[#6D28D9]"
-              style={{ backgroundColor: "#7C3AED" }}
+              className="h-9 cursor-pointer !bg-primary !text-primary-foreground hover:!bg-primary/90"
+             
               disabled={saving}
               onClick={() => {
                 void handleSave();
@@ -1150,7 +1126,7 @@ function QuickRow({
   return (
     <div className="flex items-center justify-between gap-2">
       <span className="inline-flex items-center gap-1.5 text-[#9CA3AF]">
-        <Icon className="size-3.5 text-[#7C3AED]" />
+        <Icon className="size-3.5 text-primary" />
         {label}
       </span>
       {valueAsChip ? (
@@ -1188,7 +1164,7 @@ function docStatusTone(status: AtsDocument["status"]): string {
 function interviewStatusTone(status: AtsInterview["status"]): string {
   switch (status) {
     case "scheduled":
-      return "bg-[#F5F3FF] text-[#7C3AED]";
+      return "bg-primary/10 text-primary";
     case "completed":
       return "bg-[#ECFDF5] text-[#00A866]";
     case "cancelled":
@@ -1207,7 +1183,7 @@ function offerStatusTone(status: AtsOffer["status"]): string {
     case "draft":
       return "bg-[#F3F4F6] text-[#6B7280]";
     case "sent":
-      return "bg-[#F5F3FF] text-[#7C3AED]";
+      return "bg-primary/10 text-primary";
     case "accepted":
       return "bg-[#ECFDF5] text-[#00A866]";
     case "rejected":
@@ -1222,50 +1198,110 @@ function offerStatusTone(status: AtsOffer["status"]): string {
 }
 
 function DocumentsTab({ docs }: { docs: AtsDocument[] }) {
+  const [preview, setPreview] = useState<AtsDocument | null>(null);
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!preview) {
+      setPreviewSrc(null);
+      return;
+    }
+    const href = getDocumentHref(preview);
+    const resolved = resolvePreviewSrc(href);
+    setPreviewSrc(resolved.src);
+    return () => {
+      resolved.revoke?.();
+    };
+  }, [preview]);
+
   if (!docs.length) return <EmptyBlock text="No documents for this candidate" />;
+
   return (
-    <ul className="space-y-2">
-      {docs.map((d) => {
-        const status = d.status ?? "pending";
-        return (
-          <li
-            key={d.id}
-            className="flex items-start gap-3 rounded-xl border border-[#E5E7EB] bg-[#FAFBFC] px-3 py-2.5"
-          >
-            <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#FFF1F2] text-[#F43F5E]">
-              <FileText className="size-4" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="truncate text-[12px] font-medium text-[#111827]">{d.fileName}</p>
-                <span
-                  className={cn(
-                    "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                    docStatusTone(status),
-                  )}
-                >
-                  {DOC_STATUS_LABELS[status]}
-                </span>
+    <>
+      <ul className="space-y-2">
+        {docs.map((d) => {
+          const status = d.status ?? "pending";
+          const href = getDocumentHref(d);
+          return (
+            <li
+              key={d.id}
+              className="flex items-start gap-3 rounded-xl border border-[#E5E7EB] bg-[#FAFBFC] px-3 py-2.5"
+            >
+              <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#FFF1F2] text-[#F43F5E]">
+                <FileText className="size-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="truncate text-[12px] font-medium text-[#111827]">{d.fileName}</p>
+                  <span
+                    className={cn(
+                      "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                      docStatusTone(status),
+                    )}
+                  >
+                    {DOC_STATUS_LABELS[status]}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-[10px] text-[#6B7280]">
+                  {DOC_KIND_LABELS[d.kind] ?? d.kind} · Uploaded {formatPostedOn(d.uploadedAt)}
+                  {d.expiryDate ? ` · Expires ${formatPostedOn(d.expiryDate)}` : ""}
+                </p>
               </div>
-              <p className="mt-0.5 text-[10px] text-[#6B7280]">
-                {DOC_KIND_LABELS[d.kind] ?? d.kind} · Uploaded {formatPostedOn(d.uploadedAt)}
-                {d.expiryDate ? ` · Expires ${formatPostedOn(d.expiryDate)}` : ""}
-              </p>
-            </div>
-            {d.url ? (
-              <a
-                href={d.url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex h-7 shrink-0 cursor-pointer items-center rounded-md border border-[#E5E7EB] bg-white px-2 text-[10px] font-medium text-[#374151] hover:bg-white"
+              {href ? (
+                <button
+                  type="button"
+                  onClick={() => setPreview(d)}
+                  className="inline-flex h-7 shrink-0 cursor-pointer items-center rounded-md border border-[#E5E7EB] bg-white px-2 text-[10px] font-medium text-[#374151] transition-colors duration-150 hover:bg-[#F9FAFB]"
+                >
+                  View
+                </button>
+              ) : (
+                <span className="shrink-0 text-[10px] text-[#9CA3AF]">No file</span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {preview && previewSrc ? (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-3"
+          onClick={() => setPreview(null)}
+          role="presentation"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="flex h-[min(820px,90vh)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-2 border-b border-[#F3F4F6] px-4 py-3">
+              <p className="truncate text-[13px] font-semibold text-[#111827]">{preview.fileName}</p>
+              <button
+                type="button"
+                className="inline-flex h-8 cursor-pointer items-center rounded-md border border-[#E5E7EB] px-2 text-[11px] text-[#374151] transition-colors duration-150 hover:bg-[#F9FAFB]"
+                onClick={() => setPreview(null)}
               >
-                View
-              </a>
-            ) : null}
-          </li>
-        );
-      })}
-    </ul>
+                Close
+              </button>
+            </div>
+            {isPdfHref({
+              fileName: preview.fileName,
+              mimeType: preview.mimeType,
+              href: previewSrc,
+            }) ? (
+              <embed
+                title={preview.fileName}
+                src={previewSrc}
+                type="application/pdf"
+                className="min-h-0 flex-1 bg-white"
+              />
+            ) : (
+              <iframe title={preview.fileName} src={previewSrc} className="min-h-0 flex-1 bg-[#F3F4F6]" />
+            )}
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -1357,7 +1393,7 @@ function OffersTab({ offers, job }: { offers: AtsOffer[]; job: JobOpening | null
 function EmptyBlock({ text }: { text: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-      <div className="flex size-10 items-center justify-center rounded-full bg-[#F5F3FF] text-[#7C3AED]">
+      <div className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
         <FileText className="size-5" />
       </div>
       <p className="text-[12px] text-[#6B7280]">{text}</p>

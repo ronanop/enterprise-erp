@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 export type IssueFormFooterProps = {
   loading?: boolean;
   submitDisabled?: boolean;
-  missingLabels?: string[];
   finishLabel?: string;
   onCancel: () => void;
   onSaveDraft?: () => void;
@@ -19,7 +18,6 @@ export type IssueFormFooterProps = {
 export function IssueFormFooter({
   loading,
   submitDisabled,
-  missingLabels = [],
   finishLabel = "Submit",
   onCancel,
   onSaveDraft,
@@ -33,11 +31,6 @@ export function IssueFormFooter({
         className,
       )}
     >
-      {submitDisabled && missingLabels.length > 0 ? (
-        <p className="text-xs text-muted-foreground" data-testid="issue-missing-summary" role="status">
-          Complete these fields to submit: {missingLabels.join(", ")}
-        </p>
-      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Button
           type="button"

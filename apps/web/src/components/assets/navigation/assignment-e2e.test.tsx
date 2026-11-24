@@ -113,20 +113,19 @@ describe("E2E — Inventory → Issue navigation", () => {
 
   async function tableRowForAssetCode(assetCode: string) {
     await waitForInventoryReady(assetCode);
-    const cell = screen.getAllByText(assetCode).find((el) => el.closest("tr"));
-    expect(cell).toBeTruthy();
-    return cell!.closest("tr")!;
+    const assetId = assetCode === "AST-99" ? "asset-99" : assetCode === "AST-88" ? "asset-88" : null;
+    expect(assetId).toBeTruthy();
+    return screen.getByTestId(`inventory-row-${assetId}`);
   }
 
-  it("Assign closes drawer and opens issue wizard once", async () => {
+  it("Assign from row menu opens issue wizard once without a drawer", async () => {
     const user = userEvent.setup();
     render(<AssetInventoryContainer />);
     const row = await tableRowForAssetCode("AST-99");
-    await user.click(within(row).getByRole("button", { name: "View" }));
-    expect(await screen.findByTestId("asset-detail-drawer")).toBeInTheDocument();
+    expect(screen.queryByTestId("asset-detail-drawer")).not.toBeInTheDocument();
     await user.click(within(row).getByRole("button", { name: "More actions" }));
     await user.click(await screen.findByRole("menuitem", { name: "Assign Asset" }));
-    await waitFor(() => expect(screen.queryByTestId("asset-detail-drawer")).not.toBeInTheDocument());
+    expect(screen.queryByTestId("asset-detail-drawer")).not.toBeInTheDocument();
     expect(push).toHaveBeenCalledTimes(1);
     expect(push).toHaveBeenCalledWith(ASSIGNMENT_DEEP_LINKS.newAsset("asset-99"));
   });

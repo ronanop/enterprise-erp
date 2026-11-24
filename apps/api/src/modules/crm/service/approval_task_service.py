@@ -53,6 +53,7 @@ _REJECT_DOC_LABEL = {
     "approve": "OVF",
     "provide_freight": "freight charges",
     "provide_supporting_items": "supporting items",
+    "price_supporting_items": "supporting item prices",
     "provide_service_visits": "service visits",
 }
 
@@ -130,7 +131,39 @@ class ApprovalTaskService:
                 key=lambda row: row.created_at or utcnow(),
                 reverse=True,
             )
-        return rows
+        return self._unique_open_tasks(rows, preferred_user_id=ctx.user_id)
+
+    @staticmethod
+    def _unique_open_tasks(
+        rows: list[CrmApprovalTask],
+        *,
+        preferred_user_id: UUID | None,
+    ) -> list[CrmApprovalTask]:
+        """One inbox row per logical approval (entity + action).
+
+        Admin fan-out creates an ``admin_copy`` per CRM/ERP admin; without
+        collapsing, My Jobs shows the same work many times ("25 shown").
+        Prefer the caller's own assignment, then the primary (non-admin) task,
+        then the newest row.
+        """
+
+        def rank(row: CrmApprovalTask) -> tuple[int, int, datetime]:
+            is_mine = 0 if preferred_user_id and row.assigned_user_id == preferred_user_id else 1
+            is_admin_copy = 1 if (row.assigned_role or "") == "admin_copy" else 0
+            created = row.created_at or utcnow()
+            return (is_mine, is_admin_copy, created)
+
+        best: dict[tuple[str, UUID, str], CrmApprovalTask] = {}
+        for row in rows:
+            key = (row.entity_type, row.entity_id, row.action or "")
+            current = best.get(key)
+            if current is None or rank(row) < rank(current):
+                best[key] = row
+        return sorted(
+            best.values(),
+            key=lambda row: row.created_at or utcnow(),
+            reverse=True,
+        )
 
     def get(self, ctx: TenantContext, row_id: UUID) -> CrmApprovalTask:
         is_admin = self._is_crm_admin(ctx)
@@ -154,6 +187,7 @@ class ApprovalTaskService:
         assigned_role: str | None = None,
         remarks: str | None = None,
         priority: str = "normal",
+        email_attachments: list[dict] | None = None,
     ) -> CrmApprovalTask:
         if team_role not in APPROVAL_TEAM_ROLES:
             raise ConflictException(f"Unknown approval team role '{team_role}'")
@@ -178,7 +212,7 @@ class ApprovalTaskService:
             priority=priority,
             action=action,
         )
-        self._send_notification_stub(task)
+        self._send_notification_stub(task, email_attachments=email_attachments)
         return task
 
     def route_approval(
@@ -196,6 +230,7 @@ class ApprovalTaskService:
         branch_id: UUID,
         remarks: str | None = None,
         priority: str = "normal",
+        email_attachments: list[dict] | None = None,
     ) -> CrmApprovalTask:
         """Create My Jobs tasks for selected approvers, CRM module admins, and ERP admins."""
         recipient_ids: list[UUID] = []
@@ -211,6 +246,16 @@ class ApprovalTaskService:
         if not recipient_ids:
             raise ConflictException("Select at least one approver before sending for approval")
 
+        # Drop prior open rows for this action so re-sends do not stack duplicates.
+        self._repo.cancel_pending_siblings(
+            ctx,
+            entity_type,
+            entity_id,
+            action,
+            except_id=None,
+            tenant_wide=self._is_crm_admin(ctx),
+        )
+
         primary: CrmApprovalTask | None = None
         for uid in recipient_ids:
             task = self.create_task(
@@ -225,6 +270,7 @@ class ApprovalTaskService:
                 assigned_user_id=uid,
                 remarks=remarks,
                 priority=priority,
+                email_attachments=email_attachments,
             )
             if primary is None:
                 primary = task
@@ -279,7 +325,12 @@ class ApprovalTaskService:
 
         return CrmMemberService(self._db).list_approval_user_options(ctx)
 
-    def _send_notification_stub(self, task: CrmApprovalTask) -> None:
+    def _send_notification_stub(
+        self,
+        task: CrmApprovalTask,
+        *,
+        email_attachments: list[dict] | None = None,
+    ) -> None:
         """Mark dispatched and email the assignee (task + approver CTA)."""
         task.notification_sent = True
         self._db.flush()
@@ -299,6 +350,7 @@ class ApprovalTaskService:
                 priority=task.priority or "normal",
                 remarks=task.remarks,
                 is_admin_copy=is_admin_copy,
+                attachments=email_attachments,
             )
         except Exception:  # noqa: BLE001
             pass
@@ -333,6 +385,9 @@ class ApprovalTaskService:
         if decision == "approved" and task.action == "provide_supporting_items":
             if not supporting_items:
                 raise ConflictException("Add at least one supporting item to complete this task")
+        if decision == "approved" and task.action == "price_supporting_items":
+            if not supporting_items:
+                raise ConflictException("Enter unit prices for supporting items to complete this task")
         if decision == "approved" and task.action == "provide_service_visits":
             if service_plan is None:
                 raise ConflictException("A service plan is required to complete this task")
@@ -344,6 +399,25 @@ class ApprovalTaskService:
                 raise ConflictException("A file upload is required to complete this attachment task")
 
         is_admin = self._is_crm_admin(ctx)
+        # Apply blueprint / side effects while the task is still pending so a
+        # failure (e.g. service PO spawn) does not leave My Jobs "approved"
+        # while the opportunity stays locked.
+        self._resume(
+            ctx,
+            task,
+            decision,
+            remark,
+            freight=freight,
+            freight_medium=freight_medium,
+            freight_weight_kg=freight_weight_kg,
+            freight_insurance=freight_insurance,
+            supporting_items=supporting_items,
+            service_plan=service_plan,
+            file_name=file_name,
+            content_base64=content_base64,
+            content_type=content_type,
+            file_path=file_path,
+        )
         self._repo.cancel_pending_siblings(
             ctx,
             task.entity_type,
@@ -365,22 +439,6 @@ class ApprovalTaskService:
         if decision == "rejected":
             self._notify_rejection(ctx, task, remark)
         self._notify_decision_emails(ctx, task, decision, remark)
-        self._resume(
-            ctx,
-            task,
-            decision,
-            remark,
-            freight=freight,
-            freight_medium=freight_medium,
-            freight_weight_kg=freight_weight_kg,
-            freight_insurance=freight_insurance,
-            supporting_items=supporting_items,
-            service_plan=service_plan,
-            file_name=file_name,
-            content_base64=content_base64,
-            content_type=content_type,
-            file_path=file_path,
-        )
         return task
 
     def _notify_rejection(
@@ -463,6 +521,7 @@ class ApprovalTaskService:
                 "provide_sow_attachment",
                 "provide_freight",
                 "provide_supporting_items",
+                "price_supporting_items",
                 "provide_service_visits",
             }
             if task.action in provide_actions and task.assigned_user_id:
@@ -537,9 +596,23 @@ class ApprovalTaskService:
                     items_payload.append(raw.model_dump())
                 elif isinstance(raw, dict):
                     items_payload.append(raw)
-            ovf = OvfService(self._db).apply_supporting_items_from_ops(
+            ovf_svc = OvfService(self._db)
+            ovf = ovf_svc.apply_supporting_items_from_ops(
                 ctx, task.entity_id, items_payload
             )
+            # Ops list is complete — automatically raise SCM pricing My Jobs.
+            try:
+                ovf_svc.request_supporting_item_prices_from_scm(
+                    ctx,
+                    ovf.id,
+                    remarks=(
+                        f"Auto-requested after Operations submitted "
+                        f"{len(items_payload)} supporting item(s)."
+                    ),
+                )
+            except ConflictException:
+                # Already pending / no owners / deal won — Sales still sees items at ₹0.
+                pass
             if task.requested_by:
                 notify_crm_user(
                     self._db,
@@ -549,12 +622,46 @@ class ApprovalTaskService:
                     title=f"Supporting items ready - OVF {ovf.ovf_no}",
                     body=(
                         f"Operations submitted {len(items_payload)} supporting item(s) "
-                        f"for OVF {ovf.ovf_no}. Review them on the Create OVF page."
+                        f"for OVF {ovf.ovf_no}. SCM has been asked to price them."
                     ),
                     entity_type="ovf",
                     entity_id=ovf.id,
                     href=f"/crm/ovf/{ovf.id}/edit",
                     digest_key=f"ovf:{ovf.id}:supporting_items",
+                    created_by=ctx.user_id,
+                )
+            return
+
+        if task.action == "price_supporting_items":
+            if decision != "approved":
+                return
+            from modules.crm.service.ovf_service import OvfService
+            from modules.crm.service.crm_notification_service import notify_crm_user
+
+            items_payload: list[dict] = []
+            for raw in supporting_items or []:
+                if hasattr(raw, "model_dump"):
+                    items_payload.append(raw.model_dump(mode="json"))
+                elif isinstance(raw, dict):
+                    items_payload.append(raw)
+            ovf = OvfService(self._db).apply_supporting_item_prices_from_scm(
+                ctx, task.entity_id, items_payload
+            )
+            if task.requested_by:
+                notify_crm_user(
+                    self._db,
+                    tenant_id=ctx.tenant_id,
+                    recipient_user_id=task.requested_by,
+                    event_type="crm.ovf.supporting_item_prices_provided",
+                    title=f"Supporting item prices ready - OVF {ovf.ovf_no}",
+                    body=(
+                        f"SCM priced {len(items_payload)} supporting item(s) "
+                        f"for OVF {ovf.ovf_no}."
+                    ),
+                    entity_type="ovf",
+                    entity_id=ovf.id,
+                    href=f"/crm/ovf/{ovf.id}/edit",
+                    digest_key=f"ovf:{ovf.id}:supporting_item_prices",
                     created_by=ctx.user_id,
                 )
             return

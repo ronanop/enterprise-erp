@@ -1242,6 +1242,26 @@ export const erpModules: ErpModule[] = [
     ],
   },
   {
+    key: "assets-it",
+    title: "IT Assets",
+    description:
+      "IT asset lifecycle — registration, assignment, maintenance, disposal, and reporting.",
+    href: "/assets",
+    group: "operations",
+    icon: "asset",
+    resources: [],
+  },
+  {
+    key: "assets-non-it",
+    title: "Non-IT Assets",
+    description:
+      "Non-IT asset inventory — furniture, facilities, and other non-IT equipment.",
+    href: "/assets/non-it",
+    group: "operations",
+    icon: "package",
+    resources: [],
+  },
+  {
     key: "assets",
     title: "Asset Management",
     description:
@@ -1300,13 +1320,6 @@ export const erpModules: ErpModule[] = [
         title: "Locations",
         description: "IT Location → Building master",
         apiPath: "/assets/site-locations",
-        listable: false,
-      },
-      {
-        key: "departments",
-        title: "Departments",
-        description: "Departments (organization master)",
-        apiPath: "/departments",
         listable: false,
       },
       {

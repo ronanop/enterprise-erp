@@ -227,6 +227,9 @@ class ProcurementCrmAdapter:
             "deal_number": opp.deal_reg_number or opp.opportunity_code,
             "company_account_id": opp.company_account_id,
             "customer_name": getattr(account, "customer_name", None),
+            "has_services": bool(getattr(opp, "has_services", False)),
+            "has_hardware": bool(getattr(opp, "has_hardware", False)),
+            "service_sourcing_channel": getattr(opp, "service_sourcing_channel", None),
         }
 
     def add_ovf_vendor_line(self, ctx: TenantContext, ovf_id: UUID, **fields: Any) -> Any:

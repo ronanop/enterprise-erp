@@ -4,10 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { WizardFooter } from "@/components/assets/assignment-wizard/wizard-footer";
 import { WizardShell } from "@/components/assets/assignment-wizard/wizard-shell";
-import {
-  WizardProgressBar,
-  WizardStepper,
-} from "@/components/assets/assignment-wizard/wizard-stepper";
+import { WizardStepper } from "@/components/assets/assignment-wizard/wizard-stepper";
 import { AssignmentReviewStep } from "@/components/assets/assignment-wizard/steps/assignment-review-step";
 import { AssetStep } from "@/components/assets/assignment-wizard/steps/asset-step";
 import {
@@ -39,7 +36,6 @@ import { cn } from "@/lib/utils";
 export type AssignmentWizardProps = {
   loading?: boolean;
   saving?: boolean;
-  branchLabel?: string;
   initialState?: Partial<AssignmentWizardState>;
   employees?: WizardSelectOption[];
   assets?: WizardAssetOption[];
@@ -54,21 +50,15 @@ export type AssignmentWizardProps = {
   unavailableAssetMessage?: string | null;
   onClearUnavailableAsset?: () => void;
   unlinkedDcChallans?: UnlinkedDcChallanOption[];
+  /** Create DC now — leave wizard for DC Challan workspace. */
+  onCreateDcNow?: (state: AssignmentWizardState) => void;
 };
 
 const STEPS = ASSIGNMENT_FORM_SECTIONS;
-const STEP_HINTS: Record<string, string> = {
-  allocation: "Who receives this asset — directory employee or manual entry.",
-  asset: "Pick one Ready to Move asset for this issue.",
-  "issued-items": "Optional accessories or attach an eligible asset as a component.",
-  delivery: "Most issues skip DC at handover — choose only if needed.",
-  review: "Confirm details, then submit or save a draft.",
-};
 
 export function AssignmentWizard({
   loading,
   saving,
-  branchLabel = "HQ",
   initialState,
   employees,
   assets,
@@ -82,6 +72,7 @@ export function AssignmentWizard({
   unavailableAssetMessage,
   onClearUnavailableAsset,
   unlinkedDcChallans,
+  onCreateDcNow,
 }: AssignmentWizardProps) {
   const [step, setStep] = useState(0);
   const [maxVisited, setMaxVisited] = useState(0);
@@ -128,10 +119,6 @@ export function AssignmentWizard({
   }, [goTo, state, step]);
 
   const missing = useMemo(() => listMissingAssignmentFields(state), [state]);
-  const fieldErrors = useMemo(
-    () => Object.fromEntries(missing.map((item) => [item.id, `${item.label} is required.`])),
-    [missing],
-  );
   const busy = Boolean(loading || saving);
   const stepMeta = STEPS[step];
   const isLast = step === STEPS.length - 1;
@@ -143,21 +130,17 @@ export function AssignmentWizard({
       <WizardShell
         title="Issue asset"
         stepTitle={stepMeta?.label ?? ""}
-        stepDescription={stepMeta ? STEP_HINTS[stepMeta.id] : undefined}
-        branchLabel={branchLabel}
+        stepDescription={undefined}
         loading={loading}
         progress={
-          <div className="space-y-3">
-            <WizardProgressBar currentIndex={step} totalSteps={STEPS.length} />
-            <WizardStepper
-              steps={STEPS}
-              currentIndex={step}
-              maxVisitedIndex={maxVisited}
-              onStepClick={goTo}
-              orientation="horizontal"
-              className="lg:hidden"
-            />
-          </div>
+          <WizardStepper
+            steps={STEPS}
+            currentIndex={step}
+            maxVisitedIndex={maxVisited}
+            onStepClick={goTo}
+            orientation="horizontal"
+            className="lg:hidden"
+          />
         }
         sidebar={
           <WizardStepper
@@ -175,22 +158,13 @@ export function AssignmentWizard({
                 {stepError}
               </p>
             ) : null}
-            {isLast && missing.length > 0 ? (
-              <p
-                className="text-xs text-muted-foreground"
-                data-testid="issue-missing-summary"
-                role="status"
-              >
-                Complete these fields to submit: {missing.map((m) => m.label).join(", ")}
-              </p>
-            ) : null}
             <WizardFooter
               isFirst={step === 0}
               isLast={isLast}
               loading={busy}
               nextDisabled={false}
               finishLabel={finishLabel}
-              showSaveDraft
+              showSaveDraft={isLast}
               finishClassName={ASSETS_ACCENT_BTN}
               onBack={() => goTo(step - 1)}
               onNext={tryNext}
@@ -210,13 +184,7 @@ export function AssignmentWizard({
           )}
         >
           {step === 0 ? (
-            <EmployeeStep
-              state={state}
-              onChange={patch}
-              showAdvancedAllocation
-              employees={employees}
-              fieldErrors={fieldErrors}
-            />
+            <EmployeeStep state={state} onChange={patch} employees={employees} />
           ) : null}
           {step === 1 ? (
             <AssetStep
@@ -236,7 +204,12 @@ export function AssignmentWizard({
             />
           ) : null}
           {step === 3 ? (
-            <DeliveryStep state={state} onChange={patch} unlinkedChallans={unlinkedDcChallans} />
+            <DeliveryStep
+              state={state}
+              onChange={patch}
+              unlinkedChallans={unlinkedDcChallans}
+              onCreateDcNow={onCreateDcNow}
+            />
           ) : null}
           {step === 4 ? (
             <AssignmentReviewStep

@@ -31,6 +31,8 @@ MONTHLY_CARRYING_COST_PCT = Decimal("1")
 DAYS_PER_MONTH = Decimal("30")
 
 _MONEY = Decimal("0.0001")
+# Vendor-matched margin % may carry up to 10 decimal places.
+_PCT = Decimal("0.0000000001")
 
 
 @dataclass(frozen=True)
@@ -65,7 +67,7 @@ def compute_line_margin(qty: Decimal, unit_cost: Decimal, unit_sell: Decimal) ->
     if total_cost == 0:
         margin_pct = Decimal("0")
     else:
-        margin_pct = (margin_amount / total_cost * Decimal("100")).quantize(Decimal("0.001"))
+        margin_pct = (margin_amount / total_cost * Decimal("100")).quantize(_PCT)
     return LineMargin(margin_pct=margin_pct, margin_amount=margin_amount, line_total=line_total)
 
 
@@ -100,7 +102,7 @@ def evaluate_quote_margin(
         avg_margin_pct = Decimal("0")
     else:
         avg_margin_pct = (sum(line_margins, Decimal("0")) / Decimal(len(line_margins))).quantize(
-            Decimal("0.001")
+            _PCT
         )
 
     threshold = required_threshold_for(line_types)
@@ -245,7 +247,7 @@ def compute_ovf_margin(
         - Decimal(str(holding_cost or 0))
     ).quantize(_MONEY)
     margin_pct = (
-        (margin_amount / customer_total * Decimal("100")).quantize(Decimal("0.001"))
+        (margin_amount / customer_total * Decimal("100")).quantize(_PCT)
         if customer_total
         else Decimal("0")
     )

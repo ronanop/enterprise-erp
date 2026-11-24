@@ -44,10 +44,9 @@ import {
   PlatformModuleShareDonut,
 } from "@/components/platform/platform-dashboard-charts";
 import { Button } from "@/components/ui/button";
-import { shellSidebarModules } from "@/config/navigation";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { welcomeDisplayName } from "@/lib/welcome-display-name";
-import { canAccessHref, hasModuleAssignments } from "@/lib/module-access";
+import { hasModuleAssignments } from "@/lib/module-access";
 import { cn } from "@/lib/utils";
 import {
   loadPlatformDashboard,
@@ -307,6 +306,43 @@ function DepartmentAnalyticsTable({
   );
 }
 
+function HomeDashboardSkeleton() {
+  return (
+    <div className="space-y-7" role="status" aria-label="Loading home dashboard">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div
+            key={i}
+            className="h-[92px] animate-pulse rounded-xl bg-[#e8e8ed] motion-reduce:animate-none"
+          />
+        ))}
+      </div>
+      <div className="grid gap-4 xl:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div
+            key={i}
+            className="rounded-2xl border border-[#e8e8ed] bg-white p-5"
+          >
+            <div className="mb-4 h-4 w-36 animate-pulse rounded bg-[#f5f5f7] motion-reduce:animate-none" />
+            <div className="h-[220px] animate-pulse rounded-xl bg-[#f5f5f7] motion-reduce:animate-none" />
+          </div>
+        ))}
+      </div>
+      <div className="rounded-2xl border border-[#e8e8ed] bg-white p-5">
+        <div className="mb-4 h-4 w-44 animate-pulse rounded bg-[#f5f5f7] motion-reduce:animate-none" />
+        <div className="space-y-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-14 animate-pulse rounded-xl bg-[#f5f5f7] motion-reduce:animate-none"
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function HealthSummaryStrip({
   health,
   tracked,
@@ -379,14 +415,6 @@ export function PlatformDashboard() {
   } = useAuthUser();
   const [data, setData] = useState<PlatformDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const visibleModules = useMemo(
-    () =>
-      shellSidebarModules().filter((mod) =>
-        canAccessHref(mod.href, moduleKeys, user?.userType, adminModuleKeys),
-      ),
-    [adminModuleKeys, moduleKeys, user?.userType],
-  );
 
   const load = useCallback(async () => {
     if (authLoading || authStatus !== "authenticated") return;
@@ -507,15 +535,8 @@ export function PlatformDashboard() {
     );
   }
 
-  const kpis =
-    headline.length > 0
-      ? headline.slice(0, 4)
-      : [
-        { label: "Modules", value: String(visibleModules.length), hint: "Assigned" },
-        { label: "Records", value: "—", hint: "Tracked" },
-        { label: "Live feeds", value: "—", hint: "Healthy" },
-        { label: "Coverage", value: "—", hint: "API" },
-      ];
+  const kpis = headline.slice(0, 4);
+  const showSkeleton = showLoading && !data;
 
   return shell(
     <>
@@ -553,124 +574,149 @@ export function PlatformDashboard() {
         </div>
       </header>
 
-      {authBlocked ? (
-        <div className="home-rise rounded-2xl border border-[#e8e8ed] bg-[#f5f5f7] px-4 py-3 text-sm text-[#6e6e73]" style={{ animationDelay: "40ms" }}>
-          Sign in to load live analytics.{" "}
-          <Link href="/login" className="cursor-pointer font-medium text-[#1d1d1f] underline underline-offset-2">
-            Go to login
-          </Link>
+      {showSkeleton ? (
+        <div className="home-rise" style={{ animationDelay: "80ms" }}>
+          <HomeDashboardSkeleton />
         </div>
-      ) : null}
+      ) : (
+        <>
+          {authBlocked ? (
+            <div className="home-rise rounded-2xl border border-[#e8e8ed] bg-[#f5f5f7] px-4 py-3 text-sm text-[#6e6e73]" style={{ animationDelay: "40ms" }}>
+              Sign in to load live analytics.{" "}
+              <Link href="/login" className="cursor-pointer font-medium text-[#1d1d1f] underline underline-offset-2">
+                Go to login
+              </Link>
+            </div>
+          ) : null}
 
-      {data?.partial && !authBlocked ? (
-        <div
-          className="home-rise rounded-2xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs text-amber-950"
-          style={{ animationDelay: "60ms" }}
-          role="status"
-        >
-          Some module KPIs could not be loaded. Showing what is available — refresh to retry.
-        </div>
-      ) : null}
+          {data?.partial && !authBlocked ? (
+            <div
+              className="home-rise rounded-2xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs text-amber-950"
+              style={{ animationDelay: "60ms" }}
+              role="status"
+            >
+              Some module KPIs could not be loaded. Showing what is available — refresh to retry.
+            </div>
+          ) : null}
 
-      <div
-        className="home-rise grid gap-2 sm:grid-cols-2 lg:grid-cols-4"
-        style={{ animationDelay: "100ms" }}
-      >
-        {kpis.map((stat) => (
           <div
-            key={stat.label}
-            className="relative min-w-0 overflow-hidden rounded-xl border border-white/10 px-5 py-5 text-white shadow-sm bg-[linear-gradient(135deg,var(--kpi-hero-from)_0%,var(--kpi-hero-via)_45%,var(--kpi-hero-to)_100%)]"
+            className="home-rise grid gap-2 sm:grid-cols-2 lg:grid-cols-4"
+            style={{ animationDelay: "100ms" }}
           >
-            <span
-              className="pointer-events-none absolute -top-10 -right-8 size-28 rounded-full bg-white/10 blur-2xl"
-              aria-hidden
-            />
-            <p className="relative text-[11px] font-normal tracking-[0.08em] text-white/75 uppercase">
-              {stat.label}
-            </p>
-            {showLoading ? (
-              <div className="relative mt-2 h-8 w-24 animate-pulse rounded bg-white/20 motion-reduce:animate-none" />
+            {kpis.length ? (
+              kpis.map((stat) => (
+                <div
+                  key={stat.label}
+                  className="relative min-w-0 overflow-hidden rounded-xl border border-white/10 px-5 py-5 text-white shadow-sm bg-[linear-gradient(135deg,var(--kpi-hero-from)_0%,var(--kpi-hero-via)_45%,var(--kpi-hero-to)_100%)]"
+                >
+                  <span
+                    className="pointer-events-none absolute -top-10 -right-8 size-28 rounded-full bg-white/10 blur-2xl"
+                    aria-hidden
+                  />
+                  <p className="relative text-[11px] font-normal tracking-[0.08em] text-white/75 uppercase">
+                    {stat.label}
+                  </p>
+                  {showLoading ? (
+                    <div className="relative mt-2 h-8 w-24 animate-pulse rounded bg-white/20 motion-reduce:animate-none" />
+                  ) : (
+                    <p className="relative mt-1.5 truncate text-[1.75rem] font-normal tracking-[-0.04em] text-white tabular-nums">
+                      {stat.value}
+                    </p>
+                  )}
+                  {stat.hint ? (
+                    <p className="relative mt-1 text-[11px] text-white/65">{stat.hint}</p>
+                  ) : null}
+                </div>
+              ))
             ) : (
-              <p className="relative mt-1.5 truncate text-[1.75rem] font-normal tracking-[-0.04em] text-white tabular-nums">
-                {stat.value}
-              </p>
+              <div className="col-span-full rounded-xl border border-[#e8e8ed] bg-white px-5 py-8 text-center text-sm text-[#6e6e73]">
+                No executive KPIs for your assigned modules yet.
+              </div>
             )}
-            {stat.hint ? (
-              <p className="relative mt-1 text-[11px] text-white/65">{stat.hint}</p>
-            ) : null}
           </div>
-        ))}
-      </div>
 
-      <div className="grid gap-4 xl:grid-cols-3">
-        <HomeCard
-          title="Lead-to-delivery"
-          subtitle="Pipeline stage counts"
-          icon={GitBranch}
-          delayMs={160}
-        >
-          <PlatformConnectedPipelineChart data={pipelineChart} loading={showLoading} />
-        </HomeCard>
-        <HomeCard
-          title="Module activity"
-          subtitle="Record volume by department"
-          icon={BarChart3}
-          delayMs={200}
-        >
-          <PlatformModuleActivityChart data={moduleActivityChart} loading={showLoading} />
-        </HomeCard>
-        <HomeCard
-          title="Department share"
-          subtitle="Mix across top modules"
-          icon={PieChart}
-          delayMs={240}
-        >
-          <PlatformModuleShareDonut
-            data={(data?.moduleActivity ?? []).map((row) => ({
-              name: row.name,
-              value: row.count,
-            }))}
-            loading={showLoading}
-          />
-          <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 border-t border-[#e8e8ed] pt-3">
-            {(data?.moduleActivity ?? []).slice(0, 6).map((row, index) => {
-              const total = (data?.moduleActivity ?? []).reduce((sum, r) => sum + r.count, 0) || 1;
-              const pct = Math.round((row.count / total) * 100);
-              const hues = ["#1e2937", "#334155", "#0f766e", "#0d9488", "#14b8a6", "#5eead4"];
-              return (
-                <li key={row.name} className="flex items-center justify-between gap-2 text-[11px]">
-                  <span className="flex min-w-0 items-center gap-1.5 truncate text-[#6e6e73]">
-                    <span
-                      className="size-1.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: hues[index % hues.length] }}
+          <div className="grid gap-4 xl:grid-cols-3">
+            <HomeCard
+              title="Lead-to-delivery"
+              subtitle="Pipeline stage counts"
+              icon={GitBranch}
+              delayMs={160}
+            >
+              <PlatformConnectedPipelineChart data={pipelineChart} loading={showLoading} />
+            </HomeCard>
+            <HomeCard
+              title="Module activity"
+              subtitle="Record volume by department"
+              icon={BarChart3}
+              delayMs={200}
+            >
+              <PlatformModuleActivityChart data={moduleActivityChart} loading={showLoading} />
+            </HomeCard>
+            <HomeCard
+              title="Department share"
+              subtitle="Mix across top modules"
+              icon={PieChart}
+              delayMs={240}
+            >
+              <PlatformModuleShareDonut
+                data={(data?.moduleActivity ?? []).map((row) => ({
+                  name: row.name,
+                  value: row.count,
+                }))}
+                loading={showLoading}
+              />
+              {showLoading ? (
+                <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-[#e8e8ed] pt-3">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="h-3 animate-pulse rounded bg-[#f5f5f7] motion-reduce:animate-none"
                     />
-                    {row.name}
-                  </span>
-                  <span className="font-medium tabular-nums text-[#1d1d1f]">{pct}%</span>
-                </li>
-              );
-            })}
-          </ul>
-        </HomeCard>
-      </div>
+                  ))}
+                </div>
+              ) : (
+                <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 border-t border-[#e8e8ed] pt-3">
+                  {(data?.moduleActivity ?? []).slice(0, 6).map((row, index) => {
+                    const total = (data?.moduleActivity ?? []).reduce((sum, r) => sum + r.count, 0) || 1;
+                    const pct = Math.round((row.count / total) * 100);
+                    const hues = ["#1e2937", "#334155", "#0f766e", "#0d9488", "#14b8a6", "#5eead4"];
+                    return (
+                      <li key={row.name} className="flex items-center justify-between gap-2 text-[11px]">
+                        <span className="flex min-w-0 items-center gap-1.5 truncate text-[#6e6e73]">
+                          <span
+                            className="size-1.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: hues[index % hues.length] }}
+                          />
+                          {row.name}
+                        </span>
+                        <span className="font-medium tabular-nums text-[#1d1d1f]">{pct}%</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </HomeCard>
+          </div>
 
-      <HomeCard
-        title="Departments"
-        subtitle="Same modules as the sidebar — status, volume, and KPIs."
-        icon={LayoutDashboard}
-        delayMs={280}
-      >
-        <HealthSummaryStrip
-          health={data?.moduleHealth ?? []}
-          tracked={tracked}
-          loading={showLoading}
-        />
-        <DepartmentAnalyticsTable
-          modules={data?.modules ?? []}
-          maxRecords={maxModuleRecords}
-          loading={showLoading}
-        />
-      </HomeCard>
+          <HomeCard
+            title="Departments"
+            subtitle="Same modules as the sidebar — status, volume, and KPIs."
+            icon={LayoutDashboard}
+            delayMs={280}
+          >
+            <HealthSummaryStrip
+              health={data?.moduleHealth ?? []}
+              tracked={tracked}
+              loading={showLoading}
+            />
+            <DepartmentAnalyticsTable
+              modules={data?.modules ?? []}
+              maxRecords={maxModuleRecords}
+              loading={showLoading}
+            />
+          </HomeCard>
+        </>
+      )}
     </>,
   );
 }

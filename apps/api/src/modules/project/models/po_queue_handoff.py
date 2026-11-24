@@ -32,6 +32,8 @@ class PrjPoQueueHandoff(Base, *PrjTransactionMixin):
     project_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     circle_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     site_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    cloud_name: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    line_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
     contact_person: Mapped[str | None] = mapped_column(String(255), nullable=True)
     contact_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
     rack_quantity: Mapped[str | None] = mapped_column(String(32), nullable=True)

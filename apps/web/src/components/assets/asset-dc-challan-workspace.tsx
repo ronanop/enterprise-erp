@@ -551,7 +551,7 @@ export function AssetDcChallanWorkspace() {
               ) : items.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-3 py-6">
-                    <EmptyState variant="no-results" title="No DC challans" description="Create a challan from an employee assignment or a Ready to Move asset." />
+                    <EmptyState variant="no-results" title="No DC challans" description="Create a challan from an employee assignment or an In Stock asset." />
                   </td>
                 </tr>
               ) : (

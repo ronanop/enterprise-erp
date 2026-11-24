@@ -459,24 +459,50 @@ def test_return_audit_includes_condition() -> None:
         allocation_type="branch",
         employee_id=None,
     )
-    asset = SimpleNamespace(id=row.asset_id, version=1, custodian_employee_id=None, master_asset_id=None)
+    asset = SimpleNamespace(
+        id=row.asset_id,
+        version=1,
+        custodian_employee_id=None,
+        master_asset_id=None,
+        branch_id=uuid4(),
+        company_id=uuid4(),
+    )
     with patch.object(svc, "get", return_value=row):
         with patch.object(svc._validator, "validate_return_readiness"):
-            with patch.object(svc._validator, "validate_return_request", return_value="retire"):
-                with patch.object(svc._assets, "lock_for_update", return_value=asset):
-                    with patch.object(svc._operational, "apply_action"):
-                        with patch.object(svc._assets, "get", return_value=asset):
-                            with patch.object(svc._repo, "complete_return", return_value=row):
-                                with patch.object(svc._audit, "log_entity_change") as audit:
-                                    svc.return_assignment(
-                                        ctx,
-                                        row_id,
-                                        return_condition="outdated",
-                                        remarks="old laptop",
-                                    )
+            with patch.object(svc._validator, "validate_return_request", return_value="dispose"):
+                with patch.object(svc._assignment_components, "reconcile_return"):
+                    with patch(
+                        "modules.asset.service.component_service.AssetComponentService"
+                    ) as CompSvc:
+                        CompSvc.return_value.dispose_active_for_parent.return_value = []
+                        with patch.object(svc._assets, "lock_for_update", return_value=asset):
+                            with patch.object(svc._operational, "apply_action") as ops:
+                                with patch.object(svc._assets, "get", return_value=asset):
+                                    with patch.object(
+                                        svc._repo, "complete_return", return_value=row
+                                    ):
+                                        with patch.object(
+                                            svc._audit, "log_entity_change"
+                                        ) as audit:
+                                            with patch(
+                                                "modules.asset.service.disposal_service.DisposalService"
+                                            ) as DisposalSvc:
+                                                DisposalSvc.return_value.create.return_value = (
+                                                    MagicMock()
+                                                )
+                                                svc.return_assignment(
+                                                    ctx,
+                                                    row_id,
+                                                    return_condition="outdated",
+                                                    remarks="old laptop",
+                                                )
+    ops.assert_not_called()
+    CompSvc.return_value.dispose_active_for_parent.assert_called_once()
+    DisposalSvc.return_value.create.assert_called_once()
     payload = audit.call_args.kwargs["new_value"]
     assert payload["return_condition"] == "outdated"
     assert payload["return_remarks"] == "old laptop"
+    assert payload["sent_to_disposal"] is True
 
 
 def test_json_safe_component_returns_helper_stringifies_uuid_only() -> None:
@@ -514,6 +540,8 @@ def _run_return_with_component_returns(
         version=1,
         custodian_employee_id=row.employee_id,
         master_asset_id=None,
+        branch_id=uuid4(),
+        company_id=uuid4(),
     )
     with patch.object(svc, "get", return_value=row):
         with patch.object(svc._validator, "validate_return_readiness"):
@@ -523,25 +551,36 @@ def _run_return_with_component_returns(
                 with patch.object(
                     svc._assignment_components, "reconcile_return", return_value=[]
                 ) as reconcile:
-                    with patch.object(svc._assets, "lock_for_update", return_value=asset):
-                        with patch.object(svc._operational, "apply_action"):
-                            with patch.object(svc._assets, "get", return_value=asset):
-                                with patch.object(
-                                    svc._assets, "update", return_value=asset
-                                ):
+                    with patch(
+                        "modules.asset.service.component_service.AssetComponentService"
+                    ) as CompSvc:
+                        CompSvc.return_value.dispose_active_for_parent.return_value = []
+                        CompSvc.return_value.detach_linked_for_parent.return_value = []
+                        with patch.object(svc._assets, "lock_for_update", return_value=asset):
+                            with patch.object(svc._operational, "apply_action"):
+                                with patch.object(svc._assets, "get", return_value=asset):
                                     with patch.object(
-                                        svc._repo, "complete_return", return_value=row
+                                        svc._assets, "update", return_value=asset
                                     ):
                                         with patch.object(
-                                            svc._audit, "log_entity_change"
-                                        ) as audit:
-                                            svc.return_assignment(
-                                                ctx,
-                                                row_id,
-                                                return_condition=return_condition,
-                                                remarks="ok",
-                                                component_returns=component_returns,
-                                            )
+                                            svc._repo, "complete_return", return_value=row
+                                        ):
+                                            with patch.object(
+                                                svc._audit, "log_entity_change"
+                                            ) as audit:
+                                                with patch(
+                                                    "modules.asset.service.disposal_service.DisposalService"
+                                                ) as DisposalSvc:
+                                                    DisposalSvc.return_value.create.return_value = (
+                                                        MagicMock()
+                                                    )
+                                                    svc.return_assignment(
+                                                        ctx,
+                                                        row_id,
+                                                        return_condition=return_condition,
+                                                        remarks="ok",
+                                                        component_returns=component_returns,
+                                                    )
     return reconcile, audit
 
 
@@ -576,7 +615,7 @@ def test_return_audit_component_outcome_json_safe(issue_status: str) -> None:
     ("return_condition", "ops_action"),
     [
         ("good", "return_to_ready"),
-        ("outdated", "return_to_ready"),
+        ("outdated", "dispose"),
         ("dead", "return_to_ready"),
     ],
 )

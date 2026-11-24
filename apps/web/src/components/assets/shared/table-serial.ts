@@ -17,11 +17,11 @@ export function tableRowSerialFromIndex(rowIndex: number): number {
   return tableRowSerial(1, 1, rowIndex);
 }
 
-export const TABLE_SERIAL_HEADER_LABEL = "#";
+export const TABLE_SERIAL_HEADER_LABEL = "No.";
 
 export function tableSerialHeaderClassName(className?: string): string {
   return cn(
-    "w-10 px-2 py-2.5 text-center font-medium tabular-nums whitespace-nowrap",
+    "w-12 px-2 py-2.5 text-center font-medium tabular-nums whitespace-nowrap",
     className,
   );
 }

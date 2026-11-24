@@ -261,6 +261,25 @@ def request_ovf_supporting_items(
     )
 
 
+@ovf_router.post(
+    "/{ovf_id}/request-supporting-item-prices",
+    response_model=APIResponse[OvfResponse],
+)
+def request_ovf_supporting_item_prices(
+    ovf_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.ovf:update"))],
+    db: Annotated[Session, Depends(get_db)],
+    body: OvfSupportingItemsRequest | None = None,
+):
+    remarks = body.remarks if body is not None else None
+    return APIResponse(
+        message="Supporting item prices requested from SCM",
+        data=OvfService(db).request_supporting_item_prices_from_scm(
+            ctx, ovf_id, remarks=remarks
+        ),
+    )
+
+
 @ovf_router.post("/{ovf_id}/request-service-visits", response_model=APIResponse[OvfResponse])
 def request_ovf_service_visits(
     ovf_id: UUID,

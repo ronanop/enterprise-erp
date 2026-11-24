@@ -19,6 +19,16 @@ class QuoteRepository(CrmScopedRepository):
         stmt = self.apply_crm_filter(stmt, CrmQuote, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
 
+    def get_for_update(self, ctx: TenantContext, row_id: UUID) -> CrmQuote | None:
+        """Lock the quote row so concurrent line recomputes cannot race on version."""
+        stmt = (
+            select(CrmQuote)
+            .where(CrmQuote.id == row_id, CrmQuote.is_deleted.is_(False))
+            .with_for_update()
+        )
+        stmt = self.apply_crm_filter(stmt, CrmQuote, ctx, branch_scoped=True)
+        return self.db.scalar(stmt)
+
     def list_quotes(
         self,
         ctx: TenantContext,

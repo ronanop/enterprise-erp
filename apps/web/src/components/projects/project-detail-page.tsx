@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
+  Cloud,
   FolderKanban,
   Pencil,
   RefreshCw,
+  ShoppingCart,
 } from "lucide-react";
 
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
@@ -16,6 +18,8 @@ import {
   ProjectsDetailGrid,
   ProjectsDetailItem,
   ProjectsErrorBanner,
+  ProjectsListPanel,
+  ProjectsListToolbar,
   ProjectsPage,
   ProjectsSection,
 } from "@/components/projects/projects-ui";
@@ -35,6 +39,7 @@ import {
   getProject,
   getSiteInstallationByProject,
   listBranchOptions,
+  type CloudPoLine,
   type Project,
   type SiteInstallation,
 } from "@/services/projects-portal-service";
@@ -107,6 +112,15 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
     }
   }
 
+  const cloudPoLines = useMemo<CloudPoLine[]>(() => {
+    const lines = Array.isArray(site?.cloud_po_lines) ? site.cloud_po_lines : [];
+    return [...lines].sort((a, b) => {
+      const po = (a.customer_po_number || "").localeCompare(b.customer_po_number || "");
+      if (po !== 0) return po;
+      return (a.line_type || "").localeCompare(b.line_type || "");
+    });
+  }, [site?.cloud_po_lines]);
+
   if (loading && !project) {
     return (
       <div className="space-y-3">
@@ -140,6 +154,9 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
     employeeName: labels.employeeName,
     companyPoNumber,
   });
+
+  const cloudName = (site?.cloud_name || "").trim();
+  const showCloudPoTable = Boolean(cloudName) || cloudPoLines.length > 0;
 
   return (
     <ProjectsPage>
@@ -206,23 +223,79 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
 
       <SiteInstallationWorkflow projectId={project.id} />
 
-      <ProjectsSection
-        title="Project Details"
-        subtitle="Intake fields captured when this site request was created"
-        icon={FolderKanban}
-      >
-        {intakeDetailRows.length > 0 ? (
-          <ProjectsDetailGrid>
-            {intakeDetailRows.map((row) => (
-              <ProjectsDetailItem key={row.label} label={row.label}>
-                {row.value}
-              </ProjectsDetailItem>
-            ))}
-          </ProjectsDetailGrid>
-        ) : (
-          <p className="text-sm text-muted-foreground">No intake details recorded.</p>
-        )}
-      </ProjectsSection>
+      {showCloudPoTable ? (
+        <ProjectsListPanel>
+          <ProjectsListToolbar
+            title={cloudName || project.project_name}
+            subtitle={`All POs for this cloud · ${cloudPoLines.length} line${cloudPoLines.length === 1 ? "" : "s"}`}
+            icon={cloudName ? Cloud : ShoppingCart}
+            count={cloudPoLines.length}
+          />
+          <div className="erp-scroll overflow-x-auto">
+            {cloudPoLines.length === 0 ? (
+              <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+                No PO lines stored for this cloud yet.
+              </p>
+            ) : (
+              <table className="w-full min-w-[880px] text-left text-[13px]">
+                <thead className="border-b border-border/70 bg-muted/80 text-[11px] text-muted-foreground">
+                  <tr>
+                    <th className="whitespace-nowrap px-3 py-2 font-semibold">Project</th>
+                    <th className="whitespace-nowrap px-3 py-2 font-semibold">Circle</th>
+                    <th className="whitespace-nowrap px-3 py-2 font-semibold">Site</th>
+                    <th className="whitespace-nowrap px-3 py-2 font-semibold">Type</th>
+                    <th className="whitespace-nowrap px-3 py-2 font-semibold">Qty</th>
+                    <th className="whitespace-nowrap px-3 py-2 font-semibold">PO</th>
+                    <th className="whitespace-nowrap px-3 py-2 font-semibold">PO Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cloudPoLines.map((row, index) => (
+                    <tr
+                      key={`${row.customer_po_number || "po"}-${row.line_type || ""}-${index}`}
+                      className="border-b border-border/40"
+                    >
+                      <td className="max-w-[180px] truncate px-3 py-2 font-medium">
+                        {row.project_name || "—"}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2">{row.circle_name || "—"}</td>
+                      <td className="max-w-[160px] truncate px-3 py-2">{row.site_name || "—"}</td>
+                      <td className="whitespace-nowrap px-3 py-2">{row.line_type || "—"}</td>
+                      <td className="whitespace-nowrap px-3 py-2 tabular-nums">
+                        {row.quantity != null && row.quantity > 0 ? row.quantity : "—"}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2 font-mono text-xs tabular-nums">
+                        {row.customer_po_number || "—"}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
+                        {formatDate(row.document_date)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </ProjectsListPanel>
+      ) : (
+        <ProjectsSection
+          title="Project Details"
+          subtitle="Intake fields captured when this site request was created"
+          icon={FolderKanban}
+        >
+          {intakeDetailRows.length > 0 ? (
+            <ProjectsDetailGrid>
+              {intakeDetailRows.map((row) => (
+                <ProjectsDetailItem key={row.label} label={row.label}>
+                  {row.value}
+                </ProjectsDetailItem>
+              ))}
+            </ProjectsDetailGrid>
+          ) : (
+            <p className="text-sm text-muted-foreground">No intake details recorded.</p>
+          )}
+        </ProjectsSection>
+      )}
 
       <SiteInstallationTrackingSummary projectId={project.id} />
 

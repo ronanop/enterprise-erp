@@ -42,7 +42,7 @@ class ManagementGroupService:
         return catalog_for_api()
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
-        cid = self._scope.resolve_list_company_id(ctx, company_id)
+        cid = self._scope.resolve_company_id(ctx, company_id)
         self.ensure_default_groups(ctx, cid)
         return self._repo.list_rows(ctx, cid)
 

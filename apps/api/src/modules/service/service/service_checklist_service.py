@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
-from modules.platform.compat.audit_facade import PlatformAuditFacade
+from modules.foundation.service.audit_service import AuditService
 from modules.service.models import SvcServiceChecklist
 from modules.service.repository.service_checklist_repository import ServiceChecklistRepository
 from modules.service.service.engines import ServiceChecklistEngine
@@ -18,10 +18,10 @@ class ServiceChecklistService:
         self._repo = ServiceChecklistRepository(db)
         self._scope = ServiceScopeValidator(db)
         self._engine = ServiceChecklistEngine()
-        self._audit = PlatformAuditFacade(db)
+        self._audit = AuditService(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
-        cid = self._scope.resolve_list_company_id(ctx, company_id)
+        cid = self._scope.resolve_company_id(ctx, company_id)
         return self._repo.list_rows(ctx, cid)
 
     def get(self, ctx: TenantContext, row_id: UUID) -> SvcServiceChecklist:

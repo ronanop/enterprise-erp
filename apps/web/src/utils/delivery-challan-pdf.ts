@@ -45,6 +45,15 @@ export type DeliveryChallanPdfInput = {
   lines: DeliveryChallanLine[];
 };
 
+function isBillingPdfDocument(input: Pick<DeliveryChallanPdfInput, "documentType">): boolean {
+  const raw = (input.documentType || "").trim().toUpperCase();
+  return raw === "BILLING" || raw.includes("BILLING");
+}
+
+function pdfDocumentTitle(input: Pick<DeliveryChallanPdfInput, "documentType">): string {
+  return isBillingPdfDocument(input) ? "BILLING" : "DELIVERY CHALLAN";
+}
+
 function wrap(doc: jsPDF, text: string, maxWidth: number): string[] {
   return doc.splitTextToSize(dash(text), maxWidth) as string[];
 }
@@ -464,8 +473,9 @@ export async function downloadDeliveryChallanPdf(
   if (options?.watermark) {
     applyDraftWatermark(doc);
   }
-  const safeName = (input.challanNumber || "delivery-challan").replace(/[/\\?%*:|"<>]/g, "-");
-  const base = fileName || `Delivery-Challan-${safeName}.pdf`;
+  const safeName = (input.challanNumber || "document").replace(/[/\\?%*:|"<>]/g, "-");
+  const prefix = isBillingPdfDocument(input) ? "Billing" : "Delivery-Challan";
+  const base = fileName || `${prefix}-${safeName}.pdf`;
   doc.save(options?.watermark ? base.replace(/\.pdf$/i, "-draft.pdf") : base);
 }
 
@@ -559,9 +569,10 @@ async function renderDeliveryChallanPdf(input: DeliveryChallanPdfInput): Promise
   y = Math.max(y + logoH + 2, hy + 2);
 
   const centerX = pageW / 2;
+  const billingDoc = isBillingPdfDocument(input);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
-  doc.text("DELIVERY CHALLAN", centerX, y, { align: "center" });
+  doc.text(pdfDocumentTitle(input), centerX, y, { align: "center" });
   doc.setFontSize(7);
   doc.text(input.copyLabel || "ORIGINAL FOR CONSIGNEE", rightX, y, { align: "right" });
   y += 5;
@@ -569,8 +580,14 @@ async function renderDeliveryChallanPdf(input: DeliveryChallanPdfInput): Promise
   const headerRows: HeaderGridRow[] = [
     {
       kind: "dual",
-      left: { label: "Challan No", value: input.challanNumber },
-      right: { label: "Challan Date", value: formatPoDate(input.challanDate) },
+      left: {
+        label: billingDoc ? "Invoice No" : "Challan No",
+        value: input.challanNumber,
+      },
+      right: {
+        label: billingDoc ? "Invoice Date" : "Challan Date",
+        value: formatPoDate(input.challanDate),
+      },
     },
     {
       kind: "span",
@@ -765,14 +782,24 @@ export function buildDeliveryChallanPdfInput(params: {
 export function buildDeliveryChallanPdfInputFromRecord(
   record: DeliveryChallanRecord,
 ): DeliveryChallanPdfInput {
+  const isBilling = record.grnKind === "billing";
+  const invoiceNo = (record.invoiceNumber || "").trim();
+  const invoiceDate = (record.invoiceDate || "").trim();
   return buildDeliveryChallanPdfInput({
     entityName: record.entityName,
     entityAddressBlock: record.entityAddressBlock,
     entityGstBlock: record.entityGstBlock,
-    documentType: record.documentType || "DELIVERY CHALLAN",
+    documentType:
+      isBilling
+        ? "BILLING"
+        : record.documentType || "DELIVERY CHALLAN",
     copyLabel: record.copyLabel || "ORIGINAL FOR CONSIGNEE",
-    challanNumber: record.challanNumber,
-    challanDate: record.challanDate,
+    challanNumber: isBilling
+      ? invoiceNo || record.challanNumber
+      : record.challanNumber,
+    challanDate: isBilling
+      ? invoiceDate || record.challanDate
+      : record.challanDate,
     customerName: record.customerName,
     customerBillTo: record.customerBillTo,
     customerShipTo: record.customerShipTo,

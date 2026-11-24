@@ -128,15 +128,39 @@ async function createTextPolicyPdf(title: string, body: string): Promise<PDFDocu
   return doc;
 }
 
-function stampSignatureOnPages(
+function formatSignedAtLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  // e.g. 30 Oct 2026, 14:12:05
+  return d.toLocaleString(undefined, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
+
+async function stampSignatureOnPages(
   pdfDoc: PDFDocument,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sigImage: any,
+  signedAtIso: string,
+  candidateName?: string,
 ) {
   const pages = pdfDoc.getPages();
-  const maxW = 120;
-  const maxH = 48;
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const maxW = 140;
+  const maxH = 52;
   const margin = 36;
+  const dateLabel = formatSignedAtLabel(signedAtIso);
+  const nameLine = (candidateName || "").trim();
+  const dateLine = `Signed: ${dateLabel}`;
+  const fontSize = 8;
+  const lineGap = 10;
 
   for (const page of pages) {
     const { width } = page.getSize();
@@ -144,24 +168,51 @@ function stampSignatureOnPages(
     const scale = Math.min(maxW / dims.width, maxH / dims.height, 1);
     const w = dims.width * scale;
     const h = dims.height * scale;
+
+    // Stack from bottom-right: date (and optional name) under the signature image
+    let cursorY = margin;
+    const dateWidth = font.widthOfTextAtSize(dateLine, fontSize);
+    page.drawText(dateLine, {
+      x: width - margin - dateWidth,
+      y: cursorY,
+      size: fontSize,
+      font,
+      color: rgb(0.25, 0.25, 0.25),
+    });
+    cursorY += lineGap;
+
+    if (nameLine) {
+      const nameWidth = bold.widthOfTextAtSize(nameLine, fontSize);
+      page.drawText(nameLine, {
+        x: width - margin - nameWidth,
+        y: cursorY,
+        size: fontSize,
+        font: bold,
+        color: rgb(0.15, 0.15, 0.15),
+      });
+      cursorY += lineGap;
+    }
+
     const x = width - margin - w;
-    const y = margin;
+    const y = cursorY + 2;
     page.drawImage(sigImage, { x, y, width: w, height: h });
   }
 }
 
 /**
  * Build signed PDF copies of every active policy, with the candidate signature
- * stamped on the bottom-right of each page.
+ * stamped on the bottom-right of each page (with date and time).
  */
 export async function stampPoliciesWithSignature(input: {
   policies: PortalPolicyDoc[];
   signatureDataUrl: string;
   signatureMimeType?: string;
   candidateName?: string;
+  /** ISO timestamp shown under the signature; defaults to now. */
+  signedAt?: string;
 }): Promise<SignedPolicyDocument[]> {
-  const { policies, signatureDataUrl, signatureMimeType } = input;
-  const signedAt = new Date().toISOString();
+  const { policies, signatureDataUrl, signatureMimeType, candidateName } = input;
+  const signedAt = input.signedAt || new Date().toISOString();
   const out: SignedPolicyDocument[] = [];
 
   for (const policy of policies) {
@@ -199,7 +250,7 @@ export async function stampPoliciesWithSignature(input: {
     }
 
     const sigImage = await embedSignatureImage(pdfDoc, signatureDataUrl, signatureMimeType);
-    stampSignatureOnPages(pdfDoc, sigImage);
+    await stampSignatureOnPages(pdfDoc, sigImage, signedAt, candidateName);
 
     const pdfBytes = await pdfDoc.save();
     const safeTitle = (policy.label || "policy").replace(/[^\w\-]+/g, "_").slice(0, 40);

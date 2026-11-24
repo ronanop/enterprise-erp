@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 
 export type IssueFormShellProps = {
   title: string;
-  branchLabel?: string;
   loading?: boolean;
   headerExtra?: ReactNode;
   sections: WizardStepMeta[];
@@ -19,7 +18,6 @@ export type IssueFormShellProps = {
 
 export function IssueFormShell({
   title,
-  branchLabel,
   loading,
   headerExtra,
   sections,
@@ -32,11 +30,6 @@ export function IssueFormShell({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold tracking-tight text-foreground">{title}</h1>
-          {branchLabel ? (
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Branch: <span className="font-medium text-foreground">{branchLabel}</span>
-            </p>
-          ) : null}
         </div>
         {headerExtra}
       </div>

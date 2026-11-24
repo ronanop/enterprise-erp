@@ -45,6 +45,7 @@ import {
   groupAssignmentsByAssetId,
   indexActiveAssignments,
   mapAssetsToInventoryRows,
+  resolveAccessorySerialDisplay,
   type InventoryAccessoryLine,
   type InventoryLookupContext,
 } from "@/components/assets/inventory.mapper";
@@ -80,6 +81,8 @@ import { listItAssetTypes } from "@/services/asset-type-service";
 import { ApiClientError } from "@/services/api-client";
 
 const PAGE_SIZE = 25;
+/** Asset module PaginationParams caps page_size at 200. */
+const COMPONENT_SEARCH_PAGE_SIZE = 200;
 
 async function fetchCurrentAssetLocationLabels(): Promise<Record<string, string>> {
   const labels: Record<string, string> = {};
@@ -160,30 +163,48 @@ export async function fetchInventoryPage(input: {
   const accessoriesByAssetId = new Map<string, InventoryAccessoryLine[]>();
   if (assetIds.length) {
     try {
-      const components = await componentService.search({
-        asset_ids: assetIds,
-        status: "active",
-        page: 1,
-        page_size: Math.max(assetIds.length * 10, 100),
-      });
-      for (const row of components.items) {
-        const assetId = String(row.asset_id);
-        const list = accessoriesByAssetId.get(assetId) ?? [];
-        list.push({
-          typeLabel: row.linked_asset_code
-            ? `${componentTypeLabel(row.component_type)} · ${row.linked_asset_code}`
-            : componentTypeLabel(row.component_type),
-          // Prefer component_code (charger code) then serial — same as Edit Asset.
-          serialDisplay:
-            row.component_code?.trim() || row.serial_number?.trim() || "—",
-          componentName:
-            row.linked_asset_name?.trim() ||
-            row.linked_asset_code?.trim() ||
-            row.component_name?.trim() ||
-            undefined,
-          status: row.linked_asset_operational_status || row.status,
+      // Must stay ≤ API max (200). Oversize page_size → 422 and empty Charger column.
+      let page = 1;
+      let total = Infinity;
+      while (true) {
+        const components = await componentService.search({
+          asset_ids: assetIds,
+          status: "active",
+          page,
+          page_size: COMPONENT_SEARCH_PAGE_SIZE,
         });
-        accessoriesByAssetId.set(assetId, list);
+        total = components.total;
+        for (const row of components.items) {
+          const assetId = String(row.asset_id);
+          const list = accessoriesByAssetId.get(assetId) ?? [];
+          list.push({
+            typeLabel: row.linked_asset_code
+              ? `${componentTypeLabel(row.component_type)} · ${row.linked_asset_code}`
+              : componentTypeLabel(row.component_type),
+            // Prefer real charger code; skip auto CHARGER-NNNN when Excel serial differs.
+            serialDisplay: resolveAccessorySerialDisplay(
+              row.component_code,
+              row.serial_number,
+            ),
+            componentName:
+              row.linked_asset_name?.trim() ||
+              row.linked_asset_code?.trim() ||
+              row.component_name?.trim() ||
+              undefined,
+            status: row.linked_asset_operational_status || row.status,
+          });
+          accessoriesByAssetId.set(assetId, list);
+        }
+        const loaded = page * COMPONENT_SEARCH_PAGE_SIZE;
+        if (
+          components.items.length === 0 ||
+          components.items.length < COMPONENT_SEARCH_PAGE_SIZE ||
+          loaded >= total
+        ) {
+          break;
+        }
+        page += 1;
+        if (page > 50) break;
       }
     } catch {
       // Accessories are optional enrichment — inventory still loads.
@@ -371,7 +392,7 @@ export function AssetInventoryContainer({
     void load();
   }, [load, reloadToken]);
 
-  /** Clear workflow flags after Issue/Return; drawer starts closed on remount. */
+  /** After Issue/Return/Import, remount reloads list so new rows appear. */
   useEffect(() => {
     clearInventoryUiSnapshot();
     const stale = consumeInventoryStale();
@@ -379,6 +400,7 @@ export function AssetInventoryContainer({
     setDrawerOpen(false);
     setDrawerRow(null);
     setDrawerData(null);
+    setReloadToken((t) => t + 1);
   }, []);
 
   const closeDrawer = useCallback(() => {
@@ -617,7 +639,6 @@ export function AssetInventoryContainer({
         errorMessage={errorMessage}
         onRetry={() => setReloadToken((t) => t + 1)}
         actionPermissions={actionPermissions}
-        onViewRow={onViewRow}
         onMenuAction={onMenuAction}
         drawerOpen={drawerOpen}
         onDrawerOpenChange={setDrawerOpen}

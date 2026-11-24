@@ -40,7 +40,7 @@ class EmployeeSalaryService:
         return payload
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
-        cid = self._scope.resolve_list_company_id(ctx, company_id)
+        cid = self._scope.resolve_company_id(ctx, company_id)
         rows = self._repo.list_rows(ctx, cid)
         labels = self._master.employee_labels(ctx, [row.employee_id for row in rows])
         return [self._to_response(row, labels) for row in rows]

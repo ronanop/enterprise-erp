@@ -31,15 +31,18 @@ class EmailAutomationStatus(BaseModel):
     enabled: bool
     smtp_configured: bool
     imap_configured: bool
+    graph_configured: bool = False
+    mailapi_configured: bool = False
     mailbox: str | None = None
     webhook_path: str
     recent_ingests: int = 0
     subject_patterns: list[str] = Field(default_factory=list)
     auto_ticket_enabled: bool = False
+    accept_all: bool = False
 
 
 class MailboxMessageItem(BaseModel):
-    mailbox_id: str
+    graph_id: str
     message_id: str
     internet_message_id: str | None = None
     from_address: str
@@ -68,3 +71,7 @@ class MailboxMessagesResult(BaseModel):
     total: int
     subject_patterns: list[str] = Field(default_factory=list)
     messages: list[MailboxMessageItem] = Field(default_factory=list)
+    # When set, live inbox could not be reached — UI should show this, not crash.
+    offline_warning: str | None = None
+    # Set when list was requested with poll=true (ticket auto-create pass).
+    poll_summary: str | None = None

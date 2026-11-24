@@ -7,14 +7,28 @@ import { UserPlus } from "lucide-react";
 import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
-import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
+import {
+  CrmSortableTh,
+  sortRows,
+  useTableSort,
+  type SortValue,
+} from "@/components/crm/sales/crm-table-sort";
+import {
+  leadColumnLabel,
+  leadTableColumnDefs,
+  LeadListColumnPicker,
+  type LeadListColumnId,
+  useLeadListVisibleColumns,
+} from "@/components/crm/sales/lead-list-columns";
+import { useCrmSettingsEffective } from "@/hooks/use-crm-settings";
 import { PageHeader } from "@/components/layout/page-header";
-import { Badge } from "@/components/ui/badge";
+import { SalesStageBadge } from "@/components/crm/sales/sales-stage-badge";
+import { resolveSalesStageLabel } from "@/lib/crm/sales-blueprint-stages";
 import { ApiClientError } from "@/services/api-client";
 import { formatCrmCode } from "@/lib/crm/format-crm-code";
 import { formatInr, fullName, listSalesLeads, type SalesLead } from "@/services/sales-crm-service";
 
-type SortKey = "lead" | "mobile" | "expected_amount" | "blueprint_state" | "status";
+type SortKey = LeadListColumnId;
 
 export function LeadListPage({
   companyAccountId,
@@ -28,6 +42,8 @@ export function LeadListPage({
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const { sortBy, sortDir, onSort } = useTableSort<SortKey>("lead");
+  const { settings } = useCrmSettingsEffective();
+  const [visibleColumns, setVisibleColumns, columnKeys] = useLeadListVisibleColumns();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,25 +73,67 @@ export function LeadListPage({
     );
   }, [rows, query]);
 
-  const sorted = useMemo(
-    () =>
-      sortRows(filtered, sortBy, sortDir, {
-        lead: (r) => fullName(r),
-        mobile: (r) => r.mobile,
-        expected_amount: (r) => r.expected_amount,
-        blueprint_state: (r) => r.blueprint_state,
-        status: (r) => r.status,
-      }),
-    [filtered, sortBy, sortDir],
-  );
+  const orderedColumns = useMemo(() => {
+    const defs = leadTableColumnDefs(settings).map((c) => c.key);
+    const keys = defs.length ? defs : columnKeys;
+    return keys.filter((id) => visibleColumns.has(id));
+  }, [settings, columnKeys, visibleColumns]);
+
+  const sorted = useMemo(() => {
+    const accessors: Record<string, (r: SalesLead) => SortValue> = {
+      lead: (r) => fullName(r),
+      mobile: (r) => r.mobile,
+      expected_amount: (r) => r.expected_amount,
+      blueprint_state: (r) => r.blueprint_state,
+      status: (r) => r.status,
+    };
+    for (const col of orderedColumns) {
+      if (col.startsWith("cf_") && !accessors[col]) {
+        accessors[col] = (r) =>
+          String((r.custom_fields as Record<string, unknown> | undefined)?.[col] ?? "") as SortValue;
+      }
+    }
+    return sortRows(filtered, sortBy, sortDir, accessors);
+  }, [filtered, sortBy, sortDir, orderedColumns]);
+
+  function renderCell(row: SalesLead, col: LeadListColumnId) {
+    if (col.startsWith("cf_")) {
+      const val = (row.custom_fields as Record<string, unknown> | undefined)?.[col];
+      return val != null && String(val) !== "" ? String(val) : "-";
+    }
+    switch (col) {
+      case "lead":
+        return (
+          <Link href={`/crm/leads/${row.id}`} className="cursor-pointer hover:underline">
+            {fullName(row)} · {formatCrmCode(row.lead_code)}
+          </Link>
+        );
+      case "mobile":
+        return row.mobile;
+      case "expected_amount":
+        return row.expected_amount ? formatInr(row.expected_amount) : "-";
+      case "blueprint_state":
+        return (
+          <SalesStageBadge
+            label={resolveSalesStageLabel({
+              entityType: "lead",
+              blueprintState: row.blueprint_state,
+              lead: row,
+            })}
+            state={row.blueprint_state}
+            entityType="lead"
+          />
+        );
+      case "status":
+        return <FinanceStatusBadge status={row.status} />;
+      default:
+        return "-";
+    }
+  }
 
   return (
     <CrmPage>
-      {!embedded ? (
-        <PageHeader
-          title="Leads"
-        />
-      ) : null}
+      {!embedded ? <PageHeader title="Leads" /> : null}
 
       {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
 
@@ -89,53 +147,67 @@ export function LeadListPage({
             onChange: setQuery,
             placeholder: "Search leads…",
           }}
+          actions={
+            <LeadListColumnPicker
+              visible={visibleColumns}
+              onChange={setVisibleColumns}
+              columnKeys={columnKeys}
+              settings={settings}
+            />
+          }
         />
 
         <div className="erp-scroll overflow-x-auto">
           <table className="w-full min-w-[800px] text-left text-sm">
             <thead>
               <tr className={CRM_TABLE_HEAD_ROW}>
-                <CrmSortableTh label="Lead" sortKey="lead" activeKey={sortBy} dir={sortDir} onSort={onSort} />
-                <CrmSortableTh label="Mobile" sortKey="mobile" activeKey={sortBy} dir={sortDir} onSort={onSort} />
-                <CrmSortableTh label="Expected Amount" sortKey="expected_amount" activeKey={sortBy} dir={sortDir} onSort={onSort} />
-                <CrmSortableTh label="Blueprint State" sortKey="blueprint_state" activeKey={sortBy} dir={sortDir} onSort={onSort} />
-                <CrmSortableTh label="Status" sortKey="status" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                {orderedColumns.map((col) => (
+                  <CrmSortableTh
+                    key={col}
+                    label={leadColumnLabel(settings, col)}
+                    sortKey={col}
+                    activeKey={sortBy}
+                    dir={sortDir}
+                    onSort={onSort}
+                  />
+                ))}
                 <th className="px-4 py-2.5 font-medium tracking-wide uppercase">Action</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                  <td
+                    colSpan={orderedColumns.length + 1}
+                    className="px-4 py-10 text-center text-muted-foreground"
+                  >
                     Loading leads…
                   </td>
                 </tr>
               ) : sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                  <td
+                    colSpan={orderedColumns.length + 1}
+                    className="px-4 py-10 text-center text-muted-foreground"
+                  >
                     No active leads. Converted leads appear under Opportunities only.
                   </td>
                 </tr>
               ) : (
                 sorted.map((row) => (
                   <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
-                    <td className="px-4 py-2.5 font-medium text-foreground">
-                      <Link href={`/crm/leads/${row.id}`} className="cursor-pointer hover:underline">
-                        {fullName(row)} · {formatCrmCode(row.lead_code)}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{row.mobile}</td>
-                    <td className="px-4 py-2.5 text-muted-foreground">
-                      {row.expected_amount ? formatInr(row.expected_amount) : "-"}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Badge variant="outline" className="capitalize">
-                        {row.blueprint_state.replaceAll("_", " ")}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <FinanceStatusBadge status={row.status} />
-                    </td>
+                    {orderedColumns.map((col) => (
+                      <td
+                        key={col}
+                        className={
+                          col === "lead"
+                            ? "px-4 py-2.5 font-medium text-foreground"
+                            : "px-4 py-2.5 text-muted-foreground"
+                        }
+                      >
+                        {renderCell(row, col)}
+                      </td>
+                    ))}
                     <td className="px-4 py-2.5">
                       <Link
                         href={`/crm/leads/${row.id}`}

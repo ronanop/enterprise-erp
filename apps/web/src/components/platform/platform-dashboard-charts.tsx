@@ -60,7 +60,22 @@ function ChartEmpty({ message }: { message: string }) {
 
 function ChartLoading() {
   return (
-    <div className="flex h-[220px] items-center justify-center text-sm text-muted-foreground">Loading chart…</div>
+    <div
+      className="flex h-[220px] w-full flex-col justify-end gap-2 px-1 pb-1"
+      role="status"
+      aria-label="Loading chart"
+    >
+      <div className="flex h-[180px] items-end gap-2">
+        {[42, 68, 35, 80, 55, 48].map((h, i) => (
+          <div
+            key={i}
+            className="flex-1 animate-pulse rounded-md bg-[#f5f5f7] motion-reduce:animate-none"
+            style={{ height: `${h}%` }}
+          />
+        ))}
+      </div>
+      <div className="h-2 w-full animate-pulse rounded bg-[#f5f5f7] motion-reduce:animate-none" />
+    </div>
   );
 }
 

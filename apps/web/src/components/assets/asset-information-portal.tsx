@@ -4,8 +4,11 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { useRouter, useSearchParams } from "next/navigation";
 import { AssetDiscoveryPanel } from "@/components/assets/asset-discovery-panel";
 import { MaintenanceWorkOrderDetailDrawer } from "@/components/assets/maintenance-work-order-detail-drawer";
-import { PortalLifecycleTimeline } from "@/components/assets/portal/portal-lifecycle-timeline";
-import { PortalOverviewPanel } from "@/components/assets/portal/portal-overview-panel";
+import {
+  formatPortalDate,
+  formatPortalDateTime,
+  PortalLifecycleTimeline,
+} from "@/components/assets/portal/portal-lifecycle-timeline";
 import {
   mapAssignmentHistoryEntries,
   type EmployeeLookup,
@@ -16,6 +19,7 @@ import {
   tableSerialCellClassName,
   tableSerialHeaderClassName,
 } from "@/components/assets/shared";
+import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,7 +30,6 @@ import {
   mapApiLifecycleEvents,
 } from "@/domain/asset-lifecycle-timeline";
 import { isAuthenticated } from "@/lib/auth";
-import { escapeHtml, openPrintDocument } from "@/lib/html";
 import {
   employeeDirectoryById,
   listEmployeeDirectory,
@@ -38,10 +41,8 @@ import {
   type AssetLifecycleTimelineEvent,
   type AssetsRow,
   assetInformationPortalService,
-  buildAssetQrUrl,
 } from "@/services/assets-service";
-import { Eye, ArrowLeft, Download, ExternalLink, Loader2, Printer, QrCode } from "lucide-react";
-import { QRCodeCanvas } from "qrcode.react";
+import { Eye, ArrowLeft, Loader2 } from "lucide-react";
 
 function dash(value?: string | null): string {
   return value && String(value).trim() ? String(value) : "—";
@@ -65,7 +66,6 @@ function portalErrorMessage(err: unknown): string {
 }
 
 type PortalTab =
-  | "overview"
   | "assignments"
   | "maintenance"
   | "documents"
@@ -73,7 +73,6 @@ type PortalTab =
   | "discovery";
 
 const PORTAL_TABS: Array<{ id: PortalTab; label: string }> = [
-  { id: "overview", label: "Overview" },
   { id: "assignments", label: "Assignment History" },
   { id: "maintenance", label: "Maintenance History" },
   { id: "documents", label: "Documents" },
@@ -89,7 +88,7 @@ export function AssetInformationPortalView({ assetId }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const fromQr = searchParams.get("from") === "qr";
-  const [tab, setTab] = useState<PortalTab>("overview");
+  const [tab, setTab] = useState<PortalTab>("assignments");
   const [portal, setPortal] = useState<AssetInformationPortal | null>(null);
   const [assignments, setAssignments] = useState<AssetsRow[]>([]);
   const [maintenances, setMaintenances] = useState<AssetsRow[]>([]);
@@ -100,17 +99,6 @@ export function AssetInformationPortalView({ assetId }: Props) {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [maintenanceDetailId, setMaintenanceDetailId] = useState<string | null>(null);
-  const qrCanvasId = `asset-qr-${assetId}`;
-
-  const qrUrl = useMemo(() => {
-    if (typeof window === "undefined") {
-      return (
-        portal?.self_service_path ??
-        `/assets/information-portal/${encodeURIComponent(assetId)}?from=qr`
-      );
-    }
-    return buildAssetQrUrl(assetId);
-  }, [assetId, portal?.self_service_path]);
 
   const loadPortal = useCallback(async () => {
     if (!isAuthenticated()) {
@@ -166,7 +154,7 @@ export function AssetInformationPortalView({ assetId }: Props) {
       }
       setEmployeeLookup(lookup);
     } catch {
-      // History tabs degrade gracefully; portal overview still works.
+      // History tabs degrade gracefully; core portal payload still works.
     } finally {
       setHistoryLoading(false);
     }
@@ -204,9 +192,25 @@ export function AssetInformationPortalView({ assetId }: Props) {
     );
   }, [assignmentHistory, assignments]);
 
-  const maintenanceTimeline = useMemo(
-    () => buildMaintenanceTimeline(maintenances),
+  const maintenanceRows = useMemo(
+    () =>
+      [...maintenances]
+        .filter((row) => String(row.status ?? "").toLowerCase() !== "draft")
+        .sort((a, b) => {
+          const aAt = String(
+            a.completed_date ?? a.scheduled_date ?? a.created_at ?? a.updated_at ?? "",
+          );
+          const bAt = String(
+            b.completed_date ?? b.scheduled_date ?? b.created_at ?? b.updated_at ?? "",
+          );
+          return bAt.localeCompare(aAt);
+        }),
     [maintenances],
+  );
+
+  const maintenanceTimeline = useMemo(
+    () => buildMaintenanceTimeline(maintenanceRows),
+    [maintenanceRows],
   );
 
   const activityTimeline = useMemo(() => {
@@ -245,45 +249,6 @@ export function AssetInformationPortalView({ assetId }: Props) {
     portal?.created_at,
     portal?.updated_at,
   ]);
-
-  function getQrCanvas(): HTMLCanvasElement | null {
-    return document.getElementById(qrCanvasId) as HTMLCanvasElement | null;
-  }
-
-  function downloadQr() {
-    const canvas = getQrCanvas();
-    if (!canvas) return;
-    const link = document.createElement("a");
-    link.download = `${portal?.asset_code ?? "asset"}-qr.png`;
-    link.href = canvas.toDataURL("image/png");
-    link.click();
-  }
-
-  function printQr() {
-    const canvas = getQrCanvas();
-    if (!canvas || !portal) return;
-    const dataUrl = canvas.toDataURL("image/png");
-    const code = escapeHtml(portal.asset_code);
-    const name = escapeHtml(portal.asset_name);
-    const url = escapeHtml(qrUrl);
-    const imgSrc = escapeHtml(dataUrl);
-    openPrintDocument(
-      `<!doctype html><html><head><title>QR ${code}</title>
-      <style>
-        body{font-family:system-ui,sans-serif;text-align:center;padding:24px;color:#111}
-        img{width:240px;height:240px}
-        h1{font-size:18px;margin:12px 0 4px}
-        p{font-size:12px;color:#444;word-break:break-all}
-      </style></head><body>
-      <h1>${code}</h1>
-      <div>${name}</div>
-      <img src="${imgSrc}" alt="QR" />
-      <p>${url}</p>
-      </body></html>`,
-      480,
-      640,
-    );
-  }
 
   if (loading) {
     return (
@@ -337,11 +302,7 @@ export function AssetInformationPortalView({ assetId }: Props) {
     >
       <PageHeader
         title="Asset Information Portal"
-        description={
-          fromQr
-            ? `${portal.asset_code} — scanned asset profile (authenticated).`
-            : `${portal.asset_code} — overview, history, documents, activity, and discovery.`
-        }
+        titleClassName="capitalize"
         actions={
           <div className="flex flex-wrap gap-2">
             {!fromQr ? (
@@ -396,14 +357,20 @@ export function AssetInformationPortalView({ assetId }: Props) {
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-12">
-        <div className={`space-y-4 ${fromQr ? "lg:col-span-12" : "order-2 lg:order-1 lg:col-span-8"}`}>
-          {tab === "overview" ? <PortalOverviewPanel portal={portal} /> : null}
-
+      <div className="space-y-4">
+          {fromQr ? (
+            <p
+              className="rounded-lg border border-sky-500/30 bg-sky-50 px-3 py-2 text-sm text-sky-900"
+              role="status"
+              data-testid="portal-scanned-banner"
+            >
+              Scanned QR — asset details below. Sign-in is required; only authorized Asset
+              Management users can view this portal.
+            </p>
+          ) : null}
           {tab === "assignments" ? (
             <PortalSection
               title="Assignment History"
-              description="Who used this asset, when it was assigned, and when it was returned."
               loading={historyLoading}
               empty={assignmentTimeline.length === 0}
             >
@@ -419,31 +386,53 @@ export function AssetInformationPortalView({ assetId }: Props) {
           {tab === "maintenance" ? (
             <PortalSection
               title="Maintenance History"
-              description="Each maintenance cycle — when it started, when it completed, and work-order details."
               loading={historyLoading}
-              empty={maintenanceTimeline.length === 0}
+              empty={false}
             >
-              <PortalLifecycleTimeline
-                events={maintenanceTimeline.map((event) => ({
-                  ...event,
-                  action: event.maintenanceId ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-8 cursor-pointer transition-colors duration-200"
-                      data-testid={`portal-maintenance-view-${event.maintenanceId}`}
-                      onClick={() => setMaintenanceDetailId(event.maintenanceId)}
-                    >
-                      <Eye className="mr-1 size-3.5" aria-hidden />
-                      View Details
-                    </Button>
-                  ) : null,
-                }))}
-                emptyTitle="No maintenance history"
-                emptyDescription="Maintenance cycles will appear here when work orders are started or completed."
-                testId="portal-maintenance-history"
-              />
+              <div className="space-y-6" data-testid="portal-maintenance-history">
+                <section className="space-y-3" aria-labelledby="portal-maintenance-timeline-heading">
+                  <h3
+                    id="portal-maintenance-timeline-heading"
+                    className="text-sm font-semibold tracking-tight text-foreground"
+                  >
+                    Timeline
+                  </h3>
+                  <PortalLifecycleTimeline
+                    events={maintenanceTimeline.map((event) => ({
+                      ...event,
+                      action: event.maintenanceId ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 cursor-pointer transition-colors duration-200"
+                          data-testid={`portal-maintenance-view-${event.maintenanceId}`}
+                          onClick={() => setMaintenanceDetailId(event.maintenanceId)}
+                        >
+                          <Eye className="mr-1 size-3.5" aria-hidden />
+                          View Details
+                        </Button>
+                      ) : null,
+                    }))}
+                    emptyTitle="No maintenance history"
+                    emptyDescription="Maintenance cycles will appear here when work orders are started or completed."
+                    testId="portal-maintenance-timeline"
+                  />
+                </section>
+
+                <section className="space-y-3" aria-labelledby="portal-maintenance-table-heading">
+                  <h3
+                    id="portal-maintenance-table-heading"
+                    className="text-sm font-semibold tracking-tight text-foreground"
+                  >
+                    Work order columns
+                  </h3>
+                  <MaintenanceHistoryTable
+                    rows={maintenanceRows}
+                    onViewDetails={(id) => setMaintenanceDetailId(id)}
+                  />
+                </section>
+              </div>
             </PortalSection>
           ) : null}
 
@@ -467,7 +456,6 @@ export function AssetInformationPortalView({ assetId }: Props) {
           {tab === "activity" ? (
             <PortalSection
               title="Activity Logs"
-              description="Complete lifecycle — creation, assignments, maintenance cycles, edits, and status changes."
               loading={historyLoading}
               empty={activityTimeline.length === 0}
             >
@@ -492,74 +480,6 @@ export function AssetInformationPortalView({ assetId }: Props) {
               onApplied={() => void loadPortal()}
             />
           ) : null}
-        </div>
-
-        <div className="order-1 space-y-4 lg:order-2 lg:col-span-4">
-          {fromQr ? null : (
-            <section className="overflow-hidden rounded-xl border border-indigo-500/30 bg-card/80 shadow-sm lg:sticky lg:top-14">
-              <div className="border-b border-border/60 bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 px-4 py-3.5">
-                <div className="flex items-center gap-3">
-                  <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 ring-1 ring-indigo-200">
-                    <QrCode className="size-3.5" aria-hidden />
-                  </div>
-                  <div className="min-w-0">
-                    <span className="inline-flex rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-800 ring-1 ring-inset ring-indigo-200">
-                      Scan target
-                    </span>
-                    <h3 className="mt-1 text-sm font-medium text-foreground">QR Code</h3>
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-3 p-4">
-                <div className="flex justify-center rounded-xl border border-border/70 bg-white p-4 shadow-sm">
-                  <QRCodeCanvas
-                    id={qrCanvasId}
-                    value={qrUrl}
-                    size={200}
-                    level="M"
-                    includeMargin
-                  />
-                </div>
-                <p className="break-all font-mono text-[11px] text-muted-foreground">{qrUrl}</p>
-                <p className="text-xs text-muted-foreground">
-                  Scanning opens ERP sign-in, then this Information Portal for authorized Asset
-                  Management users. QR is generated in the browser only — never stored on the server.
-                </p>
-                <div className="flex flex-col gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="w-full cursor-pointer transition-colors duration-200"
-                    onClick={downloadQr}
-                  >
-                    <Download className="size-4" aria-hidden />
-                    Download QR
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="w-full cursor-pointer transition-colors duration-200"
-                    onClick={printQr}
-                  >
-                    <Printer className="size-4" aria-hidden />
-                    Print QR
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="w-full cursor-pointer transition-colors duration-200"
-                    onClick={() => window.open(qrUrl, "_blank", "noopener,noreferrer")}
-                  >
-                    <ExternalLink className="size-4" aria-hidden />
-                    Open scan link
-                  </Button>
-                </div>
-              </div>
-            </section>
-          )}
-        </div>
       </div>
 
       <MaintenanceWorkOrderDetailDrawer
@@ -647,6 +567,143 @@ function SimpleHistoryTable({
               ))}
             </tr>
           ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function formatMaintenanceStatusLabel(status?: string | null): string {
+  const raw = String(status ?? "").trim();
+  if (!raw) return "—";
+  return raw.replace(/_/g, " ");
+}
+
+function maintenanceStatusBadgeClass(status?: string | null): string {
+  const s = String(status ?? "").toLowerCase();
+  if (s === "completed") return "border-teal-200 bg-teal-50 text-teal-800";
+  if (s === "in_progress") return "border-amber-200 bg-amber-50 text-amber-900";
+  if (s === "cancelled" || s === "canceled") return "border-slate-200 bg-slate-100 text-slate-700";
+  return "border-border bg-muted/40 text-muted-foreground";
+}
+
+function MaintenanceHistoryTable({
+  rows,
+  onViewDetails,
+}: {
+  rows: AssetsRow[];
+  onViewDetails: (maintenanceId: string) => void;
+}) {
+  if (rows.length === 0) {
+    return (
+      <div
+        className="rounded-xl border border-dashed border-border/80 bg-muted/20 px-4 py-8 text-center"
+        data-testid="portal-maintenance-table"
+      >
+        <p className="text-sm font-medium text-foreground">No work orders</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Document, type, status, entered, and completed columns appear when maintenance is recorded
+          for this asset.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-lg border border-border/80" data-testid="portal-maintenance-table">
+      <table className="w-full min-w-[64rem] text-sm">
+        <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+          <tr>
+            <th className={tableSerialHeaderClassName()} scope="col">
+              {TABLE_SERIAL_HEADER_LABEL}
+            </th>
+            <th className="px-3 py-2 font-medium">Document</th>
+            <th className="px-3 py-2 font-medium">Type</th>
+            <th className="px-3 py-2 font-medium">Status</th>
+            <th className="px-3 py-2 font-medium">Entered</th>
+            <th className="px-3 py-2 font-medium">Completed</th>
+            <th className="px-3 py-2 font-medium">Duration</th>
+            <th className="px-3 py-2 font-medium">Expected Return</th>
+            <th className="px-3 py-2 font-medium text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => {
+            const id = String(row.id ?? "");
+            const entered =
+              row.created_at != null
+                ? String(row.created_at)
+                : row.scheduled_date != null
+                  ? String(row.scheduled_date)
+                  : null;
+            const completed =
+              row.completed_date != null
+                ? String(row.completed_date)
+                : null;
+            const duration =
+              row.expected_duration_days != null
+                ? `${row.expected_duration_days}d`
+                : "—";
+            return (
+              <tr
+                key={id || String(index)}
+                className="border-t border-border/60 transition-colors duration-200 hover:bg-muted/30"
+              >
+                <td className={tableSerialCellClassName()}>{tableRowSerialFromIndex(index)}</td>
+                <td className="px-3 py-2 font-mono text-xs">
+                  {dash(row.document_number != null ? String(row.document_number) : null)}
+                </td>
+                <td className="px-3 py-2 capitalize">
+                  {dash(
+                    row.maintenance_type != null
+                      ? String(row.maintenance_type).replace(/_/g, " ")
+                      : null,
+                  )}
+                </td>
+                <td className="px-3 py-2">
+                  <Badge
+                    variant="outline"
+                    className={`shrink-0 capitalize ${maintenanceStatusBadgeClass(
+                      row.status != null ? String(row.status) : null,
+                    )}`}
+                  >
+                    {formatMaintenanceStatusLabel(
+                      row.status != null ? String(row.status) : null,
+                    )}
+                  </Badge>
+                </td>
+                <td className="whitespace-nowrap px-3 py-2 tabular-nums text-xs text-muted-foreground">
+                  {entered?.includes("T") ? formatPortalDateTime(entered) : formatPortalDate(entered)}
+                </td>
+                <td className="whitespace-nowrap px-3 py-2 tabular-nums text-xs text-muted-foreground">
+                  {formatPortalDate(completed)}
+                </td>
+                <td className="px-3 py-2 text-xs text-muted-foreground">{duration}</td>
+                <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
+                  {formatPortalDate(
+                    row.expected_return_date != null ? String(row.expected_return_date) : null,
+                  )}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  {id ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 cursor-pointer transition-colors duration-200"
+                      data-testid={`portal-maintenance-table-view-${id}`}
+                      onClick={() => onViewDetails(id)}
+                    >
+                      <Eye className="mr-1 size-3.5" aria-hidden />
+                      View
+                    </Button>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

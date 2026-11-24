@@ -125,9 +125,7 @@ function TicketDetailsPanel({ row }: { row: FieldEngineerTicketItem }) {
         <BriefRow label="CKT ID" value={row.ckt_id} />
         <BriefRow label="Link type" value={row.link_type} />
         <BriefRow label="Bandwidth" value={row.bandwidth} />
-        <BriefRow label="Ports in use" value={row.ports_in_use} />
-        <BriefRow label="IP / credentials notes" value={row.ip_details} />
-        <BriefRow label="Previous FE notes" value={row.previous_fe_notes} />
+        <BriefRow label="Previous Ticket" value={row.previous_fe_notes} />
       </dl>
     </div>
   );

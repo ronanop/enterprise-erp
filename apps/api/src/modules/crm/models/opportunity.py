@@ -119,6 +119,7 @@ class CrmOpportunity(Base, *CrmTransactionMixin):
     )
     blueprint_state: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
     locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    custom_fields: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
     boq_attached: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     boq_approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
@@ -170,6 +171,8 @@ class CrmOpportunity(Base, *CrmTransactionMixin):
     has_hardware: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     has_software: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     has_services: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    # From lead Service Sourcing Channel: Outsourced | Cache Service.
+    service_sourcing_channel: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
     # Cloud-specific sales path (billing shift, migration, POC/assessment).
     cloud_blueprint_variant: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)

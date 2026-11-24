@@ -7,8 +7,10 @@ import { FileStack } from "lucide-react";
 import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
+import { SalesStageBadge } from "@/components/crm/sales/sales-stage-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { formatCrmCode } from "@/lib/crm/format-crm-code";
+import { resolveSalesStageLabel } from "@/lib/crm/sales-blueprint-stages";
 import { ApiClientError } from "@/services/api-client";
 import {
   listAttachmentsByCategory,
@@ -240,10 +242,20 @@ export function DocumentRegistryListPage({
                         </div>
                       ) : null}
                     </td>
-                    <td className="px-4 py-2.5 text-muted-foreground capitalize">
-                      {(row.opportunity?.blueprint_state ?? row.opportunity?.current_stage ?? "-").replaceAll(
-                        "_",
-                        " ",
+                    <td className="px-4 py-2.5">
+                      {row.opportunity ? (
+                        <SalesStageBadge
+                          label={resolveSalesStageLabel({
+                            entityType: "opportunity",
+                            blueprintState:
+                              row.opportunity.blueprint_state || row.opportunity.current_stage,
+                            opportunity: row.opportunity,
+                          })}
+                          state={row.opportunity.blueprint_state || row.opportunity.current_stage}
+                          entityType="opportunity"
+                        />
+                      ) : (
+                        "-"
                       )}
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground">

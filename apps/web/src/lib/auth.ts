@@ -36,7 +36,11 @@ function dispatchAuthChange(): void {
 function hasSessionHint(): boolean {
   if (typeof window === "undefined") return false;
   try {
-    return window.sessionStorage.getItem(SESSION_HINT_KEY) === "1";
+    // localStorage survives new tabs / module navigations; sessionStorage alone did not.
+    return (
+      window.localStorage.getItem(SESSION_HINT_KEY) === "1" ||
+      window.sessionStorage.getItem(SESSION_HINT_KEY) === "1"
+    );
   } catch {
     return false;
   }
@@ -46,6 +50,7 @@ function hasSessionHint(): boolean {
 export function markSessionPresent(): void {
   if (typeof window === "undefined") return;
   try {
+    window.localStorage.setItem(SESSION_HINT_KEY, "1");
     window.sessionStorage.setItem(SESSION_HINT_KEY, "1");
   } catch {
     // ignore
@@ -64,6 +69,35 @@ export function getAccessToken(): string | null {
     return legacy;
   }
   return null;
+}
+
+/** True when JWT `exp` is missing/unreadable or already past (with small skew). */
+export function isAccessTokenExpired(token: string | null = getAccessToken()): boolean {
+  if (!token) return true;
+  const parts = token.split(".");
+  if (parts.length < 2) return true;
+  try {
+    const payload = JSON.parse(atob(parts[1]!.replace(/-/g, "+").replace(/_/g, "/"))) as {
+      exp?: number;
+    };
+    if (typeof payload.exp !== "number") return false;
+    // 30s skew — refresh before the API hard-rejects.
+    return payload.exp * 1000 <= Date.now() + 30_000;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Token for the Authorization header. Returns null when missing/expired so the
+ * request can fall back to the HttpOnly access cookie instead of sending a
+ * dead bearer that forces 401 → logout.
+ */
+export function getRequestAccessToken(): string | null {
+  const token = getAccessToken();
+  if (!token) return null;
+  if (isAccessTokenExpired(token)) return null;
+  return token;
 }
 
 export function getRefreshToken(): string | null {
@@ -94,6 +128,7 @@ export function clearTokens() {
   purgeLegacyWebStorage();
   if (typeof window !== "undefined") {
     try {
+      window.localStorage.removeItem(SESSION_HINT_KEY);
       window.sessionStorage.removeItem(SESSION_HINT_KEY);
     } catch {
       // ignore

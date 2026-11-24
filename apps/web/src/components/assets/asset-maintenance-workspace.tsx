@@ -45,10 +45,11 @@ import {
 } from "@/services/assets-service";
 import { ApiClientError } from "@/services/api-client";
 import { cn } from "@/lib/utils";
+import { formatDropdownLabel } from "@/components/assets/shared/format-dropdown-label";
 
 const MAINTENANCE_TYPES = ["preventive", "corrective", "emergency", "annual_service"] as const;
 const PAGE_SIZE = 25;
-const TABLE_COLS = 9;
+const TABLE_COLS = 8;
 
 function formatMaintenanceType(value: string): string {
   return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -64,10 +65,17 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** Simple list status: In Progress | Completed (ignore workflow suffixes). */
+function formatSimpleStatus(status: string): "In Progress" | "Completed" {
+  const key = status.trim().toLowerCase();
+  if (key === "completed" || key === "cancelled" || key === "closed") {
+    return "Completed";
+  }
+  return "In Progress";
+}
+
 function statusVariant(status: string): "default" | "secondary" | "outline" {
-  if (status === "in_progress") return "default";
-  if (status === "completed" || status === "cancelled") return "outline";
-  return "secondary";
+  return formatSimpleStatus(status) === "Completed" ? "outline" : "default";
 }
 
 export function AssetMaintenanceWorkspace() {
@@ -80,7 +88,6 @@ export function AssetMaintenanceWorkspace() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
-  const [showHistory, setShowHistory] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -125,7 +132,7 @@ export function AssetMaintenanceWorkspace() {
         page,
         page_size: PAGE_SIZE,
         q: q.trim() || undefined,
-        open_only: !showHistory,
+        open_only: true,
       });
       setRows(payload.items);
       setTotal(payload.total);
@@ -136,7 +143,7 @@ export function AssetMaintenanceWorkspace() {
     } finally {
       setLoading(false);
     }
-  }, [page, q, showHistory]);
+  }, [page, q]);
 
   const openDetail = useCallback((row: MaintenanceRow) => {
     setSelected(row);
@@ -245,8 +252,7 @@ export function AssetMaintenanceWorkspace() {
     <AssetsPremiumPage testId="asset-maintenance-workspace">
       <div className="space-y-5">
         <PageHeader
-          title="Asset maintenance"
-          description="Open work orders and start maintenance with reason and expected duration."
+          title="Asset Maintenance"
         />
 
         {error ? (
@@ -268,18 +274,6 @@ export function AssetMaintenanceWorkspace() {
                 }}
                 className="max-w-xs"
               />
-              <Button
-                type="button"
-                variant={showHistory ? "default" : "outline"}
-                size="sm"
-                className="cursor-pointer transition-colors duration-200"
-                onClick={() => {
-                  setPage(1);
-                  setShowHistory((v) => !v);
-                }}
-              >
-                {showHistory ? "Showing all" : "Show history"}
-              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -324,13 +318,12 @@ export function AssetMaintenanceWorkspace() {
                     <th className={tableSerialHeaderClassName()} scope="col">
                       {TABLE_SERIAL_HEADER_LABEL}
                     </th>
-                    <th className="px-3 py-2 font-medium">Asset code</th>
-                    <th className="px-3 py-2 font-medium">Asset name</th>
+                    <th className="px-3 py-2 font-medium">Asset Name</th>
                     <th className="px-3 py-2 font-medium">Serial</th>
                     <th className="px-3 py-2 font-medium">Reason</th>
                     <th className="px-3 py-2 font-medium">Duration</th>
                     <th className="px-3 py-2 font-medium">Status</th>
-                    <th className="px-3 py-2 font-medium">Expected return</th>
+                    <th className="px-3 py-2 font-medium">Expected Return</th>
                     <th className="px-3 py-2 font-medium text-right">Actions</th>
                   </tr>
                 </thead>
@@ -344,18 +337,13 @@ export function AssetMaintenanceWorkspace() {
                   ) : rows.length === 0 ? (
                     <tr>
                       <td colSpan={TABLE_COLS} className="px-3 py-10 text-center text-muted-foreground">
-                        {showHistory
-                          ? "No work orders found."
-                          : "No open work orders. Use Maintenance on an asset in All Assets to start one."}
+                        No open work orders. Use Maintenance on an asset in All Assets to start one.
                       </td>
                     </tr>
                   ) : (
                     rows.map((row, index) => (
                         <tr key={row.id} className="border-t border-border/60">
                           <td className={tableSerialCellClassName()}>{tableRowSerial(page, PAGE_SIZE, index)}</td>
-                          <td className="px-3 py-2 font-mono text-xs">
-                            {row.asset_code ?? "—"}
-                          </td>
                           <td className="px-3 py-2 font-medium">
                             {row.asset_name ?? row.asset_id.slice(0, 8)}
                           </td>
@@ -371,9 +359,8 @@ export function AssetMaintenanceWorkspace() {
                               : "—"}
                           </td>
                           <td className="px-3 py-2">
-                            <Badge variant={statusVariant(row.status)} className="font-mono text-xs">
-                              {row.status}
-                              {row.workflow_status ? ` / ${row.workflow_status}` : ""}
+                            <Badge variant={statusVariant(row.status)} className="text-xs">
+                              {formatSimpleStatus(row.status)}
                             </Badge>
                           </td>
                           <td className="px-3 py-2 text-xs text-muted-foreground">
@@ -437,7 +424,7 @@ export function AssetMaintenanceWorkspace() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="shrink-0 border-b border-border/70 px-5 pb-3 pt-5">
-              <h2 className="text-base font-semibold">Start maintenance</h2>
+              <h2 className="text-base font-semibold">Start Maintenance</h2>
               <p className="mt-1 text-xs text-muted-foreground">
                 Asset: {selected.asset_name ?? selected.asset_code ?? selected.asset_id}
               </p>
@@ -505,7 +492,7 @@ export function AssetMaintenanceWorkspace() {
                       <SelectContent>
                         {MAINTENANCE_TYPES.map((t) => (
                           <SelectItem key={t} value={t} className="cursor-pointer">
-                            {t}
+                            {formatDropdownLabel(t)}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -602,7 +589,7 @@ export function AssetMaintenanceWorkspace() {
                 onClick={() => void handleStartMaintenance()}
               >
                 {startSaving ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
-                Start maintenance
+                Start Maintenance
               </Button>
             </div>
           </div>

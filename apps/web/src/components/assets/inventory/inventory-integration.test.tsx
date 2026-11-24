@@ -134,9 +134,10 @@ async function waitForInventoryReady(assetCode: string) {
 
 async function tableRowForAssetCode(assetCode: string) {
   await waitForInventoryReady(assetCode);
-  const cell = screen.getAllByText(assetCode).find((el) => el.closest("tr"));
-  expect(cell).toBeTruthy();
-  return cell!.closest("tr")!;
+  const assetId = assetCode === "AST-99" ? "asset-99" : assetCode === "AST-88" ? "asset-88" : null;
+  expect(assetId).toBeTruthy();
+  const row = await screen.findByTestId(`inventory-row-${assetId}`);
+  return row;
 }
 
 async function openAssignMenu(user: ReturnType<typeof userEvent.setup>) {
@@ -157,17 +158,14 @@ describe("Inventory → Issue", () => {
     });
   });
 
-  it("closes drawer before issue navigation", async () => {
+  it("keeps drawer closed when assigning from the row menu", async () => {
     const user = userEvent.setup();
     render(<AssetInventoryContainer />);
     const row = await tableRowForAssetCode("AST-99");
-    await user.click(within(row).getByRole("button", { name: "View" }));
-    expect(await screen.findByTestId("asset-detail-drawer")).toBeInTheDocument();
+    expect(screen.queryByTestId("asset-detail-drawer")).not.toBeInTheDocument();
     await user.click(within(row).getByRole("button", { name: "More actions" }));
     await user.click(await screen.findByRole("menuitem", { name: "Assign Asset" }));
-    await waitFor(() => {
-      expect(screen.queryByTestId("asset-detail-drawer")).not.toBeInTheDocument();
-    });
+    expect(screen.queryByTestId("asset-detail-drawer")).not.toBeInTheDocument();
     expect(push).toHaveBeenCalledTimes(1);
   });
 
@@ -194,17 +192,14 @@ describe("Inventory → Return", () => {
     expect(push.mock.calls[0]?.[0]).toContain("intent=return");
   });
 
-  it("closes drawer before return navigation", async () => {
+  it("keeps drawer closed when returning from the row menu", async () => {
     const user = userEvent.setup();
     render(<AssetInventoryContainer />);
     const row = await tableRowForAssetCode("AST-88");
-    await user.click(within(row).getByRole("button", { name: "View" }));
-    expect(await screen.findByTestId("asset-detail-drawer")).toBeInTheDocument();
+    expect(screen.queryByTestId("asset-detail-drawer")).not.toBeInTheDocument();
     await user.click(within(row).getByRole("button", { name: "More actions" }));
     await user.click(await screen.findByRole("menuitem", { name: "Return Asset" }));
-    await waitFor(() => {
-      expect(screen.queryByTestId("asset-detail-drawer")).not.toBeInTheDocument();
-    });
+    expect(screen.queryByTestId("asset-detail-drawer")).not.toBeInTheDocument();
   });
 });
 
@@ -246,21 +241,22 @@ describe("Inventory refresh after workflow", () => {
 });
 
 describe("Inventory selection & view", () => {
-  it("opens drawer on View without routing", async () => {
+  it("does not offer View Details or QR Code in the row menu", async () => {
     const user = userEvent.setup();
     render(<AssetInventoryContainer />);
     const row = await tableRowForAssetCode("AST-99");
-    await user.click(within(row).getByRole("button", { name: "View" }));
-    expect(await screen.findByTestId("asset-detail-drawer")).toBeInTheDocument();
-    expect(push).not.toHaveBeenCalled();
+    await user.click(within(row).getByRole("button", { name: "More actions" }));
+    expect(screen.queryByTestId("inventory-menu-viewDetails")).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "View Details" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "QR Code" })).not.toBeInTheDocument();
   });
 
-  it("navigates portal from drawer without closing workflow path", async () => {
+  it("navigates Information Portal from the row menu", async () => {
     const user = userEvent.setup();
     render(<AssetInventoryContainer />);
     const row = await tableRowForAssetCode("AST-99");
-    await user.click(within(row).getByRole("button", { name: "View" }));
-    await user.click(await screen.findByRole("button", { name: "Information Portal" }));
+    await user.click(within(row).getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Information Portal" }));
     expect(push).toHaveBeenCalledWith("/assets/information-portal/asset-99");
   });
 });

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime, time, timezone
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -114,6 +115,9 @@ class AssignmentService:
 
     def list_components(self, ctx: TenantContext, row_id: UUID) -> list[dict]:
         row = self.get(ctx, row_id)
+        if row.status == AssetAssignmentStatus.ACTIVE.value:
+            # Heal imports that installed chargers after activation.
+            return self._assignment_components.ensure_parent_accessories_issued(ctx, row)
         return self._assignment_components.list_for_assignment(ctx, row)
 
     def set_components(
@@ -123,17 +127,43 @@ class AssignmentService:
         self._assignment_components.set_components(ctx, row, component_ids)
         return self._assignment_components.list_for_assignment(ctx, row)
 
+    def _cancel_orphan_drafts_for_asset(self, ctx: TenantContext, asset_id: UUID) -> None:
+        """Cancel leftover drafts so Issue Asset is not blocked after abandoned wizards."""
+        while True:
+            pending = self._repo.find_pending_or_active_for_asset(ctx, asset_id)
+            if pending is None or pending.status != AssetAssignmentStatus.DRAFT.value:
+                return
+            self._engine.cancel_draft(pending)
+            self._assignment_components.release_issued(ctx, pending.id)
+            self._repo.update(ctx, pending.id, status=pending.status)
+            self._audit.log_entity_change(
+                tenant_id=ctx.tenant_id,
+                entity_name=ENTITY_AST_ASSIGNMENT,
+                entity_id=pending.id,
+                operation="cancel",
+                performed_by=ctx.user_id,
+                new_value={"reason": "orphan_draft_replaced"},
+            )
+
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
-        cid = self._scope.resolve_company_id(ctx, company_id)
-        self._scope.validate_branch_access(ctx, branch_id)
         component_ids = fields.pop("component_ids", None)
         fields.pop("expected_return_at", None)
-        enrichment = self._validator.validate_create_fields(ctx, company_id=cid, fields=fields)
-        identity = self._validator.allocation_identity_payload(fields)
 
         asset = self._assets.get(ctx, fields["asset_id"])
         if asset is None:
             raise NotFoundException("Asset not found")
+        # Multi-entity sessions park on one company; assignments must still write under
+        # the asset's company (otherwise Issue fails with "does not belong to this company").
+        cid = self._scope.resolve_company_id(ctx, company_id or asset.company_id)
+        if asset.company_id != cid:
+            raise AssignmentValidationError("Asset does not belong to this company")
+        self._scope.validate_branch_access(ctx, branch_id)
+        # Abandoned Issue drafts stay ``draft`` and block the next issue/return cycle.
+        self._cancel_orphan_drafts_for_asset(ctx, asset.id)
+
+        enrichment = self._validator.validate_create_fields(ctx, company_id=cid, fields=fields)
+        identity = self._validator.allocation_identity_payload(fields)
+
         if fields.get("allocation_type") in {"employee", "department", "project"}:
             if asset.branch_id != branch_id:
                 raise AssignmentValidationError(
@@ -254,7 +284,12 @@ class AssignmentService:
         self._validator.validate_submit_readiness(ctx, row)
         self._engine.submit(row)
         if not asset_workflow_governance_enabled():
-            return self._repo.update(ctx, row_id, status=row.status)
+            # Dev/local: submit must complete custody (ASSIGNED), otherwise orphans
+            # stay ``submitted`` while operational_status remains READY_TO_MOVE and
+            # block the next Issue Asset attempt.
+            self._repo.update(ctx, row_id, status=row.status)
+            self._activate_assignment(ctx, row_id)
+            return self.get(ctx, row_id)
         instance = self._governance.submit_for_approval(
             ctx,
             entity_name=ENTITY_AST_ASSIGNMENT,
@@ -331,7 +366,15 @@ class AssignmentService:
         row = self.get(ctx, row_id)
         if row.workflow_instance_id is not None:
             raise InvalidAssetWorkflowState("Cannot cancel after workflow started")
-        self._engine.cancel_draft(row)
+        if row.status == AssetAssignmentStatus.DRAFT.value:
+            self._engine.cancel_draft(row)
+        elif row.status == AssetAssignmentStatus.SUBMITTED.value:
+            # Orphan submitted (e.g. governance off + failed activate) — free the asset.
+            self._engine.cancel_submitted(row)
+        else:
+            raise InvalidAssetWorkflowState(
+                "Only draft or submitted assignments without workflow can be cancelled"
+            )
         self._assignment_components.release_issued(ctx, row_id)
         updated = self._repo.update(ctx, row_id, status=row.status)
         self._audit.log_entity_change(
@@ -397,29 +440,42 @@ class AssignmentService:
         )
         # Reconcile components first so a failure rolls back with the request UoW.
         self._assignment_components.reconcile_return(ctx, row, component_returns)
-        # Detach asset-linked components → READY_TO_MOVE regardless of parent return_condition.
         from modules.asset.service.component_service import AssetComponentService
 
-        AssetComponentService(self._db).detach_linked_for_parent(
-            ctx,
-            row.asset_id,
-            reason=f"parent_assignment_return:{return_condition}",
-            source_entity=ENTITY_AST_ASSIGNMENT,
-            source_entity_id=row_id,
-        )
+        # Outdated → close assignment first, then create Disposal (DISPOSED).
+        # Good/dead → return to stock via operational action while still ASSIGNED.
+        send_to_disposal = action == "dispose"
+        component_svc = AssetComponentService(self._db)
+        if send_to_disposal:
+            # Dispose accessories + linked children so Disposal create is not blocked.
+            component_svc.dispose_active_for_parent(
+                ctx,
+                row.asset_id,
+                reason=f"parent_assignment_return:{return_condition}",
+            )
+        else:
+            # Detach asset-linked components → READY_TO_MOVE on stock return.
+            component_svc.detach_linked_for_parent(
+                ctx,
+                row.asset_id,
+                reason=f"parent_assignment_return:{return_condition}",
+                source_entity=ENTITY_AST_ASSIGNMENT,
+                source_entity_id=row_id,
+            )
         asset = self._assets.lock_for_update(ctx, row.asset_id)
         if asset is None:
             raise NotFoundException("Asset not found")
-        self._operational.apply_action(
-            ctx,
-            row.asset_id,
-            action=action,
-            expected_version=int(asset.version or 1),
-            reason=reason or return_condition,
-            remarks=remarks,
-            source_entity=ENTITY_AST_ASSIGNMENT,
-            source_entity_id=row_id,
-        )
+        if not send_to_disposal:
+            self._operational.apply_action(
+                ctx,
+                row.asset_id,
+                action=action,
+                expected_version=int(asset.version or 1),
+                reason=reason or return_condition,
+                remarks=remarks,
+                source_entity=ENTITY_AST_ASSIGNMENT,
+                source_entity_id=row_id,
+            )
         self._engine.return_assignment(row)
         now = utcnow()
         asset = self._assets.get(ctx, row.asset_id)
@@ -458,6 +514,7 @@ class AssignmentService:
                 "component_returns": _json_safe_component_returns_for_audit(
                     component_returns
                 ),
+                **({"sent_to_disposal": True} if send_to_disposal else {}),
             },
         )
         self._auto_cancel_assignment_dcs(
@@ -465,6 +522,26 @@ class AssignmentService:
             row,
             remark=self._dc_auto_cancel_remark(row, "returned"),
         )
+        if send_to_disposal:
+            fresh = self._assets.get(ctx, row.asset_id)
+            if fresh is None:
+                raise NotFoundException("Asset not found")
+            disposal_remarks = (
+                (normalized_remarks or "").strip()
+                or (reason or "").strip()
+                or "Returned as outdated — sent to disposal"
+            )
+            from modules.asset.service.disposal_service import DisposalService
+
+            DisposalService(self._db).create(
+                ctx,
+                branch_id=fresh.branch_id,
+                company_id=fresh.company_id,
+                asset_id=fresh.id,
+                disposal_type="scrap",
+                remarks=disposal_remarks,
+                management_approved=True,
+            )
         return updated
 
     def _dc_auto_cancel_remark(self, assignment: AstAssetAssignment, action: str) -> str:
@@ -503,6 +580,26 @@ class AssignmentService:
             )
         self._activate_assignment(ctx, row_id)
         return self.get(ctx, row_id)
+
+    def find_pending_or_active_for_asset(
+        self, ctx: TenantContext, asset_id: UUID
+    ) -> AstAssetAssignment | None:
+        return self._repo.find_pending_or_active_for_asset(ctx, asset_id)
+
+    def apply_allocated_at_from_issue_date(
+        self, ctx: TenantContext, row_id: UUID, issue_date: date
+    ) -> AstAssetAssignment:
+        """Set Issue Date (allocated_at) from Excel import / historical issue date."""
+        row = self.get(ctx, row_id)
+        if row.status != AssetAssignmentStatus.ACTIVE.value:
+            raise AssignmentValidationError(
+                "Only active assignments can receive an Issue Date override"
+            )
+        allocated_at = datetime.combine(issue_date, time.min, tzinfo=timezone.utc)
+        updated = self._repo.update(ctx, row_id, allocated_at=allocated_at)
+        if updated is None:
+            raise NotFoundException("Asset assignment not found")
+        return updated
 
     def _activate_assignment(self, ctx: TenantContext, row_id: UUID) -> None:
         assignment = self.get(ctx, row_id)

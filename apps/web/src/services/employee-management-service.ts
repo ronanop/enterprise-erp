@@ -3,7 +3,9 @@ import { resourceService } from "@/services/api-client";
 import { employeeDisplayName, type HrRow } from "@/services/hr-service";
 import {
   formatEmployeeCode,
+  peekNextEmployeeCodeForEntity,
   peekNextEmployeeSequence,
+  consumeEmployeeSequenceForEntity,
   syncSequenceFromCodes,
 } from "@/config/employee-id";
 import {
@@ -43,11 +45,11 @@ const LOCAL_EMP_KEY = "erp_hr_local_employees_v1";
 const ACTIVITY_KEY = "erp_employee_activity_v1";
 const AUDIT_KEY = "erp_employee_audit_v1";
 
-/** Classic seed / fake local-only demo employee codes. */
+/** Classic seed / fake demo employee codes (local + seeded API rows). */
 const DEMO_EMP_CODE_RE =
   /^(EMP-\d{3}|EMP-T\d{2}|EMP-ESS-\d+|EMP-E\d{2}|EMP-O\d{2}|MGR-ENG|MGR-SAL)$/i;
 
-function isDemoEmployeeCode(code: string | undefined | null): boolean {
+export function isDemoEmployeeCode(code: string | undefined | null): boolean {
   return DEMO_EMP_CODE_RE.test(String(code || "").trim());
 }
 
@@ -513,6 +515,7 @@ export async function listEmployeesPage(
   const extensions = loadExtensions();
   const records = masterRows
     .filter((m) => !m.is_deleted)
+    .filter((m) => !isDemoEmployeeCode(String(m.employee_code ?? "")))
     .map((m) => {
       const id = String(m.id);
       return mergeRow(
@@ -642,6 +645,7 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
 
   const records = masterRows
     .filter((m) => !m.is_deleted)
+    .filter((m) => !isDemoEmployeeCode(String(m.employee_code ?? "")))
     .map((m) => {
       const id = String(m.id);
       const profile = profileByEmployee.get(id);
@@ -651,6 +655,7 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
       if (profile) {
         ext.governmentIds = {
           ...ext.governmentIds,
+          aadhaar: ext.governmentIds.aadhaar || String(profile.aadhaar_number ?? ""),
           pan: ext.governmentIds.pan || String(profile.pan_number ?? ""),
           uan: ext.governmentIds.uan || String(profile.uan_number ?? ""),
         };
@@ -780,7 +785,7 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
     };
   }
 
-  // Backfill contact / email / gender / DOB / manager / photo from onboarding portal
+  // Backfill contact / email / gender / DOB / manager / photo / gov IDs from onboarding portal
   const onboardingCases = readJson<
     {
       employeeId?: string;
@@ -788,6 +793,9 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
       candidatePhone?: string;
       candidateName?: string;
       reportingManager?: string;
+      offerId?: string;
+      offerCode?: string;
+      candidateId?: string;
       portal?: {
         personal?: {
           phone?: string;
@@ -798,6 +806,14 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
           firstName?: string;
           lastName?: string;
           middleName?: string;
+        };
+        governmentIds?: {
+          aadhaar?: string;
+          pan?: string;
+          passport?: string;
+          drivingLicense?: string;
+          uan?: string;
+          esic?: string;
         };
         documents?: { kind?: string; typeCode?: string; fileDataUrl?: string }[];
       };
@@ -814,6 +830,7 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
     if (!caseRow) continue;
 
     const portalPersonal = caseRow.portal?.personal;
+    const portalGov = caseRow.portal?.governmentIds;
     const phoneFromPortal = pickStr(
       portalPersonal?.phone,
       caseRow.candidatePhone,
@@ -841,6 +858,9 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
     const needsPersonalEmail = !pickStr(row.extension.personal.personalEmail);
     const needsGender = !pickStr(row.gender, row.extension.personal.gender);
     const needsDob = !pickStr(row.extension.personal.dateOfBirth);
+    const needsGov =
+      !pickStr(row.extension.governmentIds.aadhaar) ||
+      !pickStr(row.extension.governmentIds.pan);
 
     if (
       !needsManager &&
@@ -849,7 +869,8 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
       !needsOfficialEmail &&
       !needsPersonalEmail &&
       !needsGender &&
-      !needsDob
+      !needsDob &&
+      !needsGov
     ) {
       continue;
     }
@@ -895,6 +916,22 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
         ...row.extension.employment,
         reportingManagerName:
           (row.extension.employment.reportingManagerName || "").trim() || mgr || "",
+      },
+      governmentIds: {
+        ...row.extension.governmentIds,
+        aadhaar:
+          row.extension.governmentIds.aadhaar ||
+          pickStr(portalGov?.aadhaar).replace(/\D/g, "") ||
+          row.extension.governmentIds.aadhaar,
+        pan:
+          row.extension.governmentIds.pan ||
+          pickStr(portalGov?.pan).toUpperCase() ||
+          row.extension.governmentIds.pan,
+        passport: row.extension.governmentIds.passport || pickStr(portalGov?.passport),
+        drivingLicense:
+          row.extension.governmentIds.drivingLicense || pickStr(portalGov?.drivingLicense),
+        uan: row.extension.governmentIds.uan || pickStr(portalGov?.uan),
+        esic: row.extension.governmentIds.esic || pickStr(portalGov?.esic),
       },
       documents:
         row.extension.documents.length > 0
@@ -1032,8 +1069,59 @@ export function listAudit(employeeId: string): AuditEntry[] {
   return readJson<AuditEntry[]>(AUDIT_KEY, []).filter((a) => a.employeeId === employeeId);
 }
 
-export function previewNextEmployeeCode(): string {
+export function previewNextEmployeeCode(entityCode?: string, existingCodes?: string[]): string {
+  if (entityCode?.trim()) {
+    return peekNextEmployeeCodeForEntity(entityCode, existingCodes ?? []);
+  }
   return formatEmployeeCode(peekNextEmployeeSequence());
+}
+
+/** Preview next ID for a legal entity — serial is independent per company code. */
+export async function previewNextEmployeeCodeForEntity(
+  entityId: string | undefined,
+  entityCode: string | undefined,
+): Promise<string> {
+  const code = (entityCode || "").trim();
+  if (!code) return previewNextEmployeeCode();
+  try {
+    const { records } = await loadEmployeeDirectory();
+    const codes = records
+      .filter(
+        (r) =>
+          !entityId ||
+          r.companyId === entityId ||
+          r.extension?.employment?.entityId === entityId,
+      )
+      .map((r) => r.employeeCode)
+      .filter(Boolean);
+    return peekNextEmployeeCodeForEntity(code, codes);
+  } catch {
+    return peekNextEmployeeCodeForEntity(code);
+  }
+}
+
+/** Allocate (consume) the next entity-prefixed employee code for local/complete flows. */
+export async function allocateNextEmployeeCodeForEntity(
+  entityId: string | undefined,
+  entityCode: string | undefined,
+): Promise<string> {
+  const code = (entityCode || "").trim();
+  if (!code) return formatEmployeeCode(peekNextEmployeeSequence());
+  try {
+    const { records } = await loadEmployeeDirectory();
+    const codes = records
+      .filter(
+        (r) =>
+          !entityId ||
+          r.companyId === entityId ||
+          r.extension?.employment?.entityId === entityId,
+      )
+      .map((r) => r.employeeCode)
+      .filter(Boolean);
+    return consumeEmployeeSequenceForEntity(code, codes);
+  } catch {
+    return consumeEmployeeSequenceForEntity(code);
+  }
 }
 
 export async function createExistingEmployee(input: {
@@ -1268,6 +1356,14 @@ export async function applyOnboardingPortalToEmployee(
               addressToJson(draft.personal.currentAddress) ||
               profile.current_address_json ||
               null,
+            aadhaar_number: draft.governmentIds.aadhaar || profile.aadhaar_number || null,
+            pan_number: draft.governmentIds.pan || profile.pan_number || null,
+            uan_number: draft.governmentIds.uan || profile.uan_number || null,
+            bank_account_number: draft.bank.accountNumber || profile.bank_account_number || null,
+            bank_ifsc: draft.bank.ifsc || profile.bank_ifsc || null,
+            bank_name: draft.bank.bankName || profile.bank_name || null,
+            bank_account_holder:
+              draft.bank.accountHolderName || profile.bank_account_holder || null,
           })
           .catch(() => undefined);
       } else if (draft.employment.branchId) {
@@ -1286,6 +1382,13 @@ export async function applyOnboardingPortalToEmployee(
             personal_email: draft.personal.personalEmail || null,
             permanent_address_json: addressToJson(draft.personal.permanentAddress),
             current_address_json: addressToJson(draft.personal.currentAddress),
+            aadhaar_number: draft.governmentIds.aadhaar || null,
+            pan_number: draft.governmentIds.pan || null,
+            uan_number: draft.governmentIds.uan || null,
+            bank_account_number: draft.bank.accountNumber || null,
+            bank_ifsc: draft.bank.ifsc || null,
+            bank_name: draft.bank.bankName || null,
+            bank_account_holder: draft.bank.accountHolderName || null,
             status: draft.employment.lifecycleStatus || "active",
           },
         }).catch(() => undefined);
@@ -1313,6 +1416,108 @@ export function findOnboardingLinkedCaseId(employeeCode: string): string | null 
   } catch {
     return null;
   }
+}
+
+function findOnboardingCaseForEmployee(employeeCode: string): {
+  id?: string;
+  employeeId?: string;
+  offerId?: string;
+  offerCode?: string;
+  candidateId?: string;
+} | null {
+  const cases = readJson<
+    {
+      id?: string;
+      employeeId?: string;
+      offerId?: string;
+      offerCode?: string;
+      candidateId?: string;
+    }[]
+  >("erp_onboarding_cases_v1", []);
+  const linkedCaseId = findOnboardingLinkedCaseId(employeeCode);
+  return (
+    cases.find((c) => linkedCaseId && c.id === linkedCaseId) ||
+    cases.find(
+      (c) => String(c.employeeId || "").toUpperCase() === employeeCode.toUpperCase(),
+    ) ||
+    null
+  );
+}
+
+/**
+ * Pull Aadhaar / PAN from the BG document portal into an employee who is missing Gov IDs
+ * (onboarding no longer collects them — they live on the BG check portal).
+ */
+export async function backfillEmployeeGovernmentIdsFromBg(
+  record: EmployeeRecord,
+): Promise<EmployeeRecord> {
+  const hasAadhaar = Boolean(pickStr(record.extension.governmentIds.aadhaar));
+  const hasPan = Boolean(pickStr(record.extension.governmentIds.pan));
+  if (hasAadhaar && hasPan) return record;
+
+  const caseRow = findOnboardingCaseForEmployee(record.employeeCode);
+  if (!caseRow) return record;
+
+  const { resolveBgGovernmentIds } = await import("@/services/bg-check-portal-service");
+  const bgGov = await resolveBgGovernmentIds({
+    offerId: caseRow.offerId,
+    offerCode: caseRow.offerCode,
+    candidateId: caseRow.candidateId,
+  });
+  if (!bgGov.aadhaar && !bgGov.pan) return record;
+
+  const nextGov = {
+    ...record.extension.governmentIds,
+    aadhaar: record.extension.governmentIds.aadhaar || bgGov.aadhaar,
+    pan: record.extension.governmentIds.pan || bgGov.pan,
+  };
+  const nextExt = defaultExtension({
+    ...record.extension,
+    governmentIds: nextGov,
+    updatedAt: nowIso(),
+    updatedBy: "BG portal backfill",
+  });
+  saveExtension(record.id, nextExt);
+  if (record.employeeCode && record.employeeCode !== record.id) {
+    saveExtension(record.employeeCode, nextExt);
+  }
+  invalidateEmployeeDirectoryCache();
+
+  // Best-effort persist onto HR profile
+  if (record.profileId) {
+    await resourceService
+      .update("/hr/employee-profiles", record.profileId, {
+        version: record.profileVersion,
+        aadhaar_number: nextGov.aadhaar || null,
+        pan_number: nextGov.pan || null,
+      })
+      .catch(() => undefined);
+  }
+
+  return { ...record, extension: nextExt };
+}
+
+/** Load BG-check portal uploads linked to this employee (via onboarding offer / candidate). */
+export async function loadBgDocumentsForEmployee(
+  employeeCode: string,
+): Promise<
+  {
+    id: string;
+    kind: string;
+    label: string;
+    fileName: string;
+    mimeType: string;
+    fileDataUrl: string;
+  }[]
+> {
+  const caseRow = findOnboardingCaseForEmployee(employeeCode);
+  if (!caseRow) return [];
+  const { fetchBgDocumentsForCandidate } = await import("@/services/bg-check-portal-service");
+  return fetchBgDocumentsForCandidate({
+    offerId: caseRow.offerId,
+    offerCode: caseRow.offerCode,
+    candidateId: caseRow.candidateId,
+  });
 }
 
 export async function createEmployeeFromWizard(
@@ -1664,16 +1869,30 @@ export function exportEmployeesCsv(records: EmployeeRecord[]): string {
     "Department",
     "Reporting Manager",
     "DOJ",
-    "Emp. Contact No.",
-    "Email ID",
-    "Cache Email ID",
+    "Emp.Contact No.",
+    "Email id",
+    "cache email id",
     "Gender",
     "DOB",
+    "Family Member Name",
+    "Relation",
+    "Contact No.",
+    "Fathers name",
+    "ESI",
+    "UAN No",
+    "Aadhar",
+    "PAN",
+    "Personal Account Number",
+    "Bank Name",
+    "IFSC Code",
+    "Salary Bank Name",
+    "Salary Account Num",
+    "Salary IFSC Code",
   ];
   const lines = records.map((r, i) =>
     [
       String(i + 1),
-      r.lifecycleStatus,
+      r.extension.employment.lifecycleStatus || r.lifecycleStatus,
       r.employeeCode,
       r.displayName,
       excelEntityCell(r),
@@ -1692,6 +1911,20 @@ export function exportEmployeesCsv(records: EmployeeRecord[]): string {
       r.officialEmail || r.extension.personal.officialEmail || "",
       r.gender || r.extension.personal.gender || "",
       r.extension.personal.dateOfBirth || "",
+      r.extension.personal.emergency.name || "",
+      r.extension.personal.emergency.relationship || "",
+      r.extension.personal.emergency.phone || "",
+      r.extension.personal.fatherName || "",
+      r.extension.governmentIds.esic || (r.extension.salary.esi ? "Yes" : ""),
+      r.extension.governmentIds.uan || "",
+      r.extension.governmentIds.aadhaar || "",
+      r.extension.governmentIds.pan || "",
+      r.extension.bank.accountNumber || "",
+      r.extension.bank.bankName || "",
+      r.extension.bank.ifsc || "",
+      r.extension.companyBank?.bankName || "",
+      r.extension.companyBank?.accountNumber || "",
+      r.extension.companyBank?.ifsc || "",
     ]
       .map((c) => `"${String(c).replace(/"/g, '""')}"`)
       .join(","),

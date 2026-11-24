@@ -263,6 +263,9 @@ class ProjectService:
                 site["circle"] = (
                     prefill.entity_state or prefill.circle_name or ""
                 ).strip() or None
+            if not (site.get("cloud_name") or "").strip() and prefill.project_title:
+                # Cloud-wise seed: project title is the unique cloud name.
+                site["cloud_name"] = prefill.project_title
             if not (site.get("application") or "").strip() and prefill.server_type:
                 site["application"] = prefill.server_type
             if site.get("rack_qty") is None and prefill.rack_quantity:

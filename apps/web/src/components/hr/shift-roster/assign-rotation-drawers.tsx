@@ -1,25 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { SetupDrawer, SetupField, SetupInput, SetupSelect, SetupTextarea } from "@/components/hr/setup/setup-drawer";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
-import { assignShift, saveRotation } from "@/services/shift-roster-service";
+import { formatApiError } from "@/services/api-client";
+import {
+  assignShift,
+  saveRotation,
+  updateShiftAssignment,
+} from "@/services/shift-roster-service";
 import type { ShiftRosterDirectory } from "@/services/shift-roster-service";
-import type { AssignmentType } from "@/types/shift-roster-management";
+import type { AssignmentType, ShiftAssignmentRecord } from "@/types/shift-roster-management";
 
 export function AssignShiftDrawer({
   open,
   onClose,
   onSaved,
   directory,
+  initial = null,
 }: {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
   directory: ShiftRosterDirectory | null;
+  initial?: ShiftAssignmentRecord | null;
 }) {
+  const editing = Boolean(initial?.id);
   const [branchId, setBranchId] = useState("");
   const [employeeId, setEmployeeId] = useState("");
   const [shiftId, setShiftId] = useState("");
@@ -29,6 +37,27 @@ export function AssignShiftDrawer({
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    if (!open) return;
+    if (initial) {
+      setBranchId(initial.branchId || "");
+      setEmployeeId(initial.employeeId || "");
+      setShiftId(initial.shiftId || "");
+      setFrom(initial.effectiveFrom || new Date().toISOString().slice(0, 10));
+      setTo(initial.effectiveTo || "");
+      setType(initial.assignmentType || "permanent");
+      setNotes(initial.notes || "");
+      return;
+    }
+    setBranchId("");
+    setEmployeeId("");
+    setShiftId("");
+    setFrom(new Date().toISOString().slice(0, 10));
+    setTo("");
+    setType("permanent");
+    setNotes("");
+  }, [open, initial]);
+
   async function submit() {
     if (!branchId || !employeeId || !shiftId || !from) {
       toast("Branch, employee, shift, and effective from are required", "error");
@@ -36,7 +65,7 @@ export function AssignShiftDrawer({
     }
     setSaving(true);
     try {
-      await assignShift({
+      const payload = {
         branchId,
         employeeId,
         shiftId,
@@ -44,12 +73,18 @@ export function AssignShiftDrawer({
         effectiveTo: to,
         assignmentType: type,
         notes,
-      });
-      toast("Shift assigned", "success");
+      };
+      if (editing && initial?.id) {
+        await updateShiftAssignment(initial.id, payload);
+        toast("Assignment updated", "success");
+      } else {
+        await assignShift(payload);
+        toast("Shift assigned", "success");
+      }
       onSaved();
       onClose();
-    } catch {
-      toast("Assignment failed", "error");
+    } catch (err) {
+      toast(formatApiError(err, editing ? "Update failed" : "Assignment failed"), "error");
     } finally {
       setSaving(false);
     }
@@ -58,15 +93,21 @@ export function AssignShiftDrawer({
   return (
     <SetupDrawer
       open={open}
-      title="Assign shift"
-      description="Permanent, temporary, or rotation-linked assignment."
+      title={editing ? "Edit shift assignment" : "Assign shift"}
+      description={
+        editing
+          ? "Update shift, dates, or assignment type for this employee."
+          : "Permanent, temporary, or rotation-linked assignment."
+      }
       wide
       onClose={onClose}
       footer={
         <>
-          <Button variant="outline" size="sm" className="cursor-pointer" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" size="sm" className="cursor-pointer" onClick={onClose}>
+            Cancel
+          </Button>
           <Button size="sm" className="cursor-pointer" disabled={saving} onClick={() => void submit()}>
-            {saving ? "Saving…" : "Assign"}
+            {saving ? "Saving…" : editing ? "Save changes" : "Assign"}
           </Button>
         </>
       }
@@ -76,15 +117,23 @@ export function AssignShiftDrawer({
           <SetupSelect value={branchId} onChange={(e) => setBranchId(e.target.value)}>
             <option value="">Select</option>
             {directory?.options.branches.map((b) => (
-              <option key={b.id} value={b.id}>{b.label}</option>
+              <option key={b.id} value={b.id}>
+                {b.label}
+              </option>
             ))}
           </SetupSelect>
         </SetupField>
         <SetupField label="Employee" required>
-          <SetupSelect value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
+          <SetupSelect
+            value={employeeId}
+            onChange={(e) => setEmployeeId(e.target.value)}
+            disabled={editing}
+          >
             <option value="">Select</option>
             {directory?.options.employees.map((e) => (
-              <option key={e.id} value={e.id}>{e.label} ({e.code})</option>
+              <option key={e.id} value={e.id}>
+                {e.label} ({e.code})
+              </option>
             ))}
           </SetupSelect>
         </SetupField>
@@ -92,7 +141,9 @@ export function AssignShiftDrawer({
           <SetupSelect value={shiftId} onChange={(e) => setShiftId(e.target.value)}>
             <option value="">Select</option>
             {directory?.options.shifts.map((s) => (
-              <option key={s.id} value={s.id}>{s.label}</option>
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
             ))}
           </SetupSelect>
         </SetupField>

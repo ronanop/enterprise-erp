@@ -75,6 +75,7 @@ class SiteInstallationRepository(PrjScopedRepository):
                 "requestor_name",
                 "circle",
                 "cloud_name",
+                "cloud_po_lines",
                 "site_name",
                 "power_requirements",
                 "rfai_number",

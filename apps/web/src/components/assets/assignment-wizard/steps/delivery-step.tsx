@@ -1,5 +1,7 @@
 "use client";
 
+import { FileText, Clock3 } from "lucide-react";
+
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
@@ -34,122 +36,107 @@ export type UnlinkedDcChallanOption = {
 export type DeliveryStepProps = {
   state: AssignmentWizardState;
   onChange: (patch: Partial<AssignmentWizardState>) => void;
+  /** Unused — kept for call-site compatibility. */
   unlinkedChallans?: UnlinkedDcChallanOption[];
+  /** Opens DC Challan workspace (Create DC now). */
+  onCreateDcNow?: (state: AssignmentWizardState) => void;
 };
 
-const MODES: Array<{ value: AssignmentWizardState["dcChallanMode"]; label: string; hint: string }> = [
-  {
-    value: "create_now",
-    label: "Create DC now",
-    hint: "Needs DC before or at handover.",
-  },
-  {
-    value: "link_existing",
-    label: "Link existing",
-    hint: "Attach a challan prepared in advance.",
-  },
-  {
-    value: "later",
-    label: "Handle later",
-    hint: "Issue now; create DC from Operations later.",
-  },
-];
-
-export function DeliveryStep({ state, onChange, unlinkedChallans = [] }: DeliveryStepProps) {
-  const mode = state.dcChallanMode ?? "later";
+export function DeliveryStep({ state, onChange, onCreateDcNow }: DeliveryStepProps) {
+  const mode = state.dcChallanMode === "create_now" ? "create_now" : "later";
   const employeeOnly = isEmployeeAllocation(state.allocationType);
-  // Employee path uses the three DC modes; formal DC lives in Operations.
   // Legacy Number/Status/Signature stay for warehouse/department/project/branch only.
   const showLegacy = !employeeOnly;
   const numberRequired =
     state.deliveryReferenceStatus === "issued" || state.deliveryReferenceStatus === "received";
 
-  function selectMode(next: AssignmentWizardState["dcChallanMode"]) {
-    if (next === "later") {
-      onChange({
-        dcChallanMode: next,
-        dcChallanId: "",
-        deliveryReferenceNumber: "",
-        deliveryReferenceStatus: "pending",
-        deliveryChallanSignatureStatus: "not_signed",
-      });
-      return;
-    }
-    onChange({ dcChallanMode: next });
+  function selectHandleLater() {
+    onChange({
+      dcChallanMode: "later",
+      dcChallanId: "",
+      deliveryReferenceNumber: "",
+      deliveryReferenceStatus: "pending",
+      deliveryChallanSignatureStatus: "not_signed",
+    });
+  }
+
+  function selectCreateDcNow() {
+    const next: AssignmentWizardState = {
+      ...state,
+      dcChallanMode: "create_now",
+      dcChallanId: "",
+    };
+    onChange({
+      dcChallanMode: "create_now",
+      dcChallanId: "",
+    });
+    onCreateDcNow?.(next);
   }
 
   return (
-    <div className="grid max-w-lg gap-4">
-      <p className="text-sm font-medium text-foreground">Delivery Challan</p>
+    <div className="grid w-full max-w-2xl gap-4">
       {employeeOnly ? (
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">
-            Most assets don&apos;t need a DC at handover — choose an option only if this one does.
-          </p>
-          <div className="grid gap-1.5 sm:grid-cols-3">
-            {MODES.map((modeOption) => {
-              const active = mode === modeOption.value;
-              return (
-                <button
-                  key={modeOption.value}
-                  type="button"
-                  onClick={() => selectMode(modeOption.value)}
-                  className={cn(
-                    "cursor-pointer rounded-lg border px-3 py-2.5 text-left transition-colors duration-200",
-                    active
-                      ? "border-[#0369A1] bg-[rgba(3,105,161,0.08)] shadow-sm"
-                      : "border-border/80 hover:bg-muted/40",
-                  )}
-                >
-                  <span className="block text-sm font-medium text-foreground">{modeOption.label}</span>
-                  <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
-                    {modeOption.hint}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          {mode === "later" ? (
-            <p className="text-xs text-muted-foreground" data-testid="dc-handle-later-hint">
-              DC stays Pending · Not signed. Create the challan from Operations when needed.
-            </p>
-          ) : null}
-        </div>
-      ) : (
-        <p className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-          DC challan tracking is employee-only in this phase. Warehouse, department, project, and branch
-          allocations keep the existing delivery reference fields.
-        </p>
-      )}
-
-      {employeeOnly && mode === "link_existing" ? (
-        <div className="space-y-2">
-          <Label htmlFor="wiz-dc-link">Open unlinked challan</Label>
-          <Select
-            value={state.dcChallanId || "none"}
-            onValueChange={(value) => onChange({ dcChallanId: value === "none" ? "" : value })}
+        <div className="grid gap-3" role="group" aria-label="Delivery challan options">
+          <button
+            type="button"
+            onClick={selectCreateDcNow}
+            className={cn(
+              "flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3.5 text-left transition-colors duration-200",
+              mode === "create_now"
+                ? "border-primary bg-primary/5 shadow-sm"
+                : "border-border/80 hover:bg-muted/40",
+            )}
           >
-            <SelectTrigger id="wiz-dc-link" className="cursor-pointer">
-              <SelectValue placeholder="Select challan" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none" className="cursor-pointer">
-                None
-              </SelectItem>
-              {unlinkedChallans.map((row) => (
-                <SelectItem key={row.id} value={row.id} className="cursor-pointer">
-                  {row.dcNumber}
-                  {row.employeeName ? ` — ${row.employeeName}` : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <span
+              className={cn(
+                "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg",
+                mode === "create_now"
+                  ? "bg-primary/15 text-primary"
+                  : "bg-muted text-muted-foreground",
+              )}
+            >
+              <FileText className="size-4" aria-hidden />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-foreground">Create DC now</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                Open DC Challan to complete paperwork
+              </span>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={selectHandleLater}
+            className={cn(
+              "flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3.5 text-left transition-colors duration-200",
+              mode === "later"
+                ? "border-primary bg-primary/5 shadow-sm"
+                : "border-border/80 hover:bg-muted/40",
+            )}
+          >
+            <span
+              className={cn(
+                "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg",
+                mode === "later"
+                  ? "bg-primary/15 text-primary"
+                  : "bg-muted text-muted-foreground",
+              )}
+            >
+              <Clock3 className="size-4" aria-hidden />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-foreground">Handle later</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                Continue issue and add DC afterwards
+              </span>
+            </span>
+          </button>
         </div>
       ) : null}
 
       {showLegacy ? (
-        <>
-          <p className="text-xs font-medium text-muted-foreground">Advanced / existing reference</p>
+        <div className="grid gap-4 rounded-xl border border-border/70 bg-muted/20 p-4">
           <div className="space-y-2">
             <Label htmlFor="wiz-delivery-number">
               DC Number{numberRequired ? " *" : ""}
@@ -162,67 +149,56 @@ export function DeliveryStep({ state, onChange, unlinkedChallans = [] }: Deliver
               maxLength={100}
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="wiz-delivery-status">DC Status *</Label>
-            <Select
-              value={state.deliveryReferenceStatus}
-              onValueChange={(value) =>
-                onChange({
-                  deliveryReferenceStatus: value as AssignmentWizardState["deliveryReferenceStatus"],
-                })
-              }
-            >
-              <SelectTrigger id="wiz-delivery-status" className="cursor-pointer">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {DELIVERY_STATUSES.map((s) => (
-                  <SelectItem key={s.value} value={s.value} className="cursor-pointer">
-                    {s.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="wiz-delivery-status">DC Status *</Label>
+              <Select
+                value={state.deliveryReferenceStatus}
+                onValueChange={(value) =>
+                  onChange({
+                    deliveryReferenceStatus:
+                      value as AssignmentWizardState["deliveryReferenceStatus"],
+                  })
+                }
+              >
+                <SelectTrigger id="wiz-delivery-status" className="cursor-pointer">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DELIVERY_STATUSES.map((s) => (
+                    <SelectItem key={s.value} value={s.value} className="cursor-pointer">
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="wiz-dc-signature">Signature *</Label>
+              <Select
+                value={state.deliveryChallanSignatureStatus}
+                onValueChange={(value) =>
+                  onChange({
+                    deliveryChallanSignatureStatus:
+                      value as AssignmentWizardState["deliveryChallanSignatureStatus"],
+                  })
+                }
+              >
+                <SelectTrigger id="wiz-dc-signature" className="cursor-pointer">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SIGNATURE_STATUSES.map((s) => (
+                    <SelectItem key={s.value} value={s.value} className="cursor-pointer">
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="wiz-dc-signature">Signature *</Label>
-            <Select
-              value={state.deliveryChallanSignatureStatus}
-              onValueChange={(value) =>
-                onChange({
-                  deliveryChallanSignatureStatus:
-                    value as AssignmentWizardState["deliveryChallanSignatureStatus"],
-                })
-              }
-            >
-              <SelectTrigger id="wiz-dc-signature" className="cursor-pointer">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SIGNATURE_STATUSES.map((s) => (
-                  <SelectItem key={s.value} value={s.value} className="cursor-pointer">
-                    {s.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </>
+        </div>
       ) : null}
-
-      <div className="space-y-2">
-        <Label htmlFor="wiz-assignment-remarks">Assignment remarks</Label>
-        <textarea
-          id="wiz-assignment-remarks"
-          className="flex min-h-[88px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          value={state.assignmentRemarks}
-          onChange={(e) => onChange({ assignmentRemarks: e.target.value })}
-          maxLength={4000}
-        />
-        <p className="text-xs text-muted-foreground">
-          Required for employee issues before submit (backend rule).
-        </p>
-      </div>
     </div>
   );
 }

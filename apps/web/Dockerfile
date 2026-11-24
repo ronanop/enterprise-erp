@@ -27,7 +27,9 @@ ENV NODE_ENV=production
 # Coolify builders can be memory-constrained
 ENV NODE_OPTIONS=--max-old-space-size=4096
 
-RUN npm run build
+# Next 16 defaults production build to Turbopack; Google fonts resolve fails
+# with `@vercel/turbopack-next/internal/font/google/font` in Docker.
+RUN npx next build --webpack
 
 FROM node:20-alpine AS runner
 WORKDIR /app

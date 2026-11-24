@@ -2,8 +2,8 @@
 
 export type PoApprovalStatus = "pending" | "accepted" | "rejected";
 
-/** finalize = issue an existing draft PO; create_po_in_stock = allow Create PO on IN STOCK OVF. */
-export type PoApprovalKind = "finalize" | "create_po_in_stock";
+/** finalize = issue an existing draft PO; create_po_in_stock = allow Create PO on IN STOCK OVF; hold_ovf = park an OVF; freight_finance = change freight and finance. */
+export type PoApprovalKind = "finalize" | "create_po_in_stock" | "hold_ovf" | "freight_finance";
 
 export type PoApprovalDocument = {
   id: string;
@@ -15,6 +15,8 @@ export type PoApprovalDocument = {
   attachmentSource?: string;
   externalUrl?: string | null;
 };
+
+export type PoApprovalStage = "accept_po" | "management";
 
 export type PoApprovalRequest = {
   id: string;
@@ -31,9 +33,18 @@ export type PoApprovalRequest = {
   reason: "stock_short" | "user_choice" | null;
   documents: PoApprovalDocument[];
   requestedByRole: "user";
+  /** Display name of the user who sent the request. */
+  requestedByName: string | null;
   status: PoApprovalStatus;
   createdAt: string;
   decidedAt: string | null;
+  /** Finalize chain: Accept PO → Management. */
+  scmApprovalStage?: PoApprovalStage | null;
+  stageLabel?: string | null;
+  /** Remark submitted with an OVF hold request. */
+  holdRemark?: string | null;
+  /** Proposed freight and finance waiting for approval. */
+  chargeSummary?: string | null;
 };
 
 const STORAGE_KEY = "erp.procurement.po-approvals";
@@ -103,6 +114,7 @@ function normalizeApprovalRow(
     reason,
     documents,
     requestedByRole: "user",
+    requestedByName: (row.requestedByName || "").trim() || null,
     status: row.status === "accepted" || row.status === "rejected" ? row.status : "pending",
     createdAt: row.createdAt || new Date().toISOString(),
     decidedAt: row.decidedAt ?? null,
@@ -239,6 +251,7 @@ export function submitPoFinalizeApproval(input: {
     reason: null,
     documents,
     requestedByRole: "user",
+    requestedByName: null,
     status: "pending",
     createdAt: new Date().toISOString(),
     decidedAt: null,
@@ -254,6 +267,7 @@ export function submitCreatePoInStockApproval(input: {
   customerName?: string | null;
   vendorName?: string | null;
   reason: "stock_short" | "user_choice";
+  requestedByName?: string | null;
 }): PoApprovalRequest {
   const orderId = ovfCreatePoApprovalOrderKey(input.ovfId);
   const existing = findPendingCreatePoInStockApprovalForOvf(input.ovfId);
@@ -290,6 +304,7 @@ export function submitCreatePoInStockApproval(input: {
     reason: input.reason,
     documents: [],
     requestedByRole: "user",
+    requestedByName: (input.requestedByName || "").trim() || null,
     status: "pending",
     createdAt: new Date().toISOString(),
     decidedAt: null,

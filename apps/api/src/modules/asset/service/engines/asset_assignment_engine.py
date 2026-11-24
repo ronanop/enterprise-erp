@@ -34,6 +34,12 @@ class AssetAssignmentEngine:
             raise InvalidAssetAssignmentState("Only draft assignments can be cancelled")
         row.status = AssetAssignmentStatus.CANCELLED.value
 
+    def cancel_submitted(self, row) -> None:
+        """Cancel a submitted assignment that never entered workflow / activate."""
+        if row.status != AssetAssignmentStatus.SUBMITTED.value:
+            raise InvalidAssetAssignmentState("Only submitted assignments can be cancelled here")
+        row.status = AssetAssignmentStatus.CANCELLED.value
+
     def reopen(self, row, *, workflow_status: str | None) -> None:
         if row.status != AssetAssignmentStatus.CANCELLED.value:
             raise InvalidAssetAssignmentState("Only cancelled assignments can be reopened")

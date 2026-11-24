@@ -70,6 +70,7 @@ class RegistrationValidator:
     ACTIVE_EDITABLE_FIELDS = frozenset(
         {
             "asset_name",
+            "asset_type_id",
             "make",
             "model",
             "configuration",
@@ -83,6 +84,23 @@ class RegistrationValidator:
             "version",
         }
     )
+
+    @staticmethod
+    def _field_unchanged(row: AstAsset, key: str, value: object) -> bool:
+        """True when PATCH value matches the persisted attribute (UUID-safe)."""
+        if not hasattr(row, key):
+            return False
+        current = getattr(row, key)
+        if current is None and value is None:
+            return True
+        if current is None or value is None:
+            return False
+        if isinstance(current, UUID) or isinstance(value, UUID):
+            try:
+                return str(current) == str(value)
+            except Exception:
+                return False
+        return current == value
 
     def validate_update_fields(
         self,
@@ -118,6 +136,7 @@ class RegistrationValidator:
                 fields=merged,
                 exclude_id=row.id,
                 partial=True,
+                incoming_keys=frozenset(fields.keys()),
             )
             return
 
@@ -130,6 +149,18 @@ class RegistrationValidator:
                 "Disposed, written-off, or cancelled assets cannot be updated"
             )
 
+        # Clients often echo current locked fields (e.g. asset_type_id from Edit Asset).
+        # Treat unchanged values as no-ops so PATCH does not fail draft-only checks.
+        noop_keys = [
+            key
+            for key, value in list(fields.items())
+            if key not in self.ACTIVE_EDITABLE_FIELDS
+            and key not in {"charger_available", "charger_code"}
+            and self._field_unchanged(row, key, value)
+        ]
+        for key in noop_keys:
+            fields.pop(key, None)
+
         disallowed = [
             key
             for key in fields
@@ -141,11 +172,12 @@ class RegistrationValidator:
                 "Only draft registrations can change: " + ", ".join(sorted(disallowed))
             )
 
+        incoming_keys = frozenset(fields.keys())
         merged = {
             "asset_name": fields.get("asset_name", row.asset_name),
             "asset_category_id": row.asset_category_id,
-            "asset_type_id": row.asset_type_id,
-            "asset_type": row.asset_type,
+            "asset_type_id": fields.get("asset_type_id", row.asset_type_id),
+            "asset_type": fields.get("asset_type", row.asset_type),
             "purchase_date": row.purchase_date,
             "purchase_cost": row.purchase_cost,
             "currency_code": row.currency_code,
@@ -165,6 +197,7 @@ class RegistrationValidator:
             fields=merged,
             exclude_id=row.id,
             partial=True,
+            incoming_keys=incoming_keys,
         )
 
     def validate_submit_readiness(self, ctx: TenantContext, row: AstAsset) -> None:
@@ -220,13 +253,21 @@ class RegistrationValidator:
         fields: dict,
         exclude_id: UUID | None,
         partial: bool = False,
+        incoming_keys: frozenset[str] | None = None,
     ) -> None:
+        def _check_optional_fk(key: str) -> bool:
+            # Partial Edit Asset merges existing FKs for serial/etc. checks. Soft-deleted
+            # custodians/departments must not block unrelated field updates.
+            if incoming_keys is None:
+                return True
+            return key in incoming_keys
+
         asset_type = fields.get("asset_type")
         if asset_type is not None and asset_type not in self.ASSET_TYPES:
             raise RegistrationValidationError(f"Invalid asset_type '{asset_type}'")
 
         type_id = fields.get("asset_type_id")
-        if type_id is not None:
+        if type_id is not None and _check_optional_fk("asset_type_id"):
             asset_type_row = self._types.get(ctx, type_id)
             if asset_type_row is None:
                 raise RegistrationValidationError("Asset type not found")
@@ -238,7 +279,7 @@ class RegistrationValidator:
                 raise RegistrationValidationError("Asset type is not active")
 
         category_id = fields.get("asset_category_id")
-        if category_id is not None:
+        if category_id is not None and _check_optional_fk("asset_category_id"):
             category = self._categories.get(ctx, category_id)
             if category is None:
                 raise RegistrationValidationError("Asset category not found")
@@ -247,17 +288,20 @@ class RegistrationValidator:
             if category.status != AssetCategoryStatus.ACTIVE.value:
                 raise RegistrationValidationError("Asset category is not active")
 
-        vendor_id = fields.get("supplier_vendor_id")
-        if vendor_id is not None:
-            self._master.get_vendor(ctx, vendor_id)
+        if _check_optional_fk("supplier_vendor_id"):
+            vendor_id = fields.get("supplier_vendor_id")
+            if vendor_id is not None:
+                self._master.get_vendor(ctx, vendor_id)
 
-        department_id = fields.get("department_id")
-        if department_id is not None:
-            self._org.get_department(ctx, department_id)
+        if _check_optional_fk("department_id"):
+            department_id = fields.get("department_id")
+            if department_id is not None:
+                self._org.get_department(ctx, department_id)
 
-        custodian_id = fields.get("custodian_employee_id")
-        if custodian_id is not None:
-            self._master.get_employee(ctx, custodian_id)
+        if _check_optional_fk("custodian_employee_id"):
+            custodian_id = fields.get("custodian_employee_id")
+            if custodian_id is not None:
+                self._master.get_employee(ctx, custodian_id)
 
         purchase_cost = fields.get("purchase_cost")
         if purchase_cost is not None and Decimal(str(purchase_cost)) < 0:

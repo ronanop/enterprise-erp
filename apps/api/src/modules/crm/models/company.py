@@ -3,7 +3,7 @@
 from uuid import UUID, uuid4
 
 from sqlalchemy import Boolean, ForeignKey, String, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.base import Base
@@ -62,3 +62,4 @@ class CrmCompany(Base, *CrmTransactionMixin):
     )
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="active")
     locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    custom_fields: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)

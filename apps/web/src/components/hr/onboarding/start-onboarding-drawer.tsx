@@ -18,21 +18,51 @@ import {
 } from "@/services/hr-master-connector";
 import { validateEmail, validateMobile } from "@/lib/employee-validators";
 import { EMPLOYMENT_TYPE_OPTIONS, employmentDurationKind } from "@/config/hr-master-options";
-import { listEmploymentTypeOptions, listEntityOptions, loadSetupOrgLookups } from "@/services/hr-setup-service";
-import { previewNextEmployeeCode } from "@/services/employee-management-service";
+import {
+  listEmploymentTypeOptions,
+  listEntityOptions,
+  loadSetupOrgLookups,
+  type SetupMasterOption,
+} from "@/services/hr-setup-service";
+import { previewNextEmployeeCodeForEntity } from "@/services/employee-management-service";
+import { toDateInputValue } from "@/services/recruitment-ats-service";
 import type { StartOnboardingInput } from "@/types/onboarding-management";
+
+export type StartOnboardingPrefill = Partial<
+  Pick<
+    StartOnboardingInput,
+    | "candidateId"
+    | "candidateName"
+    | "candidateEmail"
+    | "candidatePhone"
+    | "joiningDate"
+    | "department"
+    | "designation"
+    | "reportingManager"
+    | "branch"
+    | "employmentType"
+    | "offerId"
+    | "offerCode"
+    | "invitationExpiryDays"
+  >
+> & {
+  /** ATS application to mark hired after invite */
+  applicationId?: string;
+};
 
 type Props = {
   open: boolean;
   onClose: () => void;
   onSubmit: (input: StartOnboardingInput) => Promise<void>;
+  /** Prefill from ATS offer accepted / hire flow */
+  initial?: StartOnboardingPrefill | null;
 };
 
 function digitsOnly(value: string): string {
   return value.replace(/\D/g, "");
 }
 
-export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
+export function StartOnboardingDrawer({ open, onClose, onSubmit, initial = null }: Props) {
   const [joiningDate, setJoiningDate] = useState("");
   const [entityId, setEntityId] = useState("");
   const [department, setDepartment] = useState("");
@@ -46,6 +76,9 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
   const [candidateName, setCandidateName] = useState("");
   const [candidateEmail, setCandidateEmail] = useState("");
   const [candidatePhone, setCandidatePhone] = useState("");
+  const [candidateId, setCandidateId] = useState("");
+  const [offerId, setOfferId] = useState<string | undefined>();
+  const [offerCode, setOfferCode] = useState<string | undefined>();
   const [employeeIdMode, setEmployeeIdMode] = useState<"auto" | "manual">("auto");
   const [assignedEmployeeCode, setAssignedEmployeeCode] = useState("");
   const [nextAutoCode, setNextAutoCode] = useState("");
@@ -63,10 +96,38 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
     branches: [],
   });
   const [employmentTypes, setEmploymentTypes] = useState(EMPLOYMENT_TYPE_OPTIONS);
-  const [entities, setEntities] = useState<{ value: string; label: string }[]>([]);
+  const [entities, setEntities] = useState<SetupMasterOption[]>([]);
 
   useEffect(() => {
     if (!open) return;
+
+    const prefillEmployment = (() => {
+      const raw = String(initial?.employmentType || "permanent");
+      if (raw === "full_time") return "permanent";
+      if (raw === "intern") return "intern";
+      if (raw === "contract") return "contract";
+      if (raw === "part_time") return "part_time";
+      return raw || "permanent";
+    })();
+
+    setCandidateId(initial?.candidateId || crypto.randomUUID());
+    setCandidateName(initial?.candidateName || "");
+    setCandidateEmail(initial?.candidateEmail || "");
+    setCandidatePhone(digitsOnly(initial?.candidatePhone || "").slice(0, 10));
+    const joinPrefill = toDateInputValue(initial?.joiningDate) || initial?.joiningDate || "";
+    setJoiningDate(joinPrefill);
+    setDepartment(initial?.department || "");
+    setDesignation(initial?.designation || "");
+    setReportingManager(initial?.reportingManager || "");
+    setBranch(initial?.branch || "");
+    setEmploymentType(prefillEmployment);
+    setExpiryDays(String(initial?.invitationExpiryDays || 14));
+    setOfferId(initial?.offerId);
+    setOfferCode(initial?.offerCode);
+    setEmployeeIdMode("auto");
+    setAssignedEmployeeCode("");
+    setErrors([]);
+
     void Promise.all([
       loadHrMasterDirectory(),
       listEmploymentTypeOptions(),
@@ -91,9 +152,10 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
       });
       setEmploymentTypes(types);
       setEntities(entityOpts);
-      setNextAutoCode(previewNextEmployeeCode());
-      setBranch((prev) => prev || branches[0]?.label || "Head Office");
+      setBranch((prev) => prev || initial?.branch || branches[0]?.label || "Head Office");
       setEntityId((prev) => prev || entityOpts[0]?.value || "");
+      // Re-apply joining date after async masters load in case state was cleared
+      if (joinPrefill) setJoiningDate(joinPrefill);
       if (!m.designations.length) {
         toast("No designations found - add them in HR Setup → Designations", "error");
       }
@@ -104,7 +166,19 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
         toast("No branches found - add them in Org Setup → Branches", "error");
       }
     });
-  }, [open]);
+  }, [open, initial?.offerId, initial?.joiningDate, initial?.candidateId]);
+
+  useEffect(() => {
+    if (!open) return;
+    const ent = entities.find((e) => e.value === entityId);
+    let cancelled = false;
+    void previewNextEmployeeCodeForEntity(entityId || undefined, ent?.code).then((next) => {
+      if (!cancelled) setNextAutoCode(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, entityId, entities]);
 
   function validate(): string[] {
     const next: string[] = [];
@@ -168,7 +242,7 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
     setSaving(true);
     try {
       await onSubmit({
-        candidateId: crypto.randomUUID(),
+        candidateId: candidateId || crypto.randomUUID(),
         candidateName: name,
         candidateEmail: email,
         candidatePhone: phone,
@@ -188,6 +262,8 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
         employeeIdMode,
         assignedEmployeeCode:
           employeeIdMode === "manual" ? assignedEmployeeCode.trim().toUpperCase() : undefined,
+        offerId,
+        offerCode,
       });
       onClose();
       setCandidateName("");
@@ -199,19 +275,27 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
       setEntityId(entities[0]?.value || "");
       setEmployeeIdMode("auto");
       setAssignedEmployeeCode("");
+      setOfferId(undefined);
+      setOfferCode(undefined);
       setErrors([]);
     } finally {
       setSaving(false);
     }
   }
 
+  const fromOffer = Boolean(initial?.offerId || initial?.candidateName);
+
   return (
     <SetupDrawer
       open={open}
       onClose={onClose}
       wide
-      title="Start Onboarding"
-      description="Create a pre-joining case. An auto-generated password is emailed to the candidate with the login page. They sign in to fill onboarding details; HR can copy the same credentials for testing."
+      title={fromOffer ? "Complete onboarding" : "Start Onboarding"}
+      description={
+        fromOffer
+          ? "Candidate and role details are prefilled from the accepted offer. Review, then send the portal invitation."
+          : "Create a pre-joining case. An auto-generated password is emailed to the candidate with the login page. They sign in to fill onboarding details; HR can copy the same credentials for testing."
+      }
       footer={
         <>
           <Button type="button" variant="outline" className="cursor-pointer" onClick={onClose}>
@@ -223,7 +307,11 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
             disabled={saving}
             onClick={() => void handleSave()}
           >
-            {saving ? "Starting…" : "Start onboarding"}
+            {saving
+              ? "Sending…"
+              : fromOffer
+                ? "Send onboarding invitation"
+                : "Start onboarding"}
           </Button>
         </>
       }
@@ -271,19 +359,31 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <SetupField label="Joining date" required>
+          <SetupField
+            label="Joining date"
+            required
+            hint={
+              initial?.offerId
+                ? "Prefills from the accepted offer letter"
+                : undefined
+            }
+          >
             <SetupInput
               type="date"
               value={joiningDate}
               onChange={(e) => setJoiningDate(e.target.value)}
             />
           </SetupField>
-          <SetupField label="Legal entity" required hint="HR Setup → Legal Entities">
+          <SetupField
+            label="Legal entity"
+            required
+            hint="HR Setup → Legal Entities (code becomes the Emp ID prefix)"
+          >
             <SetupSelect value={entityId} onChange={(e) => setEntityId(e.target.value)}>
               <option value="">Select entity…</option>
               {entities.map((e) => (
                 <option key={e.value} value={e.value}>
-                  {e.label}
+                  {e.code ? `${e.label} (${e.code})` : e.label}
                 </option>
               ))}
             </SetupSelect>

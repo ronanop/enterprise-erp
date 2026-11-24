@@ -25,9 +25,32 @@ class ApprovalStepOwnerService:
         if not self._crm_admin.is_admin(ctx):
             raise ForbiddenException("Only CRM module admins can manage default task owners")
 
+    def _effective_steps(self, ctx: TenantContext) -> list[dict]:
+        from modules.crm.service.crm_settings_service import CrmSettingsService
+
+        effective = CrmSettingsService(self._db).get_effective(ctx, require_erp_admin=False)
+        steps = CrmSettingsService.effective_approval_steps(effective)
+        if steps:
+            return steps
+        return [
+            {
+                "key": key,
+                "label": label,
+                "team_role": role,
+                "enabled": True,
+                "source": "stock",
+            }
+            for key, (label, role, _) in APPROVAL_STEP_CATALOG.items()
+        ]
+
+    def _known_step_keys(self, ctx: TenantContext) -> set[str]:
+        return {str(s["key"]) for s in self._effective_steps(ctx)}
+
     def list_grouped(self, ctx: TenantContext) -> list[dict]:
+        steps = self._effective_steps(ctx)
+        step_keys = [str(s["key"]) for s in steps]
         rows = self._repo.list_for_tenant(ctx)
-        by_step: dict[str, list[UUID]] = {key: [] for key in APPROVAL_STEP_CATALOG}
+        by_step: dict[str, list[UUID]] = {key: [] for key in step_keys}
         for row in rows:
             if row.step_key in by_step:
                 by_step[row.step_key].append(row.user_id)
@@ -36,9 +59,10 @@ class ApprovalStepOwnerService:
         users = self._user_map(ctx.tenant_id, user_ids)
 
         result: list[dict] = []
-        for step_key, (label, team_role, _) in APPROVAL_STEP_CATALOG.items():
+        for step in steps:
+            step_key = str(step["key"])
             owners = []
-            for uid in by_step[step_key]:
+            for uid in by_step.get(step_key, []):
                 user = users.get(uid)
                 owners.append(
                     {
@@ -50,21 +74,21 @@ class ApprovalStepOwnerService:
             result.append(
                 {
                     "step_key": step_key,
-                    "label": label,
-                    "team_role": team_role,
+                    "label": step.get("label") or step_key,
+                    "team_role": step.get("team_role") or "management",
                     "owners": owners,
                 }
             )
         return result
 
     def list_user_ids(self, ctx: TenantContext, step_key: str) -> list[UUID]:
-        if step_key not in APPROVAL_STEP_KEYS:
+        if step_key not in self._known_step_keys(ctx) and step_key not in APPROVAL_STEP_KEYS:
             raise ConflictException(f"Unknown approval step '{step_key}'")
         return self._repo.list_user_ids_for_step(ctx, step_key)
 
     def replace(self, ctx: TenantContext, step_key: str, user_ids: list[UUID]) -> list[dict]:
         self._ensure_admin(ctx)
-        if step_key not in APPROVAL_STEP_KEYS:
+        if step_key not in self._known_step_keys(ctx) and step_key not in APPROVAL_STEP_KEYS:
             raise ConflictException(f"Unknown approval step '{step_key}'")
 
         unique_ids: list[UUID] = []

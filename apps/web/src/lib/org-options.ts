@@ -19,9 +19,22 @@ export type EmployeeDirectoryEntry = {
 
 const DIRECTORY_PAGE_SIZE = 200;
 const DIRECTORY_MAX_PAGES = 50;
+const ASSET_EMPLOYEE_DIRECTORY_PATH = "/assets/asset-employees";
+const ASSET_DEPARTMENT_DIRECTORY_PATH = "/assets/asset-departments";
+const ASSET_DIRECTORY_LIMIT = 2000;
 
-const EMPLOYEE_READ_PERM = "master.employee:read";
-const DEPARTMENT_READ_PERM = "organization.department:read";
+/** Asset picker statuses — mirrors backend DEFAULT_DIRECTORY_STATUSES. */
+export const ASSET_EMPLOYEE_DIRECTORY_STATUSES = [
+  "active",
+  "probation",
+  "on_leave",
+] as const;
+
+/** Asset department picker statuses — mirrors backend DEFAULT_DIRECTORY_STATUSES. */
+export const ASSET_DEPARTMENT_DIRECTORY_STATUSES = ["active"] as const;
+
+const EMPLOYEE_READ_PERM = "asset.asset:read";
+const DEPARTMENT_READ_PERM = "asset.asset:read";
 
 function asArray(data: unknown): Record<string, unknown>[] {
   if (Array.isArray(data)) return data as Record<string, unknown>[];
@@ -114,18 +127,21 @@ async function listAllResourcePages(apiPath: string): Promise<Record<string, unk
 
 function mapEmployeeRows(rows: Record<string, unknown>[]): EmployeeDirectoryEntry[] {
   return rows.map((r) => {
-    const displayName = [r.first_name, r.last_name].filter(Boolean).join(" ").trim();
+    const displayName =
+      trimOrNull(r.display_name) ||
+      [r.first_name, r.last_name].filter(Boolean).join(" ").trim();
     const employeeCode = trimOrNull(r.employee_code);
     const codeSuffix = employeeCode ? ` (${employeeCode})` : "";
-    const dept =
-      typeof r.designation === "string" && r.designation.trim()
-        ? ` · ${r.designation}`
-        : "";
+    const deptOrRole =
+      trimOrNull(r.department_name) ||
+      trimOrNull(r.designation) ||
+      null;
+    const suffix = deptOrRole ? ` · ${deptOrRole}` : "";
     const id = String(r.id);
     return {
       id,
       displayName: displayName || id,
-      label: `${displayName || id}${codeSuffix}${dept}`,
+      label: `${displayName || id}${codeSuffix}${suffix}`,
       employeeCode,
       mobile: trimOrNull(r.mobile),
       companyId: trimOrNull(r.company_id != null ? String(r.company_id) : null),
@@ -151,13 +167,18 @@ export type ListEmployeeDirectoryOptions = {
   throwOnError?: boolean;
 };
 
-/** Full employee directory from GET /employees (id, code, name, mobile). */
+/**
+ * Asset employee directory from GET /assets/asset-employees.
+ * Default backend filter: active, probation, on_leave only.
+ */
 export async function listEmployeeDirectory(
   options: ListEmployeeDirectoryOptions = {},
 ): Promise<EmployeeDirectoryEntry[]> {
   try {
-    const rows = await listAllResourcePages("/employees");
-    return mapEmployeeRows(rows);
+    const res = await resourceService.list(
+      `${ASSET_EMPLOYEE_DIRECTORY_PATH}?limit=${ASSET_DIRECTORY_LIMIT}`,
+    );
+    return mapEmployeeRows(asArray(res.data));
   } catch (err) {
     if (options.throwOnError) throw err;
     return [];
@@ -181,12 +202,18 @@ export async function listEmployeeOptions(): Promise<OrgOption[]> {
   return directory.map((e) => ({ id: e.id, label: e.label }));
 }
 
+/**
+ * Asset department directory from GET /assets/asset-departments
+ * (organization.org_department — active by default).
+ */
 export async function listDepartmentOptions(
   options: { throwOnError?: boolean } = {},
 ): Promise<OrgOption[]> {
   try {
-    const rows = await listAllResourcePages("/departments");
-    return rows.map((r) => ({
+    const res = await resourceService.list(
+      `${ASSET_DEPARTMENT_DIRECTORY_PATH}?limit=${ASSET_DIRECTORY_LIMIT}`,
+    );
+    return asArray(res.data).map((r) => ({
       id: String(r.id),
       label: String(r.department_name ?? r.name ?? r.department_code ?? r.id),
     }));

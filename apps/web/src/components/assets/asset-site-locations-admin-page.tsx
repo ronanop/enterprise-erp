@@ -116,7 +116,7 @@ export function AssetSiteLocationsAdminPage() {
     try {
       setBuildings(await listSiteBuildings(id));
     } catch (err) {
-      setError(formatApiError(err, "Failed to load buildings"));
+      setError(formatApiError(err, "Failed to load address"));
     }
   }
 
@@ -167,7 +167,7 @@ export function AssetSiteLocationsAdminPage() {
       setBldName("");
       setBuildings(await listSiteBuildings(selectedId));
     } catch (err) {
-      setError(formatApiError(err, "Failed to create building"));
+      setError(formatApiError(err, "Failed to create address"));
     } finally {
       setSaving(false);
     }
@@ -182,7 +182,7 @@ export function AssetSiteLocationsAdminPage() {
       setEditingBld(null);
       setBuildings(await listSiteBuildings(selectedId));
     } catch (err) {
-      setError(formatApiError(err, "Failed to update building"));
+      setError(formatApiError(err, "Failed to update address"));
     } finally {
       setSaving(false);
     }
@@ -195,10 +195,7 @@ export function AssetSiteLocationsAdminPage() {
 
   return (
     <div className="space-y-5" data-testid="asset-site-locations-admin">
-      <PageHeader
-        title="Locations"
-        description="Location → Building master for IT Assets. Exactly one Location per company may be Head Office."
-      />
+      <PageHeader title="Locations" />
 
       {error ? (
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
@@ -280,7 +277,7 @@ export function AssetSiteLocationsAdminPage() {
         <div className="space-y-4 rounded-xl border border-border/80 bg-card p-4 shadow-sm">
           {!selected ? (
             <p className="py-10 text-center text-sm text-muted-foreground">
-              Select or create a Location to manage buildings.
+              Select or create a Location to manage address.
             </p>
           ) : (
             <>
@@ -377,12 +374,12 @@ export function AssetSiteLocationsAdminPage() {
               <div>
                 <div className="mb-2 flex items-center gap-2">
                   <Building2 className="size-4 text-primary" />
-                  <h3 className="text-sm font-semibold">Buildings</h3>
+                  <h3 className="text-sm font-semibold">Address</h3>
                 </div>
                 <ul className="divide-y divide-border/60 rounded-lg border border-border/70">
                   {buildings.length === 0 ? (
                     <li className="px-3 py-6 text-center text-sm text-muted-foreground">
-                      No buildings yet
+                      No address yet
                     </li>
                   ) : (
                     buildings.map((b) => (
@@ -445,7 +442,7 @@ export function AssetSiteLocationsAdminPage() {
                                       await deactivateSiteBuilding(b.id);
                                       setBuildings(await listSiteBuildings(selectedId!));
                                     } catch (err) {
-                                      setError(formatApiError(err, "Failed to remove building"));
+                                      setError(formatApiError(err, "Failed to remove address"));
                                     } finally {
                                       setSaving(false);
                                     }
@@ -465,7 +462,7 @@ export function AssetSiteLocationsAdminPage() {
                   <Input
                     value={bldName}
                     onChange={(e) => setBldName(e.target.value)}
-                    placeholder="Building name (e.g. CRC2)"
+                    placeholder="Address name (e.g. CRC2)"
                     className="h-9 max-w-xs"
                   />
                   <Button
@@ -476,7 +473,7 @@ export function AssetSiteLocationsAdminPage() {
                     onClick={() => void onCreateBuilding()}
                   >
                     <Plus className="size-3.5" />
-                    Add Building
+                    Add Address
                   </Button>
                 </div>
               </div>

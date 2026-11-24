@@ -171,8 +171,7 @@ def test_activate_assignment_calls_operational_assign(_gov) -> None:
     ("condition", "action"),
     [
         ("good", "return_to_ready"),
-        ("outdated", "retire"),
-        ("dead", "mark_pending_disposal"),
+        ("dead", "return_to_ready"),
     ],
 )
 def test_return_assignment_operational_action(condition: str, action: str) -> None:
@@ -197,6 +196,60 @@ def test_return_assignment_operational_action(condition: str, action: str) -> No
                             with patch.object(svc._audit, "log_entity_change"):
                                 svc.return_assignment(ctx, row_id, return_condition=condition)
     assert ops.call_args.kwargs["action"] == action
+
+
+def test_return_assignment_outdated_creates_disposal() -> None:
+    svc = AssignmentService(MagicMock())
+    ctx = _ctx()
+    row_id = uuid4()
+    asset_id = uuid4()
+    row = SimpleNamespace(
+        id=row_id,
+        status="active",
+        asset_id=asset_id,
+        allocation_type="employee",
+        employee_id=uuid4(),
+    )
+    asset = SimpleNamespace(
+        id=asset_id,
+        version=2,
+        custodian_employee_id=row.employee_id,
+        master_asset_id=None,
+        branch_id=uuid4(),
+        company_id=uuid4(),
+    )
+    with patch.object(svc, "get", return_value=row):
+        with patch.object(svc._validator, "validate_return_readiness", return_value=None):
+            with patch.object(svc._assignment_components, "reconcile_return"):
+                with patch(
+                    "modules.asset.service.component_service.AssetComponentService"
+                ) as CompSvc:
+                    CompSvc.return_value.dispose_active_for_parent.return_value = []
+                    with patch.object(svc._assets, "lock_for_update", return_value=asset):
+                        with patch.object(svc._operational, "apply_action") as ops:
+                            with patch.object(svc._assets, "update", return_value=asset):
+                                with patch.object(svc._assets, "get", return_value=asset):
+                                    with patch.object(
+                                        svc._repo, "complete_return", return_value=row
+                                    ):
+                                        with patch.object(svc._audit, "log_entity_change"):
+                                            with patch(
+                                                "modules.asset.service.disposal_service.DisposalService"
+                                            ) as DisposalSvc:
+                                                DisposalSvc.return_value.create.return_value = (
+                                                    MagicMock()
+                                                )
+                                                svc.return_assignment(
+                                                    ctx, row_id, return_condition="outdated"
+                                                )
+    ops.assert_not_called()
+    CompSvc.return_value.dispose_active_for_parent.assert_called_once()
+    CompSvc.return_value.detach_linked_for_parent.assert_not_called()
+    DisposalSvc.return_value.create.assert_called_once()
+    create_kwargs = DisposalSvc.return_value.create.call_args.kwargs
+    assert create_kwargs["asset_id"] == asset_id
+    assert create_kwargs["disposal_type"] == "scrap"
+    assert create_kwargs["management_approved"] is True
 
 
 def test_return_assignment_ops_failure_blocks_assignment_return() -> None:

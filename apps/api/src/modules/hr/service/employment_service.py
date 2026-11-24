@@ -31,7 +31,7 @@ class EmploymentService:
         self._db = db
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
-        cid = self._scope.resolve_list_company_id(ctx, company_id)
+        cid = self._scope.resolve_company_id(ctx, company_id)
         return self._repo.list_rows(ctx, cid)
 
     def get(self, ctx: TenantContext, row_id: UUID) -> HrEmployment:
@@ -148,17 +148,16 @@ class EmploymentService:
         current_code = getattr(emp, "employee_code", "") or ""
         needs_code = current_code.startswith("ONB-") or not current_code
         if needs_code:
-            if not employee_code or not str(employee_code).strip():
-                raise InvalidEmploymentState(
-                    "Manual Employee ID is required at activation "
-                    "(temporary ONB-* codes cannot remain after activation)"
-                )
-            code = str(employee_code).strip().upper()
             from modules.master_data.service.employee_service import EmployeeService
 
-            EmployeeService(self._db).update_employee(
-                ctx, row.employee_id, employee_code=code
+            emp_svc = EmployeeService(self._db)
+            code = (
+                str(employee_code).strip().upper()
+                if employee_code and str(employee_code).strip()
+                else emp_svc.allocate_next_employee_code(ctx, row.company_id)
             )
+            employee_code = code
+            emp_svc.update_employee(ctx, row.employee_id, employee_code=code)
 
         self._ensure_single_active(ctx, row.company_id, row.employee_id, exclude_id=row_id)
         self._engine.apply_activate(row)

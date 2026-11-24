@@ -74,7 +74,7 @@ describe("AssetsModuleSidebar", () => {
     expect(sidebar.className).not.toMatch(/w-\[260px\]/);
   });
 
-  it("builds domain switcher + IT workspace with nested Users for module admin", () => {
+  it("builds domain switcher + IT workspace for module admin", () => {
     const nav = buildAssetSidebarNav({
       isModuleAdmin: true,
       domains: ["IT", "NON_IT"],
@@ -99,28 +99,46 @@ describe("AssetsModuleSidebar", () => {
       "Add Asset",
     ]);
     const extended = nav.find((g) => g.title === "Extended");
-    expect(extended?.items.map((i) => i.title)).toContain("Users");
+    expect(extended?.items.map((i) => i.title)).toEqual(["Components", "Documents"]);
+    expect(extended?.items.map((i) => i.title)).not.toContain("Users");
+    expect(extended?.items.map((i) => i.title)).not.toContain("Reports");
     expect(extended?.items.map((i) => i.title)).not.toContain("QR / Barcode");
     expect(nonItAssetWorkspaceNav[0]?.items.map((i) => i.title)).toEqual([
       "Dashboard",
       "Inventory",
       "Types",
       "Locations",
-      "Users",
     ]);
-    expect(nonItAssetWorkspaceNav[0]?.items.some((i) => i.title === "Users")).toBe(true);
   });
 
-  it("hides Users tab for domain members who are not admins", () => {
+  it("hides Non-IT admin-only tabs for domain members who are not admins", () => {
     const nav = buildAssetSidebarNav({
       isModuleAdmin: false,
-      domains: ["IT"],
+      domains: ["NON_IT"],
       adminDomains: [],
-      activeDomain: "IT",
+      activeDomain: "NON_IT",
     });
     const allTitles = nav.flatMap((g) => g.items.map((i) => i.title));
+    expect(nav.map((g) => g.title)).not.toContain("Domains");
+    expect(allTitles).not.toContain("IT Assets");
     expect(allTitles).not.toContain("Users");
-    expect(allTitles).toContain("All Assets");
+    expect(allTitles).not.toContain("Types");
+    expect(allTitles).not.toContain("Locations");
+    expect(allTitles).toContain("Inventory");
+  });
+
+  it("hides IT domain switcher when only Non-IT is assigned", () => {
+    const nav = buildAssetSidebarNav({
+      isModuleAdmin: false,
+      domains: ["NON_IT"],
+      adminDomains: ["NON_IT"],
+      activeDomain: "NON_IT",
+    });
+    const allTitles = nav.flatMap((g) => g.items.map((i) => i.title));
+    expect(nav.map((g) => g.title)).not.toContain("Domains");
+    expect(allTitles).not.toContain("IT Assets");
+    expect(allTitles).toContain("Dashboard");
+    expect(allTitles).toContain("Types");
   });
 
   it("hides future modules from the rail", async () => {

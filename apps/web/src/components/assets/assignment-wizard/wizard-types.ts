@@ -19,7 +19,6 @@ export const RETURN_WIZARD_STEPS: WizardStepMeta[] = [
   { id: "summary", label: "Asset summary" },
   { id: "condition", label: "Return condition" },
   { id: "components", label: "Components" },
-  { id: "remarks", label: "Return remarks" },
   { id: "review", label: "Review" },
 ];
 

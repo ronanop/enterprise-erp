@@ -138,8 +138,7 @@ export function AssetDisposalWorkspace() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Disposed assets"
-        description="Assets marked as disposed. Use View Details for reason, approval, and disposal date."
+        title="Disposed Assets"
         actions={
           <Button
             type="button"
@@ -330,8 +329,6 @@ export function AssetDisposalWorkspace() {
                   { label: "Make", value: displayValue(detail.make) },
                   { label: "Model", value: displayValue(detail.model) },
                   { label: "Configuration", value: displayValue(detail.configuration) },
-                  { label: "Document", value: displayValue(detail.document_number) },
-                  { label: "Disposal type", value: displayValue(detail.disposal_type) },
                   { label: "Disposal date", value: formatDate(detail.disposal_date) },
                   { label: "Reason for disposal", value: displayValue(detail.remarks) },
                   {

@@ -42,7 +42,7 @@ export default function RootLayout({
     >
       {/* suppressHydrationWarning: browser extensions (e.g. QuillBot) inject attrs like data-qb-installed */}
       <body
-        className="flex min-h-full min-w-0 flex-col overflow-x-clip font-sans"
+        className="flex h-full min-h-0 min-w-0 flex-col overflow-x-clip font-sans"
         suppressHydrationWarning
       >
         {children}

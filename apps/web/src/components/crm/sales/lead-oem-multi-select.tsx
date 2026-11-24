@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 type LeadOemMultiSelectProps = {
   value: string[];
   onChange: (value: string[]) => void;
+  /** When set (e.g. from CRM Settings catalogs), replaces stock OEM list. */
+  options?: string[];
 };
 
 type MenuCoords = {
@@ -19,7 +21,7 @@ type MenuCoords = {
   width: number;
 };
 
-export function LeadOemMultiSelect({ value, onChange }: LeadOemMultiSelectProps) {
+export function LeadOemMultiSelect({ value, onChange, options }: LeadOemMultiSelectProps) {
   const triggerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
@@ -28,12 +30,16 @@ export function LeadOemMultiSelect({ value, onChange }: LeadOemMultiSelectProps)
   const [coords, setCoords] = useState<MenuCoords | null>(null);
 
   const selectedSet = useMemo(() => new Set(value), [value]);
+  const optionList = useMemo(
+    () => (options && options.length > 0 ? options : [...LEAD_OEM_OPTIONS]),
+    [options],
+  );
 
   const filteredOptions = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return [...LEAD_OEM_OPTIONS];
-    return LEAD_OEM_OPTIONS.filter((option) => option.toLowerCase().includes(q));
-  }, [search]);
+    if (!q) return optionList;
+    return optionList.filter((option) => option.toLowerCase().includes(q));
+  }, [optionList, search]);
 
   const triggerLabel =
     value.length === 0

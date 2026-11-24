@@ -24,6 +24,7 @@ import {
   CRM_TABLE_HEAD_CELL,
   CRM_TABLE_HEAD_ROW,
 } from "@/components/crm/crm-ui";
+import { CrmCustomFieldsReadOnly } from "@/components/crm/sales/crm-custom-fields-section";
 import { CompanyGstRegistrationsPanel } from "@/components/crm/sales/company-gst-registrations-panel";
 import { CustomerExpenseLedgerPanel } from "@/components/crm/sales/customer-expense-ledger-panel";
 import { FollowupFormDialog } from "@/components/crm/sales/followup-form-dialog";
@@ -42,12 +43,15 @@ import { listCompanyGst } from "@/services/crm-deal-controls-service";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCrmCode } from "@/lib/crm/format-crm-code";
+import { pageSectionVisible } from "@/lib/crm/crm-settings-ui";
 import {
   COMPANY_LEAD_SOURCES,
   companyLeadSourceLabel,
   normalizeCompanyLeadSource,
 } from "@/lib/crm/company-lead-sources";
+import { useCrmSettingsEffective } from "@/hooks/use-crm-settings";
 import { ApiClientError } from "@/services/api-client";
+
 import {
   fullName,
   getCompany,
@@ -197,6 +201,8 @@ function CompanyProfileReadOnly({
         </div>
       </CrmSection>
 
+      <CrmCustomFieldsReadOnly entity="company" values={company.custom_fields} />
+
       <CrmSection title="Description Information" icon={FileText}>
         <FinanceField label="Description">
           <div className="flex min-h-[72px] w-full rounded-lg border border-input bg-muted/20 px-2.5 py-2 text-sm whitespace-pre-wrap text-foreground">
@@ -209,6 +215,11 @@ function CompanyProfileReadOnly({
 }
 
 export function CompanyDetailPage({ companyAccountId }: { companyAccountId: string }) {
+  const { settings } = useCrmSettingsEffective();
+  const showOverview = pageSectionVisible(settings, "company_detail", "overview", true);
+  const showContacts = pageSectionVisible(settings, "company_detail", "contacts", true);
+  const showLeads = pageSectionVisible(settings, "company_detail", "leads", true);
+  const showKyc = pageSectionVisible(settings, "company_detail", "kyc", true);
   const [company, setCompany] = useState<Company | null>(null);
   const [headOfficeGstin, setHeadOfficeGstin] = useState<string | null>(null);
   const [leads, setLeads] = useState<SalesLead[]>([]);
@@ -322,18 +333,20 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
         <CrmErrorBanner>{error ?? "Company not found"}</CrmErrorBanner>
       ) : (
         <CrmPage>
-          <CompanyProfileReadOnly
-            company={company}
-            employeeName={employeeName}
-            marketingEventName={
-              marketingEvents.find((event) => event.id === company.marketing_event_id)?.label
-            }
-            headOfficeGstin={headOfficeGstin}
-          />
-
-          <CompanyGstRegistrationsPanel companyAccountId={company.id} />
-
-          <CustomerExpenseLedgerPanel companyAccountId={company.id} ovfs={ovfs} />
+          {showOverview ? (
+            <>
+              <CompanyProfileReadOnly
+                company={company}
+                employeeName={employeeName}
+                marketingEventName={
+                  marketingEvents.find((event) => event.id === company.marketing_event_id)?.label
+                }
+                headOfficeGstin={headOfficeGstin}
+              />
+              <CompanyGstRegistrationsPanel companyAccountId={company.id} />
+              <CustomerExpenseLedgerPanel companyAccountId={company.id} ovfs={ovfs} />
+            </>
+          ) : null}
 
           <div id="company-meetings">
             <CrmListPanel>
@@ -450,75 +463,79 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
             </CrmListPanel>
           </div>
 
-          <div id="company-leads">
-            <CrmListPanel>
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <CrmIconBadge icon={Target} />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-base font-extrabold tracking-tight text-foreground">Leads</h2>
-                      <CrmCountBadge count={leads.length} />
+          {showLeads ? (
+            <div id="company-leads">
+              <CrmListPanel>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <CrmIconBadge icon={Target} />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-base font-extrabold tracking-tight text-foreground">Leads</h2>
+                        <CrmCountBadge count={leads.length} />
+                      </div>
                     </div>
                   </div>
+                  <CrmViewAllLink href={`/crm/companies/${company.id}/leads`} />
                 </div>
-                <CrmViewAllLink href={`/crm/companies/${company.id}/leads`} />
-              </div>
-              <div className="erp-scroll overflow-x-auto">
-                <table className="w-full min-w-[700px] text-left text-sm">
-                  <thead>
-                    <tr className={CRM_TABLE_HEAD_ROW}>
-                      <th className={CRM_TABLE_HEAD_CELL}>Lead Name</th>
-                      <th className={CRM_TABLE_HEAD_CELL}>Customer</th>
-                      <th className={CRM_TABLE_HEAD_CELL}>Status</th>
-                      <th className={CRM_TABLE_HEAD_CELL}>Remark</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {leads.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
-                          No leads yet for this company.
-                        </td>
+                <div className="erp-scroll overflow-x-auto">
+                  <table className="w-full min-w-[700px] text-left text-sm">
+                    <thead>
+                      <tr className={CRM_TABLE_HEAD_ROW}>
+                        <th className={CRM_TABLE_HEAD_CELL}>Lead Name</th>
+                        <th className={CRM_TABLE_HEAD_CELL}>Customer</th>
+                        <th className={CRM_TABLE_HEAD_CELL}>Status</th>
+                        <th className={CRM_TABLE_HEAD_CELL}>Remark</th>
                       </tr>
-                    ) : (
-                      leads.slice(0, 5).map((lead) => (
-                        <tr key={lead.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
-                          <td className="px-4 py-2.5 font-medium text-foreground">
-                            <Link href={`/crm/leads/${lead.id}`} className="cursor-pointer hover:underline">
-                              {fullName(lead)}
-                            </Link>
-                            <div className="text-[11px] font-normal text-muted-foreground">{formatCrmCode(lead.lead_code)}</div>
-                          </td>
-                          <td className="px-4 py-2.5 text-muted-foreground">
-                            {textOrDash(lead.end_customer_name ?? company.customer_name)}
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <FinanceStatusBadge status={lead.status} />
-                          </td>
-                          <td className="max-w-[240px] px-4 py-2.5 text-muted-foreground">
-                            <span className="line-clamp-2">{textOrDash(lead.notes)}</span>
+                    </thead>
+                    <tbody>
+                      {leads.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
+                            No leads yet for this company.
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </CrmListPanel>
-          </div>
+                      ) : (
+                        leads.slice(0, 5).map((lead) => (
+                          <tr key={lead.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
+                            <td className="px-4 py-2.5 font-medium text-foreground">
+                              <Link href={`/crm/leads/${lead.id}`} className="cursor-pointer hover:underline">
+                                {fullName(lead)}
+                              </Link>
+                              <div className="text-[11px] font-normal text-muted-foreground">{formatCrmCode(lead.lead_code)}</div>
+                            </td>
+                            <td className="px-4 py-2.5 text-muted-foreground">
+                              {textOrDash(lead.end_customer_name ?? company.customer_name)}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <FinanceStatusBadge status={lead.status} />
+                            </td>
+                            <td className="max-w-[240px] px-4 py-2.5 text-muted-foreground">
+                              <span className="line-clamp-2">{textOrDash(lead.notes)}</span>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </CrmListPanel>
+            </div>
+          ) : null}
 
-          <CompanyOverviewDealPanels
-            companyAccountId={companyAccountId}
-            companyCustomerName={company.customer_name}
-            opportunities={opportunities}
-            oemQuoteRows={oemQuoteRows}
-            quotes={quotes}
-            purchaseOrderRows={purchaseOrderRows}
-            ovfs={ovfs}
-            contacts={contacts}
-            onDocumentsChanged={() => void load()}
-          />
+          {(showContacts || showKyc || showOverview) ? (
+            <CompanyOverviewDealPanels
+              companyAccountId={companyAccountId}
+              companyCustomerName={company.customer_name}
+              opportunities={showOverview ? opportunities : []}
+              oemQuoteRows={showOverview ? oemQuoteRows : []}
+              quotes={showOverview ? quotes : []}
+              purchaseOrderRows={showOverview ? purchaseOrderRows : []}
+              ovfs={showOverview ? ovfs : []}
+              contacts={showContacts ? contacts : []}
+              onDocumentsChanged={() => void load()}
+            />
+          ) : null}
 
           <MeetingFormDialog
             open={meetingOpen}

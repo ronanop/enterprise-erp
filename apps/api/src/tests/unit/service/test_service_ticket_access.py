@@ -86,3 +86,36 @@ def test_closed_ticket_locks_assignment():
     )
     access = svc.evaluate(SimpleNamespace(user_id=uuid4(), tenant_id=uuid4()), row)
     assert access.can_assign is False
+
+
+def test_owner_cannot_work_after_close_but_can_request_reopen():
+    owner_id = uuid4()
+    svc = _build_service(is_manager=False, employee_id=owner_id)
+    row = SimpleNamespace(
+        id=uuid4(),
+        owner_employee_id=owner_id,
+        status="closed",
+        opened_at="2026-09-01T00:00:00Z",
+        ownership_locked=True,
+    )
+    access = svc.evaluate(SimpleNamespace(user_id=uuid4(), tenant_id=uuid4()), row)
+    assert access.is_owner is True
+    assert access.level == TicketAccessLevel.FULL
+    assert access.can_work is False
+    assert access.can_open is False
+    assert access.can_reopen is True
+
+
+def test_resolved_ticket_owner_can_still_work_to_close():
+    owner_id = uuid4()
+    svc = _build_service(is_manager=False, employee_id=owner_id)
+    row = SimpleNamespace(
+        id=uuid4(),
+        owner_employee_id=owner_id,
+        status="resolved",
+        opened_at="2026-09-01T00:00:00Z",
+        ownership_locked=False,
+    )
+    access = svc.evaluate(SimpleNamespace(user_id=uuid4(), tenant_id=uuid4()), row)
+    assert access.can_work is True
+    assert access.can_reopen is False

@@ -132,6 +132,7 @@ export type CreateShiftPayload = {
   isOvernight: boolean;
   extension: ShiftExtension;
   branchId?: string;
+  companyId?: string;
 };
 
 export type AssignShiftPayload = {

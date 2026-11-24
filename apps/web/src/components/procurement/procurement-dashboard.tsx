@@ -110,7 +110,7 @@ export function ProcurementDashboard() {
   }, [rebuildInventorySummary]);
 
   useEffect(() => {
-    void load();
+    void load(true);
   }, [load]);
 
   useEffect(() => {

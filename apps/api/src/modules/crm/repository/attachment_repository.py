@@ -26,6 +26,7 @@ class AttachmentRepository(CrmScopedRepository):
             CrmAttachment.is_deleted.is_(False),
         )
         stmt = self.apply_crm_filter(stmt, CrmAttachment, ctx, branch_scoped=True)
+        stmt = stmt.order_by(CrmAttachment.created_at.desc())
         return list(self.db.scalars(stmt).all())
 
     def list_by_category(

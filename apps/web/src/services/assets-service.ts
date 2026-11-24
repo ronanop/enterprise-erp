@@ -1,4 +1,5 @@
 import { ApiClientError, apiClient, apiGetBlob, apiUpload, resourceService } from "@/services/api-client";
+import { getShareableOrigin } from "@/utils/env";
 
 export type AssetsRow = Record<string, unknown>;
 
@@ -936,6 +937,27 @@ export const maintenanceService = {
     return res.data as MaintenanceRow;
   },
 
+  async update(
+    id: string,
+    body: {
+      version: number;
+      vendor_id?: string | null;
+      cost_amount?: number | null;
+      technician_employee_id?: string | null;
+      reason?: string | null;
+      maintenance_type?: string;
+      scheduled_date?: string | null;
+      expected_duration_days?: number | null;
+    },
+  ): Promise<MaintenanceRow> {
+    const res = await resourceService.update<MaintenanceRow>(
+      ASSET_MAINTENANCES_PATH,
+      id,
+      body,
+    );
+    return res.data as MaintenanceRow;
+  },
+
   async timeline(id: string): Promise<MaintenanceTimelineEvent[]> {
     const res = await resourceService.list<{ events: MaintenanceTimelineEvent[] }>(
       `${ASSET_MAINTENANCES_PATH}/${id}/timeline`,
@@ -1763,8 +1785,10 @@ export const assetDiscoveryService = {
 
 /** Absolute QR / scan URL for an asset (CR-002). Never persist QR images. */
 export function buildAssetQrUrl(assetId: string, origin?: string): string {
+  // Prefer shareable/LAN origin so phone scans do not embed localhost.
   const base =
     origin ??
+    getShareableOrigin() ??
     (typeof window !== "undefined" ? window.location.origin : "");
   const path = `/assets/information-portal/${encodeURIComponent(assetId)}?from=qr`;
   return `${base.replace(/\/$/, "")}${path}`;

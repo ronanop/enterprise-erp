@@ -3985,7 +3985,9 @@ def seed_assets(db, tenant_id, company_id, branch_id, admin_id, dept_id, employe
                 "to_employee_id": employees[0].id,
                 "transferred_at": utcnow(),
                 "reason": "Internal transfer for demo purposes",
-                "status": "draft",
+                # Cancelled so seed data does not block assignment/return
+                # (open draft/submitted/approved transfers are gated).
+                "status": "cancelled",
                 "created_by": admin_id,
                 "updated_by": admin_id,
             },
@@ -6175,6 +6177,22 @@ def main() -> None:
                 SecUser.is_deleted.is_(False),
             )
         )
+        if admin is None:
+            admin = db.scalar(
+                select(SecUser).where(
+                    SecUser.tenant_id == tenant.id,
+                    SecUser.email == "techbank@cachedigitech.com",
+                    SecUser.is_deleted.is_(False),
+                )
+            )
+        if admin is None:
+            admin = db.scalar(
+                select(SecUser).where(
+                    SecUser.tenant_id == tenant.id,
+                    SecUser.user_type.in_(("super_admin", "tenant_admin")),
+                    SecUser.is_deleted.is_(False),
+                )
+            )
         customer = db.scalar(
             select(MasterCustomer).where(
                 MasterCustomer.company_id == company.id,

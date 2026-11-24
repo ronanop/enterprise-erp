@@ -99,3 +99,19 @@ class AssetTypeRepository(AstScopedRepository):
         )
         stmt = self.apply_ast_filter(stmt, AstAsset, ctx, branch_scoped=False)
         return int(self.db.scalar(stmt) or 0)
+
+    def soft_delete(self, ctx: TenantContext, row: AstAssetType) -> AstAssetType:
+        """Soft-delete and free ``(company_id, name)`` so the label can be reused."""
+        suffix = f"__del_{row.id.hex[:8]}"
+        base = (row.name or "type").strip() or "type"
+        max_base = max(1, 100 - len(suffix))
+        row.name = f"{base[:max_base]}{suffix}"
+        row.active = False
+        row.is_deleted = True
+        row.deleted_at = utcnow()
+        row.deleted_by = ctx.user_id
+        row.updated_at = utcnow()
+        row.updated_by = ctx.user_id
+        row.version = int(row.version or 1) + 1
+        self.db.flush()
+        return row

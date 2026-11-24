@@ -23,14 +23,11 @@ import {
 } from "@/components/assets/shared";
 import {
   formatAssignmentDate,
-  formatAssignmentRegisterDcColumn,
   formatAssignmentStatus,
   isReturnedAssignment,
   resolveRegisterAssetCode,
   resolveRegisterAssetName,
   resolveRegisterAssignee,
-  resolveRegisterBuilding,
-  resolveRegisterDepartment,
   resolveRegisterEmployeeId,
   resolveRegisterLocation,
 } from "@/components/assets/assignment-register-display";
@@ -76,10 +73,8 @@ import {
   type AssetLocationRow,
   type DcChallanRow,
 } from "@/services/assets-service";
-import {
-  listSiteBuildings,
-  listSiteLocations,
-} from "@/services/asset-site-location-service";
+import { listSiteLocations } from "@/services/asset-site-location-service";
+import { formatDropdownLabel } from "@/components/assets/shared/format-dropdown-label";
 
 type AssetRow = {
   id: string;
@@ -133,13 +128,6 @@ type AssignmentFormState = {
   project_id: string;
 };
 
-/** Register filter — lifecycle assignment status only (never workflow labels). */
-const STATUS_OPTIONS = [
-  { value: "", label: "All statuses" },
-  { value: "active", label: "Active" },
-  { value: "returned", label: "Returned" },
-  { value: "cancelled", label: "Cancelled" },
-] as const;
 const ALLOCATION_TYPES = ["employee", "department", "project", "branch", "warehouse"] as const;
 
 /**
@@ -168,19 +156,6 @@ function parseListItems<T>(data: unknown): T[] {
     return Array.isArray(items) ? items : [];
   }
   return [];
-}
-
-function formatDcCell(
-  row: AssignmentRow,
-  dc: DcChallanRow | null | undefined,
-): string {
-  return formatAssignmentRegisterDcColumn({
-    delivery_reference_number: row.delivery_reference_number,
-    delivery_reference_status: row.delivery_reference_status,
-    delivery_challan_signature_status: row.delivery_challan_signature_status,
-    hasDcRecord: Boolean(dc),
-    dcChallanStatus: dc?.status,
-  });
 }
 
 async function fetchLinkedDcByAssignmentId(
@@ -241,7 +216,7 @@ function directoryToEmployeeLookup(
   return out;
 }
 
-const REGISTER_COL_COUNT = 9;
+const REGISTER_COL_COUNT = 7;
 
 export function AssetAssignmentWorkspace() {
   const searchParams = useSearchParams();
@@ -259,7 +234,6 @@ export function AssetAssignmentWorkspace() {
   const [projects, setProjects] = useState<OrgOption[]>([]);
   const [locationByAssetId, setLocationByAssetId] = useState<Record<string, AssetLocationRow>>({});
   const [siteLocationLabels, setSiteLocationLabels] = useState<Record<string, string>>({});
-  const [buildingLabels, setBuildingLabels] = useState<Record<string, string>>({});
   const [dcByAssignmentId, setDcByAssignmentId] = useState<Record<string, DcChallanRow | null>>(
     {},
   );
@@ -268,8 +242,6 @@ export function AssetAssignmentWorkspace() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [allocationTypeFilter, setAllocationTypeFilter] = useState("");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -293,11 +265,6 @@ export function AssetAssignmentWorkspace() {
     () => directoryToEmployeeLookup(employeeDirectory),
     [employeeDirectory],
   );
-  const employeeDeptById = useMemo(() => {
-    const map: Record<string, string | null> = {};
-    for (const e of employeeDirectory) map[e.id] = e.departmentId;
-    return map;
-  }, [employeeDirectory]);
 
   const assetMap = useMemo(
     () => new Map(assetOptions.map((asset) => [asset.id, asset])),
@@ -322,13 +289,12 @@ export function AssetAssignmentWorkspace() {
 
   const loadLookups = useCallback(async () => {
     if (!isAuthenticated()) return;
-    const [emp, directory, dept, proj, locations, buildings] = await Promise.all([
+    const [emp, directory, dept, proj, locations] = await Promise.all([
       listEmployeeOptions(),
       listEmployeeDirectory().catch(() => [] as EmployeeDirectoryEntry[]),
       listDepartmentOptions(),
       listProjectOptions().catch(() => [] as OrgOption[]),
       listSiteLocations().catch(() => []),
-      listSiteBuildings().catch(() => []),
     ]);
     setEmployees(emp);
     setEmployeeDirectory(directory);
@@ -337,9 +303,6 @@ export function AssetAssignmentWorkspace() {
     const siteLabels: Record<string, string> = {};
     for (const loc of locations) siteLabels[loc.id] = loc.name;
     setSiteLocationLabels(siteLabels);
-    const bldLabels: Record<string, string> = {};
-    for (const b of buildings) bldLabels[b.id] = b.name;
-    setBuildingLabels(bldLabels);
   }, []);
 
   // Locations loaded separately so Promise.all typing stays clear
@@ -426,27 +389,27 @@ export function AssetAssignmentWorkspace() {
       const query = new URLSearchParams({
         page: String(page),
         page_size: String(pageSize),
+        // Assignment register shows active (currently assigned) rows only.
+        status: "active",
       });
-      if (statusFilter) query.set("status", statusFilter);
-      if (allocationTypeFilter) query.set("allocation_type", allocationTypeFilter);
       if (search.trim()) query.set("q", search.trim());
       const res = await resourceService.list<ListPayload<AssignmentRow>>(
         `${apiPath}?${query.toString()}`,
       );
       const payload = res.data as ListPayload<AssignmentRow> | AssignmentRow[];
       let items: AssignmentRow[] = [];
+      let reportedTotal = 0;
       if (payload && typeof payload === "object" && "items" in payload) {
         items = payload.items ?? [];
-        setRows(items);
-        setTotal(payload.total ?? 0);
+        reportedTotal = payload.total ?? items.length;
       } else if (Array.isArray(payload)) {
         items = payload;
-        setRows(payload);
-        setTotal(payload.length);
-      } else {
-        setRows([]);
-        setTotal(0);
+        reportedTotal = payload.length;
       }
+      // Defense in depth: register is active-assigned only.
+      items = items.filter((row) => String(row.status ?? "").split("/")[0]?.trim() === "active");
+      setRows(items);
+      setTotal(reportedTotal);
       void ensureAssetsForRows(items);
       try {
         setDcByAssignmentId(await fetchLinkedDcByAssignmentId(items));
@@ -461,15 +424,7 @@ export function AssetAssignmentWorkspace() {
     } finally {
       setLoading(false);
     }
-  }, [
-    allocationTypeFilter,
-    apiPath,
-    ensureAssetsForRows,
-    page,
-    pageSize,
-    search,
-    statusFilter,
-  ]);
+  }, [apiPath, ensureAssetsForRows, page, pageSize, search]);
 
   useEffect(() => {
     void loadLookups();
@@ -717,8 +672,7 @@ export function AssetAssignmentWorkspace() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Asset assignments"
-        description="Register of assigned assets — assignee, location, status, and DC Challan."
+        title="Asset Assignments"
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -753,7 +707,7 @@ export function AssetAssignmentWorkspace() {
 
       <Card>
         <CardHeader className="space-y-3 pb-3">
-          <CardTitle className="text-base">Assigned assets</CardTitle>
+          <CardTitle className="text-base">Assigned Assets</CardTitle>
           <div className="flex flex-wrap gap-2">
             <Input
               aria-label="Search assignments"
@@ -765,49 +719,6 @@ export function AssetAssignmentWorkspace() {
               }}
               className="max-w-xs"
             />
-            <Select
-              value={statusFilter || "__all"}
-              onValueChange={(value) => {
-                setPage(1);
-                setStatusFilter(value === "__all" ? "" : value);
-              }}
-            >
-              <SelectTrigger className="w-40 cursor-pointer" aria-label="Filter by status">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                {STATUS_OPTIONS.map((opt) => (
-                  <SelectItem
-                    key={opt.value || "__all"}
-                    value={opt.value || "__all"}
-                    className="cursor-pointer"
-                  >
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={allocationTypeFilter || "__all"}
-              onValueChange={(value) => {
-                setPage(1);
-                setAllocationTypeFilter(value === "__all" ? "" : value);
-              }}
-            >
-              <SelectTrigger className="w-44 cursor-pointer" aria-label="Filter by allocation type">
-                <SelectValue placeholder="Allocation type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all" className="cursor-pointer">
-                  All types
-                </SelectItem>
-                {ALLOCATION_TYPES.map((type) => (
-                  <SelectItem key={type} value={type} className="cursor-pointer">
-                    {type}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -826,16 +737,10 @@ export function AssetAssignmentWorkspace() {
                     Asset
                   </th>
                   <th scope="col" className="px-3 py-2 font-medium">
-                    Assignee
+                    Assigned
                   </th>
                   <th scope="col" className="px-3 py-2 font-medium">
                     Employee ID
-                  </th>
-                  <th scope="col" className="px-3 py-2 font-medium">
-                    Location
-                  </th>
-                  <th scope="col" className="px-3 py-2 font-medium">
-                    Building
                   </th>
                   <th scope="col" className="px-3 py-2 font-medium">
                     Assignment Date
@@ -873,7 +778,6 @@ export function AssetAssignmentWorkspace() {
                 ) : (
                   rows.map((row, index) => {
                     const asset = assetMap.get(row.asset_id);
-                    const location = locationByAssetId[row.asset_id];
                     const assignee = assigneeSummary(row);
                     const returned = isReturnedAssignment(row);
                     return (
@@ -916,12 +820,6 @@ export function AssetAssignmentWorkspace() {
                         >
                           {resolveRegisterEmployeeId(row, employeeLookup)}
                         </td>
-                        <td className="px-3 py-2" data-testid="assignment-location-cell">
-                          {resolveRegisterLocation(asset, location, siteLocationLabels)}
-                        </td>
-                        <td className="px-3 py-2" data-testid="assignment-building-cell">
-                          {resolveRegisterBuilding(location, buildingLabels)}
-                        </td>
                         <td
                           className="px-3 py-2 font-mono text-xs"
                           data-testid="assignment-date-cell"
@@ -939,66 +837,58 @@ export function AssetAssignmentWorkspace() {
                             const linkedDc = dcByAssignmentId[row.id] ?? null;
                             const hasDc = Boolean(linkedDc);
                             const canLaunch = canLaunchDcFromAssignment(row);
-                            const statusText = formatDcCell(row, linkedDc);
-                            return (
-                              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                                <div
-                                  className="shrink-0 text-xs leading-snug text-muted-foreground"
-                                  data-testid="assignment-dc-status"
+                            if (hasDc && linkedDc) {
+                              return (
+                                <button
+                                  type="button"
+                                  data-testid="assignment-dc-created"
+                                  aria-label={`Open DC Challan for ${row.document_number}`}
+                                  className={cn(
+                                    buttonVariants({ variant: "outline", size: "sm" }),
+                                    "h-7 shrink-0 cursor-pointer gap-1 px-2.5 text-xs transition-colors duration-200",
+                                  )}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    router.push(
+                                      buildDcChallanHref({
+                                        challanId: linkedDc.id,
+                                        assetId: row.asset_id,
+                                        assignmentId: row.id,
+                                      }),
+                                    );
+                                  }}
                                 >
-                                  {statusText}
-                                </div>
-                                {!hasDc && canLaunch ? (
-                                  <button
-                                    type="button"
-                                    data-testid="assignment-dc-create"
-                                    aria-label={`Create DC Challan for ${row.document_number}`}
-                                    className={cn(
-                                      buttonVariants({ variant: "outline", size: "sm" }),
-                                      "h-7 shrink-0 cursor-pointer gap-1 px-2.5 text-xs transition-colors duration-200",
-                                    )}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      router.push(
-                                        buildDcChallanHref({
-                                          assetId: row.asset_id,
-                                          assignmentId: row.id,
-                                        }),
-                                      );
-                                    }}
-                                  >
-                                    <FileText className="size-3.5" aria-hidden />
-                                    Create
-                                  </button>
-                                ) : null}
-                                {hasDc && linkedDc ? (
-                                  <button
-                                    type="button"
-                                    data-testid="assignment-dc-open"
-                                    aria-label={`${
-                                      isOpenDcChallanStatus(linkedDc.status) ? "Edit" : "View"
-                                    } DC Challan for ${row.document_number}`}
-                                    className={cn(
-                                      buttonVariants({ variant: "ghost", size: "sm" }),
-                                      "h-7 shrink-0 cursor-pointer gap-1 px-2.5 text-xs transition-colors duration-200",
-                                    )}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      router.push(
-                                        buildDcChallanHref({
-                                          challanId: linkedDc.id,
-                                          assetId: row.asset_id,
-                                          assignmentId: row.id,
-                                        }),
-                                      );
-                                    }}
-                                  >
-                                    <FileText className="size-3.5" aria-hidden />
-                                    {isOpenDcChallanStatus(linkedDc.status) ? "Edit" : "View"}
-                                  </button>
-                                ) : null}
-                              </div>
-                            );
+                                  <FileText className="size-3.5" aria-hidden />
+                                  Created
+                                </button>
+                              );
+                            }
+                            if (canLaunch) {
+                              return (
+                                <button
+                                  type="button"
+                                  data-testid="assignment-dc-create"
+                                  aria-label={`Create DC Challan for ${row.document_number}`}
+                                  className={cn(
+                                    buttonVariants({ variant: "outline", size: "sm" }),
+                                    "h-7 shrink-0 cursor-pointer gap-1 px-2.5 text-xs transition-colors duration-200",
+                                  )}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    router.push(
+                                      buildDcChallanHref({
+                                        assetId: row.asset_id,
+                                        assignmentId: row.id,
+                                      }),
+                                    );
+                                  }}
+                                >
+                                  <FileText className="size-3.5" aria-hidden />
+                                  Create
+                                </button>
+                              );
+                            }
+                            return null;
                           })()}
                         </td>
                       </tr>
@@ -1089,11 +979,6 @@ export function AssetAssignmentWorkspace() {
                 {(() => {
                   const asset = assetMap.get(modalRow.asset_id);
                   const location = locationByAssetId[modalRow.asset_id];
-                  const empDept =
-                    modalRow.employee_id != null
-                      ? employeeDeptById[String(modalRow.employee_id)]
-                      : null;
-                  const linkedDc = dcByAssignmentId[modalRow.id] ?? null;
                   return (
                     <dl className="grid gap-3 text-sm sm:grid-cols-2">
                       <div>
@@ -1108,7 +993,7 @@ export function AssetAssignmentWorkspace() {
                         </dd>
                       </div>
                       <div>
-                        <dt className="text-xs text-muted-foreground">Assignee</dt>
+                        <dt className="text-xs text-muted-foreground">Assigned</dt>
                         <dd data-testid="assignment-detail-assignee">
                           {assigneeSummary(modalRow)}
                         </dd>
@@ -1123,26 +1008,9 @@ export function AssetAssignmentWorkspace() {
                         </dd>
                       </div>
                       <div>
-                        <dt className="text-xs text-muted-foreground">Department</dt>
-                        <dd data-testid="assignment-detail-department">
-                          {resolveRegisterDepartment(
-                            modalRow,
-                            asset,
-                            empDept,
-                            departmentLabels,
-                          )}
-                        </dd>
-                      </div>
-                      <div>
                         <dt className="text-xs text-muted-foreground">Location</dt>
                         <dd data-testid="assignment-detail-location">
                           {resolveRegisterLocation(asset, location, siteLocationLabels)}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-xs text-muted-foreground">Building</dt>
-                        <dd data-testid="assignment-detail-building">
-                          {resolveRegisterBuilding(location, buildingLabels)}
                         </dd>
                       </div>
                       <div>
@@ -1157,42 +1025,9 @@ export function AssetAssignmentWorkspace() {
                           {registerStatusLabel(modalRow.status)}
                         </dd>
                       </div>
-                      <div className="sm:col-span-2">
-                        <dt className="text-xs text-muted-foreground">DC Challan</dt>
-                        <dd data-testid="assignment-detail-dc-status">
-                          {formatDcCell(modalRow, linkedDc)}
-                        </dd>
-                      </div>
                     </dl>
                   );
                 })()}
-                <div
-                  className="rounded-md border border-border/70 bg-muted/20 px-3 py-3"
-                  data-testid="assignment-detail-dc"
-                >
-                  <p className="mb-2 text-sm font-medium text-foreground">Delivery Challan</p>
-                  <dl className="grid gap-2 text-sm sm:grid-cols-3">
-                    <div>
-                      <dt className="text-xs text-muted-foreground">DC Number</dt>
-                      <dd>{modalRow.delivery_reference_number?.trim() || "—"}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-muted-foreground">Status</dt>
-                      <dd className="capitalize">
-                        {(modalRow.delivery_reference_status || "—").replaceAll("_", " ")}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-muted-foreground">Signature</dt>
-                      <dd className="capitalize">
-                        {(modalRow.delivery_challan_signature_status || "not_signed").replaceAll(
-                          "_",
-                          " ",
-                        )}
-                      </dd>
-                    </div>
-                  </dl>
-                </div>
                 <div className="space-y-2">
                   <Label htmlFor="asn-workflow-comments">Workflow comments</Label>
                   <Input
@@ -1477,7 +1312,7 @@ function AssignmentFormFields({
           <SelectContent>
             {ALLOCATION_TYPES.map((type) => (
               <SelectItem key={type} value={type} className="cursor-pointer">
-                {type}
+                {formatDropdownLabel(type)}
               </SelectItem>
             ))}
           </SelectContent>

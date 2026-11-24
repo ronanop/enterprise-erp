@@ -24,9 +24,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RowActionsItem, RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { nextCode, type HrSetupTab } from "@/config/hr-setup";
+import { getStoredOrgContext } from "@/lib/org-context-storage";
+import { cn } from "@/lib/utils";
 import { ApiClientError, resourceService } from "@/services/api-client";
 import { listSetupApi, type SetupRow } from "@/services/hr-setup-service";
-import { cn } from "@/lib/utils";
 
 const API = "/hr/attendance-rules";
 const SHIFTS_API = "/hr/shifts";
@@ -206,7 +207,9 @@ export function AttendancePolicyPanel({ tab }: { tab: HrSetupTab }) {
   }
 
   function buildBody() {
+    const sessionCompanyId = getStoredOrgContext()?.companyId?.trim() || "";
     return {
+      ...(sessionCompanyId ? { company_id: sessionCompanyId } : {}),
       rule_code: ruleCode,
       rule_name: ruleName,
       grace_minutes: Number(graceMinutes || 15),

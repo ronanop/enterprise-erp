@@ -11,6 +11,18 @@ class OrmModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class CloudPoLine(BaseModel):
+    """One tracker PO line under a cloud project."""
+
+    project_name: str | None = None
+    circle_name: str | None = None
+    site_name: str | None = None
+    line_type: str | None = None
+    quantity: int | None = None
+    customer_po_number: str | None = None
+    document_date: date | None = None
+
+
 class SiteInstallationNestedCreate(BaseModel):
     """Optional payload nested under ProjectCreate.site_installation."""
 
@@ -18,6 +30,7 @@ class SiteInstallationNestedCreate(BaseModel):
     requestor_name: str | None = Field(default=None, max_length=255)
     circle: str | None = Field(default=None, max_length=100)
     cloud_name: str | None = Field(default=None, max_length=255)
+    cloud_po_lines: list[CloudPoLine] | None = None
     site_name: str | None = Field(default=None, max_length=255)
     power_requirements: str | None = None
     rfai_request_done: bool = False
@@ -134,6 +147,7 @@ class ProjectPoQueueItem(BaseModel):
     customer_total: float = 0
     status: str = "shared"
     ovf_id: UUID | None = None
+    order_kind: str | None = None
     branch_id: UUID
     company_id: UUID
     created_at: datetime | None = None
@@ -141,9 +155,17 @@ class ProjectPoQueueItem(BaseModel):
     project_name: str | None = None
     circle_name: str | None = None
     site_name: str | None = None
+    cloud_name: str | None = None
+    line_type: str | None = None
     rack_quantity: str | None = None
     server_quantity: str | None = None
     server_type: str | None = None
+
+
+class CreateCloudProjectRequest(BaseModel):
+    """Optional intake extras when creating a cloud project from the PO queue."""
+
+    rfai_number: str | None = Field(default=None, max_length=100)
 
 
 class ProjectPoQueueShareCreate(BaseModel):
@@ -173,6 +195,8 @@ class ProjectPoQueueHandoffResponse(BaseModel):
     project_name: str | None = None
     circle_name: str | None = None
     site_name: str | None = None
+    cloud_name: str | None = None
+    line_type: str | None = None
     contact_person: str | None = None
     contact_number: str | None = None
     rack_quantity: str | None = None
@@ -1210,6 +1234,7 @@ class SiteInstallationResponse(OrmModel):
     requestor_name: str | None
     circle: str | None
     cloud_name: str | None
+    cloud_po_lines: list[CloudPoLine] = Field(default_factory=list)
     site_name: str | None
     power_requirements: str | None
     rfai_request_done: bool

@@ -6,20 +6,16 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Eye,
   FileDown,
-  PackageCheck,
   RefreshCw,
 } from "lucide-react";
 
 import { DeliveryChallanFormPage } from "@/components/procurement/delivery-challan-form-page";
 import { GrnPdfPickDialog } from "@/components/procurement/grn-pdf-pick-dialog";
-import { DeliveryTrackingCard } from "@/components/procurement/delivery-tracking-card";
 import { NegotiationApprovalCard } from "@/components/procurement/negotiation-approval-card";
-import { PoFulfillmentCharts } from "@/components/procurement/po-fulfillment-charts";
+import { PoFulfillmentPanel } from "@/components/procurement/po-fulfillment-panel";
 import {
   ReceiptSerialsDialog,
   type ReceiptSerialDialogLine,
-  type VendorInvoiceDraft,
-  emptyVendorInvoiceDraft,
 } from "@/components/procurement/receipt-serials-dialog";
 import { PoOrderDocumentsCard } from "@/components/procurement/po-order-documents-card";
 
@@ -40,24 +36,26 @@ import {
   formatInr,
   formatUsd,
   getPurchaseOrder,
+  getScmOrderFulfillment,
+  getScmOvfPreview,
   listOrderReceiptBatches,
   listVendorOptions,
   requestScmFinalizeApproval,
   listVendorPos,
-  resolveVendorOrgScope,
   updateLineReceipt,
-  saveReceiptBatchVendorInvoice,
-  uploadReceiptBatchAttachment,
+  createInvoiceGenerationTasks,
   type ProcOrder,
   type ScmReceiptBatch,
+  type ScmVendorDispatch,
 } from "@/services/procurement-service";
-import { fileToBase64 } from "@/services/sales-crm-service";
 import type { GrnReceiptPdfContext } from "@/utils/grn-batch-pdf-download";
 import { resolveReceiptBatchId } from "@/utils/resolve-receipt-batch-id";
 import {
   buildDeliveryChallanPdfInputFromRecordResolved,
   downloadDeliveryChallanPdf,
 } from "@/utils/delivery-challan-pdf";
+import { ensureScmOvfPdfAttached } from "@/utils/scm-ovf-pdf-attach";
+import { buildScmPoPrintPdfAttachment } from "@/utils/scm-po-pdf-attach";
 import {
   formatChallanGrnSummary,
   listDeliveryChallansByOrderId,
@@ -70,7 +68,9 @@ import {
 } from "@/utils/delivery-status-storage";
 import { receiptBatchKey } from "@/utils/delivery-challan-grn";
 import { addPendingGrnChallan } from "@/utils/grn-challan-pending";
+import { parseVendorQuoteNo } from "@/components/crm/sales/ovf-order-lines-section";
 import { splitPoProductFields } from "@/utils/po-fulfillment-metrics";
+import { ovfProductKey, ovfVendorDescriptionByProduct } from "@/utils/ovf-stock";
 import {
   quantitiesFromLineDisposition,
   resizeUnitKinds,
@@ -252,6 +252,24 @@ function normalizeCostInput(raw: string, maxAllowed: number): string {
   return next;
 }
 
+function poLineDisplayFields(
+  line: {
+    product_name?: string | null;
+    product_code?: string | null;
+    description?: string | null;
+  },
+  ovfDescriptions: Map<string, string>,
+) {
+  const stored = parseVendorQuoteNo(line.description).description.trim();
+  const fromOvf = parseVendorQuoteNo(
+    ovfDescriptions.get(ovfProductKey(line.product_name)) || "",
+  ).description.trim();
+  return splitPoProductFields({
+    ...line,
+    description: stored || fromOvf || null,
+  });
+}
+
 function emptyReceiptDrafts(lines: Array<{ id: string; unit_cost?: number }>) {
   return {
     qty: Object.fromEntries(lines.map((ln) => [ln.id, ""])),
@@ -299,6 +317,9 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
   const searchParams = useSearchParams();
   const { isAdmin } = useProcurementRole();
   const [order, setOrder] = useState<ProcOrder | null>(null);
+  const [ovfLineDescriptions, setOvfLineDescriptions] = useState<Map<string, string>>(
+    () => new Map(),
+  );
   const [vendorName, setVendorName] = useState<string>("");
   const [vendorAddress, setVendorAddress] = useState<string>("");
   const [vendorGst, setVendorGst] = useState<string>("");
@@ -314,9 +335,6 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
   const [receiptSerialOpen, setReceiptSerialOpen] = useState(false);
   const [pendingReceiptLines, setPendingReceiptLines] = useState<ReceiptSerialDialogLine[]>([]);
   const [receiptModalError, setReceiptModalError] = useState<string | null>(null);
-  const [vendorInvoiceDraft, setVendorInvoiceDraft] = useState<VendorInvoiceDraft>(
-    emptyVendorInvoiceDraft,
-  );
   const [challanOpen, setChallanOpen] = useState(false);
   const [challanSavedBanner, setChallanSavedBanner] = useState<string | null>(null);
   const [decisionNotice, setDecisionNotice] = useState<PoApprovalDecisionNotification | null>(
@@ -334,12 +352,44 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
     setViewMode(searchParams.get("tab") === "grn" ? "grn" : "po");
   }, [searchParams]);
 
+  useEffect(() => {
+    const ovfId = (order?.source_document_id || "").trim();
+    if (!order || order.source_document_type !== "ovf" || !ovfId) {
+      setOvfLineDescriptions(new Map());
+      return;
+    }
+    let cancelled = false;
+    void getScmOvfPreview(ovfId)
+      .then((preview) => {
+        if (cancelled) return;
+        const raw = ovfVendorDescriptionByProduct(preview.vendor_lines || []);
+        const cleaned = new Map<string, string>();
+        for (const [key, value] of raw) {
+          const text = parseVendorQuoteNo(value).description.trim();
+          if (text) cleaned.set(key, text);
+        }
+        setOvfLineDescriptions(cleaned);
+      })
+      .catch(() => {
+        if (!cancelled) setOvfLineDescriptions(new Map());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [order]);
+
+  const activeDispatchId = (searchParams.get("dispatch") || "").trim() || null;
+  const [activeDispatch, setActiveDispatch] = useState<ScmVendorDispatch | null>(null);
+
   const setPoView = useCallback(
     (next: PoDetailView) => {
       setViewMode(next);
       const params = new URLSearchParams(searchParams.toString());
       if (next === "grn") params.set("tab", "grn");
-      else params.delete("tab");
+      else {
+        params.delete("tab");
+        params.delete("dispatch");
+      }
       const qs = params.toString();
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
@@ -436,7 +486,15 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
     setBusy(true);
     setError(null);
     try {
-      const updated = await requestScmFinalizeApproval(order.id);
+      const ovfId = String(order.source_document_id || "").trim();
+      if (ovfId) {
+        await ensureScmOvfPdfAttached(ovfId).catch(() => null);
+      }
+      const poPdf = await buildScmPoPrintPdfAttachment(order.id);
+      const updated = await requestScmFinalizeApproval(order.id, {
+        po_pdf_base64: poPdf?.base64 ?? null,
+        po_pdf_filename: poPdf?.filename ?? null,
+      });
       setOrder(updated);
       setError(null);
       router.replace(`${pathname}?approval=pending`);
@@ -455,7 +513,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       const draft = (order.status || "").toLowerCase() === "draft";
       await downloadOrderPdf(
         order,
-        { name: vendorName, address: vendorAddress },
+        { name: vendorName, address: vendorAddress, gstin: vendorGst },
         undefined,
         { watermark: draft },
       );
@@ -535,29 +593,6 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       });
     }
 
-    const invoiceTouched =
-      vendorInvoiceDraft.files.length > 0 ||
-      vendorInvoiceDraft.invoiceNumber.trim() !== "" ||
-      vendorInvoiceDraft.invoiceDate.trim() !== "" ||
-      vendorInvoiceDraft.quantity.trim() !== "" ||
-      vendorInvoiceDraft.subtotal.trim() !== "";
-    if (vendorInvoiceDraft.files.length > 0 && !vendorInvoiceDraft.invoiceNumber.trim()) {
-      setReceiptModalError("Enter invoice number for the attached vendor invoice.");
-      return;
-    }
-    if (invoiceTouched) {
-      const qtyRaw = vendorInvoiceDraft.quantity.trim();
-      const subRaw = vendorInvoiceDraft.subtotal.trim();
-      if (qtyRaw && Number.isNaN(Number(qtyRaw))) {
-        setReceiptModalError("Invoice quantity must be a number.");
-        return;
-      }
-      if (subRaw && Number.isNaN(Number(subRaw))) {
-        setReceiptModalError("Invoice total amount must be a number.");
-        return;
-      }
-    }
-
     setSavingReceipts(true);
     setReceiptModalError(null);
     setError(null);
@@ -571,80 +606,11 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           billing: item.billingQuantity > 0,
           billing_quantity: item.billingQuantity,
           delivery_challan_quantity: item.deliveryChallanQuantity,
+          vendor_dispatch_id: activeDispatchId,
         });
       }
       const refreshed = await loadOrderWithCommercial(latest.id);
       const batchId = resolveReceiptBatchId(refreshed);
-
-      async function resolveUploadScope() {
-        const branchId = refreshed.branch_id?.trim();
-        const companyId = refreshed.company_id?.trim();
-        if (branchId && companyId) {
-          return { company_id: companyId, branch_id: branchId };
-        }
-        return resolveVendorOrgScope();
-      }
-
-      if (invoiceTouched && batchId) {
-        const scope = await resolveUploadScope();
-        if (!scope?.branch_id) {
-          setError(
-            "Receipt saved, but vendor invoice could not be saved (missing branch scope).",
-          );
-        } else {
-          try {
-            const qtyRaw = vendorInvoiceDraft.quantity.trim();
-            const subRaw = vendorInvoiceDraft.subtotal.trim();
-            const invoiceFiles = vendorInvoiceDraft.files;
-            const primaryFile = invoiceFiles[0];
-            const content_base64 = primaryFile ? await fileToBase64(primaryFile) : null;
-            await saveReceiptBatchVendorInvoice(batchId, {
-              vendor_invoice_number: vendorInvoiceDraft.invoiceNumber.trim() || null,
-              vendor_invoice_date: vendorInvoiceDraft.invoiceDate.trim() || null,
-              vendor_invoice_quantity: qtyRaw ? Number(qtyRaw) : null,
-              vendor_invoice_subtotal: subRaw ? Number(subRaw) : null,
-              file_name: primaryFile?.name ?? null,
-              content_base64,
-              content_type: primaryFile?.type || null,
-              branch_id: scope.branch_id,
-              company_id: scope.company_id ?? null,
-            });
-            for (let i = 1; i < invoiceFiles.length; i += 1) {
-              const doc = invoiceFiles[i];
-              await uploadReceiptBatchAttachment(batchId, {
-                file_name: doc.name,
-                content_base64: await fileToBase64(doc),
-                content_type: doc.type || null,
-                branch_id: scope.branch_id,
-                company_id: scope.company_id ?? null,
-              });
-            }
-          } catch (uploadErr) {
-            const uploadDetail =
-              uploadErr instanceof ApiClientError
-                ? [uploadErr.message, ...uploadErr.errors].filter(Boolean).join(" - ")
-                : uploadErr instanceof Error && uploadErr.message.trim()
-                  ? uploadErr.message
-                  : "Failed to save vendor invoice";
-            setReceiptModalError(
-              `Receipt saved, but vendor invoice failed: ${uploadDetail}`,
-            );
-            setOrder(refreshed);
-            void listOrderReceiptBatches(orderId)
-              .then((batches) => setReceiptBatches(batches))
-              .catch(() => setReceiptBatches([]));
-            const drafts = emptyReceiptDrafts(refreshed.lines || []);
-            setQtyDraft(drafts.qty);
-            setCostDraft(drafts.cost);
-            setSerialDraft({});
-            setPendingReceiptLines([]);
-            setVendorInvoiceDraft(emptyVendorInvoiceDraft());
-            return;
-          }
-        }
-      } else if (invoiceTouched && !batchId) {
-        setError("Receipt saved, but vendor invoice could not be linked (no receipt batch).");
-      }
 
       setOrder(refreshed);
       {
@@ -654,7 +620,6 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       }
       setSerialDraft({});
       setPendingReceiptLines([]);
-      setVendorInvoiceDraft(emptyVendorInvoiceDraft());
       setReceiptSerialOpen(false);
 
       const batches = await listOrderReceiptBatches(orderId).catch(() => [] as ScmReceiptBatch[]);
@@ -717,9 +682,48 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
             kind: "billing",
             itemsSummary: itemsSummaryForKind("billing"),
           });
+          const batchUuid =
+            (latestBatch?.id && String(latestBatch.id)) ||
+            (batchId ? String(batchId) : "");
+          if (batchUuid) {
+            try {
+              await createInvoiceGenerationTasks({
+                order_id: refreshed.id,
+                receipt_batch_id: batchUuid,
+                items_summary: itemsSummaryForKind("billing"),
+                vendor_name: vendorName.trim(),
+                customer_name:
+                  refreshed.customer_name?.trim() ||
+                  order?.customer_name?.trim() ||
+                  "",
+              });
+              try {
+                sessionStorage.setItem(
+                  "erp.procurement.accounts-invoice-notified",
+                  "Accounts was notified to fill invoice number, date, quantity, and amount in My Jobs.",
+                );
+              } catch {
+                /* ignore */
+              }
+            } catch (notifyErr) {
+              const notifyDetail =
+                notifyErr instanceof ApiClientError
+                  ? [notifyErr.message, ...notifyErr.errors].filter(Boolean).join(" - ")
+                  : notifyErr instanceof Error && notifyErr.message.trim()
+                    ? notifyErr.message
+                    : "Could not notify Accounts";
+              setError(
+                `Receipt saved, but Accounts was not notified: ${notifyDetail}`,
+              );
+            }
+          }
         }
       }
-      router.push("/procurement/delivery-challan");
+      router.push(
+        hasBilling || hasDeliveryChallan
+          ? "/procurement/delivery-challan"
+          : `/procurement/orders/${orderId}?tab=grn`,
+      );
     } catch (err) {
       const detail =
         err instanceof ApiClientError
@@ -739,12 +743,18 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
     if (!order) return { ok: false, message: "Purchase order not loaded." };
 
     const lines: ReceiptSerialDialogLine[] = [];
-    for (const line of order.lines || []) {
+    const sourceLines =
+      showGrnWorkspace && activeDispatchId ? orderLinesForGrn : order.lines || [];
+    for (const line of sourceLines) {
       const orderedQty = Number(line.quantity) || 0;
       const savedReceived = Number(line.quantity_received ?? 0);
       if (isReceiptLocked(orderedQty, savedReceived)) continue;
 
-      const remaining = Math.max(0, orderedQty - savedReceived);
+      const orderRemaining = Math.max(0, orderedQty - savedReceived);
+      const waveRemaining = activeDispatchId
+        ? waveRemainingByLineId.get(line.id) ?? 0
+        : orderRemaining;
+      const remaining = Math.min(orderRemaining, waveRemaining);
       const raw = (qtyDraft[line.id] ?? "").trim();
       if (raw === "" || raw === ".") continue;
 
@@ -764,7 +774,12 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           ...prev,
           [line.id]: formatCostDraftValue(Number(line.unit_cost) || 0),
         }));
-        return { ok: false, message: `You can receive at most ${remaining} more for ${label}.` };
+        return {
+          ok: false,
+          message: activeDispatchId
+            ? `This dispatch wave allows at most ${remaining} more for ${label}.`
+            : `You can receive at most ${remaining} more for ${label}.`,
+        };
       }
 
       lines.push({
@@ -813,7 +828,6 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
     }
     setSerialDraft(draft);
     setPendingReceiptLines(result.lines);
-    setVendorInvoiceDraft(emptyVendorInvoiceDraft());
     setReceiptSerialOpen(true);
   }
 
@@ -821,15 +835,8 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
     if (savingReceipts) return;
     setReceiptSerialOpen(false);
     setReceiptModalError(null);
-    setVendorInvoiceDraft(emptyVendorInvoiceDraft());
   }
 
-  /** GRN / receipt / challan only after admin finalizes (issued PO). */
-  const canReceipt = Boolean(
-    order &&
-      !["draft", "submitted", "cancelled"].includes((order.status || "").toLowerCase()),
-  );
-  const showGrnWorkspace = canReceipt && viewMode === "grn";
   const orderStatus = (order?.status || "").toLowerCase();
   const workflowStatus = (order?.workflow_status || "").toLowerCase();
   const pendingApproval = orderStatus === "submitted";
@@ -848,28 +855,64 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
   const negotiationApplies = Boolean(
     order && order.status === "draft" && order.source_module === "crm",
   );
-  // Delivery correspondence only matters once the PO is live with the distributor.
-  const deliveryTrackingApplies = Boolean(
+  const orderKind = (order?.order_kind || "product").toLowerCase();
+  const isInternalServicePo = orderKind === "internal_service";
+  const isVendorServicePo = orderKind === "vendor_service";
+  // Fulfillment wizard for CRM product/OVF and outsourced service POs (not Cache Service).
+  const fulfillmentApplies = Boolean(
     order &&
-      order.source_module === "crm" &&
-      !["draft", "submitted", "cancelled"].includes((order.status || "").toLowerCase()),
+    order.source_module === "crm" &&
+    !isInternalServicePo &&
+    !["draft", "submitted", "cancelled"].includes((order.status || "").toLowerCase()),
   );
+  const GRN_UNLOCK_STAGES = new Set([
+    "vendor_dispatch_recorded",
+    "grn_in_stock",
+    "customer_delivery_ready",
+    "customer_dispatched",
+    "delivered",
+  ]);
+  /** CRM POs: GRN unlocks after customer order-processed mail + vendor dispatch. */
+  const fulfillmentBlocksGrn =
+    fulfillmentApplies &&
+    !GRN_UNLOCK_STAGES.has((order?.fulfillment_stage || "").toLowerCase());
+  /** GRN / receipt / challan only after issue (+ fulfillment gate for CRM POs). */
+  const canReceipt = Boolean(
+    order &&
+    !isInternalServicePo &&
+    !["draft", "submitted", "cancelled"].includes((order.status || "").toLowerCase()) &&
+    !fulfillmentBlocksGrn,
+  );
+  const showGrnWorkspace = canReceipt && viewMode === "grn";
   const negotiationBlocksIssue =
     order?.negotiation_status === "pending" || order?.negotiation_status === "rejected";
   const canFinalize =
     order &&
     orderStatus === "draft" &&
-    (order.source_module === "crm" || order.source_document_type === "inventory_initiated") &&
+    (order.source_module === "crm" ||
+      order.source_document_type === "inventory_initiated" ||
+      order.source_document_type === "opportunity_service" ||
+      isVendorServicePo ||
+      isInternalServicePo) &&
     (order.lines?.length ?? 0) > 0 &&
     !finalizeBlockedByApproval &&
     !negotiationBlocksIssue &&
-    !isAdmin;
+    // Admins may also send Internal/Vendor Service POs for Accept PO → Management.
+    (!isAdmin || isInternalServicePo || isVendorServicePo);
+  const isOpportunityServicePo =
+    order?.source_document_type === "opportunity_service" ||
+    isInternalServicePo ||
+    isVendorServicePo;
   const editPoHref =
-    order?.source_module === "crm" && order.source_document_id
+    order?.source_module === "crm" &&
+      order.source_document_id &&
+      !isOpportunityServicePo
       ? `/procurement/scm/ovf/${order.source_document_id}/po`
       : null;
   const ovfViewHref =
-    order?.source_module === "crm" && order.source_document_id
+    order?.source_module === "crm" &&
+      order.source_document_id &&
+      !isOpportunityServicePo
       ? `/procurement/scm/ovf/${order.source_document_id}`
       : null;
   const lineCount = order?.lines?.length ?? 0;
@@ -878,6 +921,22 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
     rows.sort((a, b) => (Number(a.line_number) || 0) - (Number(b.line_number) || 0));
     return rows;
   }, [order?.lines]);
+  const waveRemainingByLineId = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!activeDispatch) return map;
+    for (const ln of activeDispatch.lines || []) {
+      map.set(
+        ln.order_line_id,
+        Math.max(0, Number(ln.grn_remaining_qty ?? ln.dispatch_qty) || 0),
+      );
+    }
+    return map;
+  }, [activeDispatch]);
+  const orderLinesForGrn = useMemo(() => {
+    if (!showGrnWorkspace || !activeDispatchId || !activeDispatch) return orderLines;
+    const allowed = new Set((activeDispatch.lines || []).map((ln) => ln.order_line_id));
+    return orderLines.filter((ln) => allowed.has(ln.id));
+  }, [orderLines, showGrnWorkspace, activeDispatchId, activeDispatch]);
   const allLinesDelivered =
     lineCount > 0 &&
     orderLines.every((ln) =>
@@ -885,6 +944,28 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
     );
   /** Hide receive / GRN columns until the PO is issued and user opens GRN workspace. */
   const showReceiptColumns = showGrnWorkspace && !allLinesDelivered;
+
+  useEffect(() => {
+    if (!showGrnWorkspace || !activeDispatchId || !orderId) {
+      setActiveDispatch(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const fulfillment = await getScmOrderFulfillment(orderId);
+        if (cancelled) return;
+        const wave =
+          (fulfillment.dispatches || []).find((d) => d.id === activeDispatchId) || null;
+        setActiveDispatch(wave);
+      } catch {
+        if (!cancelled) setActiveDispatch(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showGrnWorkspace, activeDispatchId, orderId, order?.version, receiptBatches]);
 
   useEffect(() => {
     // Wait until the PO has loaded - otherwise tab=grn is cleared while order is still null.
@@ -979,9 +1060,9 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
     if (!order) return null;
     const vendorAddressLines = vendorAddress.includes("\n")
       ? vendorAddress
-          .split(/\r?\n/)
-          .map((part) => part.trim())
-          .filter(Boolean)
+        .split(/\r?\n/)
+        .map((part) => part.trim())
+        .filter(Boolean)
       : vendorAddress.trim()
         ? [vendorAddress.trim()]
         : [];
@@ -1016,9 +1097,9 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
             ? { backHref: "/procurement/grns", backLabel: "GRNs" }
             : showGrnWorkspace
               ? {
-                  onBack: () => setPoView("po"),
-                  backLabel: "Purchase order",
-                }
+                onBack: () => setPoView("po"),
+                backLabel: "Purchase order",
+              }
               : backToScm
                 ? { backHref: "/procurement/scm", backLabel: "SCM queue" }
                 : backToGrns
@@ -1027,9 +1108,16 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         title={
           challanOpen
             ? "Create delivery challan"
-            : order
-              ? order.company_po_number?.trim() || order.document_number
-              : "Purchase order"
+            : showGrnWorkspace && activeDispatch
+              ? `GRN · Dispatch wave #${activeDispatch.sequence}`
+              : order
+                ? order.company_po_number?.trim() || order.document_number
+                : "Purchase order"
+        }
+        description={
+          showGrnWorkspace && activeDispatch
+            ? `Receive only this wave (${Number(activeDispatch.grn_received_qty || 0)} / ${Number(activeDispatch.grn_dispatch_qty || 0)}). DC ${activeDispatch.dc_number || "—"} · Inv ${activeDispatch.invoice_number || "—"}.`
+            : undefined
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -1055,17 +1143,6 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
               >
                 <FileDown className="mr-1.5 size-3.5" />
                 {pdfBusy ? "Preparing…" : "Download PO PDF"}
-              </Button>
-            ) : null}
-            {canReceipt && !challanOpen && !showGrnWorkspace ? (
-              <Button
-                type="button"
-                size="sm"
-                className="cursor-pointer transition-colors duration-200"
-                onClick={() => setPoView("grn")}
-              >
-                <PackageCheck className="mr-1.5 size-3.5" />
-                Record GRN
               </Button>
             ) : null}
             {canFinalize && !showGrnWorkspace ? (
@@ -1208,16 +1285,44 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                 onDecided={() => void load()}
               />
 
-              {deliveryTrackingApplies ? (
-                <DeliveryTrackingCard
+              {fulfillmentApplies ? (
+                <PoFulfillmentPanel
                   order={order}
                   isAdmin={isAdmin}
                   onSaved={() => void load()}
                 />
               ) : null}
 
+              {isInternalServicePo &&
+                !["draft", "submitted", "cancelled"].includes(orderStatus) ? (
+                <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">
+                  Internal Service (Cache Service) PO is issued. It was shared to{" "}
+                  <Link
+                    href="/projects/po-queue"
+                    className="cursor-pointer font-semibold underline underline-offset-2 transition-colors duration-200 hover:text-sky-800"
+                  >
+                    Projects → PO Queue
+                  </Link>{" "}
+                  for project creation. GRN / vendor fulfillment does not apply.
+                </div>
+              ) : null}
+
+              {isVendorServicePo ? (
+                <div className="rounded-xl border border-border/70 bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
+                  Vendor Service (Outsourced) PO — use Accept PO → Management, then fulfillment to
+                  send to the vendor.
+                </div>
+              ) : null}
+
               <SectionCard title="Purchase order overview">
                 <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <DetailItem label="PO kind">
+                    {isInternalServicePo
+                      ? "Internal Service"
+                      : isVendorServicePo
+                        ? "Vendor Service"
+                        : "Product"}
+                  </DetailItem>
                   <DetailItem label="Company PO">
                     {order.company_po_number?.trim() || order.document_number}
                   </DetailItem>
@@ -1296,7 +1401,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                     </thead>
                     <tbody>
                       {orderLines.map((ln) => {
-                        const fields = splitPoProductFields(ln);
+                        const fields = poLineDisplayFields(ln, ovfLineDescriptions);
                         const taxPct = Number(ln.tax_rate) || 0;
                         return (
                           <tr key={ln.id} className="border-b border-border/60">
@@ -1345,13 +1450,6 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                 </div>
               </div>
 
-              <PoFulfillmentCharts
-                poLabel={order.company_po_number?.trim() || order.document_number}
-                lines={orderLines}
-                batches={receiptBatches}
-                loading={loading}
-              />
-
               <PoOrderDocumentsCard
                 orderId={order.id}
                 branchId={order.branch_id}
@@ -1359,287 +1457,287 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                 receiptBatches={receiptBatches}
                 allowUpload={(order.status || "").toLowerCase() !== "cancelled"}
                 onChanged={() => {
-                  void listOrderReceiptBatches(orderId).then(setReceiptBatches).catch(() => {});
+                  void listOrderReceiptBatches(orderId).then(setReceiptBatches).catch(() => { });
                 }}
               />
             </>
           ) : (
-          <>
-          {savedChallans.length > 0 ? (
-            <div className="overflow-hidden rounded-lg border border-border bg-card">
-              <div className="border-b border-border px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Delivery challans ({savedChallans.length})
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[520px] text-left text-sm">
-                  <thead className="border-b border-border bg-muted/30 text-xs text-muted-foreground">
-                    <tr>
-                      <th className="px-3 py-2 font-medium">Challan no.</th>
-                      <th className="px-3 py-2 font-medium">Date</th>
-                      <th className="px-3 py-2 font-medium">GRN</th>
-                      <th className="px-3 py-2 font-medium">Status</th>
-                      <th className="px-3 py-2 font-medium">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {savedChallans.map((challan) => {
-                      const statusLabel =
-                        getDeliveryStatus(challan.id)?.shipmentStatus || "Pending dispatch";
-                      return (
-                      <tr key={challan.id} className="border-b border-border/70 last:border-0">
-                        <td className="px-3 py-2 font-medium tabular-nums">{challan.challanNumber}</td>
-                        <td className="px-3 py-2 tabular-nums">{challan.challanDate}</td>
-                        <td className="px-3 py-2 font-medium tabular-nums">
-                          {formatChallanGrnSummary(challan)}
-                        </td>
-                        <td className="px-3 py-2">
-                          <Badge
-                            variant={shipmentStatusBadgeVariant(statusLabel)}
-                            className="text-[10px] uppercase tracking-wide"
-                          >
-                            {statusLabel}
-                          </Badge>
-                        </td>
-                        <td className="px-3 py-2">
-                          <div className="flex flex-wrap gap-1.5">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="h-7 cursor-pointer px-2 text-xs transition-colors duration-200"
-                              disabled={challanPdfBusyId === challan.id}
-                              onClick={() => void onDownloadChallanPdf(challan)}
-                            >
-                              <FileDown className="size-3.5" />
-                              PDF
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : null}
-          <div className="overflow-hidden rounded-lg border border-border bg-card">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
-              <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Lines & receipt
-              </div>
-              {showReceiptColumns ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-8 cursor-pointer transition-colors duration-200"
-                  disabled={savingReceipts || busy || !hasDraftReceiptQty}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    openReceiptSerialModal();
-                  }}
-                >
-                  Update
-                </Button>
+            <>
+              {savedChallans.length > 0 ? (
+                <div className="overflow-hidden rounded-lg border border-border bg-card">
+                  <div className="border-b border-border px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Delivery challans ({savedChallans.length})
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[520px] text-left text-sm">
+                      <thead className="border-b border-border bg-muted/30 text-xs text-muted-foreground">
+                        <tr>
+                          <th className="px-3 py-2 font-medium">Challan no.</th>
+                          <th className="px-3 py-2 font-medium">Date</th>
+                          <th className="px-3 py-2 font-medium">GRN</th>
+                          <th className="px-3 py-2 font-medium">Status</th>
+                          <th className="px-3 py-2 font-medium">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {savedChallans.map((challan) => {
+                          const statusLabel =
+                            getDeliveryStatus(challan.id)?.shipmentStatus || "Pending dispatch";
+                          return (
+                            <tr key={challan.id} className="border-b border-border/70 last:border-0">
+                              <td className="px-3 py-2 font-medium tabular-nums">{challan.challanNumber}</td>
+                              <td className="px-3 py-2 tabular-nums">{challan.challanDate}</td>
+                              <td className="px-3 py-2 font-medium tabular-nums">
+                                {formatChallanGrnSummary(challan)}
+                              </td>
+                              <td className="px-3 py-2">
+                                <Badge
+                                  variant={shipmentStatusBadgeVariant(statusLabel)}
+                                  className="text-[10px] uppercase tracking-wide"
+                                >
+                                  {statusLabel}
+                                </Badge>
+                              </td>
+                              <td className="px-3 py-2">
+                                <div className="flex flex-wrap gap-1.5">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 cursor-pointer px-2 text-xs transition-colors duration-200"
+                                    disabled={challanPdfBusyId === challan.id}
+                                    onClick={() => void onDownloadChallanPdf(challan)}
+                                  >
+                                    <FileDown className="size-3.5" />
+                                    PDF
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               ) : null}
-            </div>
-            <div className="overflow-x-auto">
-              <table className={cn("w-full text-left text-sm", tableMinWidth)}>
-                <thead className="border-b border-border bg-muted/40 text-xs text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2 font-bold">S No.</th>
-                    <th className="px-3 py-2 font-bold">Product</th>
-                    <th className="px-3 py-2 font-bold">Description</th>
-                    <th className="px-3 py-2 font-bold">HSN/SAC</th>
-                    <th className="px-3 py-2 font-bold">Ordered</th>
-                    <th className="px-3 py-2 text-center font-bold">Receive now</th>
-                    {showReceiptColumns ? (
-                      <th className="px-3 py-2 font-bold">Remaining</th>
-                    ) : null}
-                    <th className="px-3 py-2 font-bold">Unit cost</th>
-                    <th className="px-3 py-2 font-bold">Status</th>
-                    <th className="px-3 py-2 text-center font-bold">GRN details</th>
-                    <th className="px-3 py-2 text-center font-bold">PO PDF</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orderLines.map((ln, index) => {
-                    const orderedQty = Number(ln.quantity) || 0;
-                    const savedReceived = Number(ln.quantity_received ?? 0);
-                    const remainingSaved = Math.max(0, orderedQty - savedReceived);
-                    const locked = isReceiptLocked(orderedQty, savedReceived);
-                    const additional = Number(qtyDraft[ln.id] || 0);
-                    const remainingAfterDraft = Math.max(
-                      0,
-                      remainingSaved - (Number.isFinite(additional) ? additional : 0),
-                    );
-                    const projectedReceived = Math.min(
-                      orderedQty,
-                      savedReceived + (Number.isFinite(additional) ? additional : 0),
-                    );
-                    const status = receiptStatusFromQty(orderedQty, projectedReceived);
-                    const fields = splitPoProductFields(ln);
-
-                    return (
-                      <tr key={ln.id} className="border-b border-border/70 align-top">
-                        <td className="px-3 py-2 tabular-nums">{index + 1}</td>
-                        <td className="px-3 py-2 font-medium">
-                          {fields.productName || ln.product_code || "-"}
-                        </td>
-                        <td className="px-3 py-2 text-muted-foreground">
-                          {fields.description || "-"}
-                        </td>
-                        <td className="px-3 py-2 tabular-nums text-muted-foreground">
-                          {fields.hsnSac || "-"}
-                        </td>
-                        <td className="px-3 py-2 tabular-nums">{orderedQty}</td>
-                        <td className="px-3 py-2 text-center">
-                          {locked ? (
-                            <span className="font-medium tabular-nums">{savedReceived}</span>
-                          ) : (
-                            <Input
-                              className="mx-auto block h-8 w-24"
-                              type="text"
-                              inputMode="decimal"
-                              value={qtyDraft[ln.id] ?? ""}
-                              disabled={
-                                !showGrnWorkspace ||
-                                savingReceipts ||
-                                busy ||
-                                remainingSaved <= 0
-                              }
-                              onFocus={(e) => e.currentTarget.select()}
-                              onChange={(e) =>
-                                onQtyDraftChange(
-                                  ln.id,
-                                  e.target.value,
-                                  remainingSaved,
-                                  Number(ln.unit_cost) || 0,
-                                )
-                              }
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault();
-                                  openReceiptSerialModal();
-                                }
-                              }}
-                            />
-                          )}
-                        </td>
-                        {showReceiptColumns ? (
-                          <td className="px-3 py-2">
-                            {remainingAfterDraft > 0 ? (
-                              <span className="font-medium tabular-nums text-amber-700">
-                                {remainingAfterDraft}
-                              </span>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">0</span>
-                            )}
-                          </td>
-                        ) : null}
-                        <td className="px-3 py-2">
-                          {locked || !showReceiptColumns ? (
-                            <span className="tabular-nums">
-                              {formatOrderLineMoney(ln.unit_cost, ln.rate_currency)}
-                            </span>
-                          ) : (
-                            <Input
-                              className="h-8 w-28 font-mono text-sm tabular-nums"
-                              type="text"
-                              inputMode="decimal"
-                              aria-label={`Unit cost for ${ln.product_name || ln.product_code || "line"}`}
-                              title={`Max ${formatOrderLineMoney(Number(ln.unit_cost) || 0, ln.rate_currency)} (PO unit cost)`}
-                              value={costDraft[ln.id] ?? ""}
-                              disabled={
-                                !showGrnWorkspace ||
-                                savingReceipts ||
-                                busy ||
-                                remainingSaved <= 0
-                              }
-                              onFocus={(e) => e.currentTarget.select()}
-                              onChange={(e) =>
-                                onCostDraftChange(
-                                  ln.id,
-                                  e.target.value,
-                                  remainingSaved,
-                                  Number(ln.unit_cost) || 0,
-                                )
-                              }
-                            />
-                          )}
-                        </td>
-                        <td className="px-3 py-2">
-                          <Badge variant={receiptBadgeVariant(status)} className="uppercase">
-                            {status}
-                          </Badge>
-                        </td>
-                        {index === 0 ? (
-                          <>
-                            <td
-                              rowSpan={Math.max(lineCount, 1)}
-                              className="border-l border-border/60 px-3 py-2 align-middle"
-                            >
-                              <div className="flex justify-center">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-8 w-8 cursor-pointer border-border p-0 text-[#0369A1] transition-colors duration-200 hover:bg-sky-50 hover:text-[#0369A1]"
-                                  disabled={!hasReceivedQty}
-                                  title="View GRN details"
-                                  aria-label="View GRN details"
-                                  onClick={() => setGrnPdfPickOpen(true)}
-                                >
-                                  <Eye className="size-4 stroke-[2]" />
-                                </Button>
-                              </div>
-                            </td>
-                            <td
-                              rowSpan={Math.max(lineCount, 1)}
-                              className="border-l border-border/60 px-3 py-2 align-middle"
-                            >
-                              <div className="flex justify-center">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-8 w-8 cursor-pointer border-border p-0 text-[#0369A1] transition-colors duration-200 hover:bg-sky-50 hover:text-[#0369A1]"
-                                  disabled={pdfBusy || lineCount === 0}
-                                  title="Download PO PDF"
-                                  aria-label="Download PO PDF"
-                                  onClick={() => void onDownloadPdf()}
-                                >
-                                  <FileDown className="size-4 stroke-[2]" />
-                                </Button>
-                              </div>
-                            </td>
-                          </>
-                        ) : null}
-                      </tr>
-                    );
-                  })}
-                  {lineCount === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={emptyColSpan}
-                        className="px-3 py-8 text-center text-muted-foreground"
-                      >
-                        No lines on this purchase order.
-                      </td>
-                    </tr>
+              <div className="overflow-hidden rounded-lg border border-border bg-card">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Lines & receipt
+                  </div>
+                  {showReceiptColumns ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8 cursor-pointer transition-colors duration-200"
+                      disabled={savingReceipts || busy || !hasDraftReceiptQty}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        openReceiptSerialModal();
+                      }}
+                    >
+                      Update
+                    </Button>
                   ) : null}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <PoFulfillmentCharts
-            poLabel={order.company_po_number?.trim() || order.document_number}
-            lines={orderLines}
-            batches={receiptBatches}
-            loading={loading}
-          />
-          </>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className={cn("w-full text-left text-sm", tableMinWidth)}>
+                    <thead className="border-b border-border bg-muted/40 text-xs text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2 font-bold">S No.</th>
+                        <th className="px-3 py-2 font-bold">Product</th>
+                        <th className="px-3 py-2 font-bold">Description</th>
+                        <th className="px-3 py-2 font-bold">HSN/SAC</th>
+                        <th className="px-3 py-2 font-bold">Ordered</th>
+                        <th className="px-3 py-2 text-center font-bold">GRN qty</th>
+                        {showReceiptColumns ? (
+                          <th className="px-3 py-2 font-bold">Remaining</th>
+                        ) : null}
+                        <th className="px-3 py-2 font-bold">Unit cost</th>
+                        <th className="px-3 py-2 font-bold">Status</th>
+                        <th className="px-3 py-2 text-center font-bold">GRN details</th>
+                        <th className="px-3 py-2 text-center font-bold">PO PDF</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(showGrnWorkspace ? orderLinesForGrn : orderLines).map((ln, index) => {
+                        const orderedQty = Number(ln.quantity) || 0;
+                        const savedReceived = Number(ln.quantity_received ?? 0);
+                        const orderRemaining = Math.max(0, orderedQty - savedReceived);
+                        const waveCap = activeDispatchId
+                          ? waveRemainingByLineId.get(ln.id) ?? 0
+                          : orderRemaining;
+                        const remainingSaved = Math.min(orderRemaining, waveCap);
+                        const locked =
+                          isReceiptLocked(orderedQty, savedReceived) ||
+                          (Boolean(activeDispatchId) && remainingSaved <= 0);
+                        const additional = Number(qtyDraft[ln.id] || 0);
+                        const remainingAfterDraft = Math.max(
+                          0,
+                          remainingSaved - (Number.isFinite(additional) ? additional : 0),
+                        );
+                        const projectedReceived = Math.min(
+                          orderedQty,
+                          savedReceived + (Number.isFinite(additional) ? additional : 0),
+                        );
+                        const status = receiptStatusFromQty(orderedQty, projectedReceived);
+                        const fields = poLineDisplayFields(ln, ovfLineDescriptions);
+
+                        return (
+                          <tr key={ln.id} className="border-b border-border/70 align-top">
+                            <td className="px-3 py-2 tabular-nums">{index + 1}</td>
+                            <td className="px-3 py-2 font-medium">
+                              {fields.productName || ln.product_code || "-"}
+                            </td>
+                            <td className="px-3 py-2 text-muted-foreground">
+                              {fields.description || "-"}
+                            </td>
+                            <td className="px-3 py-2 tabular-nums text-muted-foreground">
+                              {fields.hsnSac || "-"}
+                            </td>
+                            <td className="px-3 py-2 tabular-nums">{orderedQty}</td>
+                            <td className="px-3 py-2 text-center">
+                              {locked ? (
+                                <span className="font-medium tabular-nums">{savedReceived}</span>
+                              ) : (
+                                <Input
+                                  className="mx-auto block h-8 w-24"
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={qtyDraft[ln.id] ?? ""}
+                                  disabled={
+                                    !showGrnWorkspace ||
+                                    savingReceipts ||
+                                    busy ||
+                                    remainingSaved <= 0
+                                  }
+                                  onFocus={(e) => e.currentTarget.select()}
+                                  onChange={(e) =>
+                                    onQtyDraftChange(
+                                      ln.id,
+                                      e.target.value,
+                                      remainingSaved,
+                                      Number(ln.unit_cost) || 0,
+                                    )
+                                  }
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      openReceiptSerialModal();
+                                    }
+                                  }}
+                                />
+                              )}
+                            </td>
+                            {showReceiptColumns ? (
+                              <td className="px-3 py-2">
+                                {remainingAfterDraft > 0 ? (
+                                  <span className="font-medium tabular-nums text-amber-700">
+                                    {remainingAfterDraft}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">0</span>
+                                )}
+                              </td>
+                            ) : null}
+                            <td className="px-3 py-2">
+                              {locked || !showReceiptColumns ? (
+                                <span className="tabular-nums">
+                                  {formatOrderLineMoney(ln.unit_cost, ln.rate_currency)}
+                                </span>
+                              ) : (
+                                <Input
+                                  className="h-8 w-28 font-mono text-sm tabular-nums"
+                                  type="text"
+                                  inputMode="decimal"
+                                  aria-label={`Unit cost for ${ln.product_name || ln.product_code || "line"}`}
+                                  title={`Max ${formatOrderLineMoney(Number(ln.unit_cost) || 0, ln.rate_currency)} (PO unit cost)`}
+                                  value={costDraft[ln.id] ?? ""}
+                                  disabled={
+                                    !showGrnWorkspace ||
+                                    savingReceipts ||
+                                    busy ||
+                                    remainingSaved <= 0
+                                  }
+                                  onFocus={(e) => e.currentTarget.select()}
+                                  onChange={(e) =>
+                                    onCostDraftChange(
+                                      ln.id,
+                                      e.target.value,
+                                      remainingSaved,
+                                      Number(ln.unit_cost) || 0,
+                                    )
+                                  }
+                                />
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              <Badge variant={receiptBadgeVariant(status)} className="uppercase">
+                                {status}
+                              </Badge>
+                            </td>
+                            {index === 0 ? (
+                              <>
+                                <td
+                                  rowSpan={Math.max(lineCount, 1)}
+                                  className="border-l border-border/60 px-3 py-2 align-middle"
+                                >
+                                  <div className="flex justify-center">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8 w-8 cursor-pointer border-border p-0 text-[#0369A1] transition-colors duration-200 hover:bg-sky-50 hover:text-[#0369A1]"
+                                      disabled={!hasReceivedQty}
+                                      title="View GRN details"
+                                      aria-label="View GRN details"
+                                      onClick={() => setGrnPdfPickOpen(true)}
+                                    >
+                                      <Eye className="size-4 stroke-[2]" />
+                                    </Button>
+                                  </div>
+                                </td>
+                                <td
+                                  rowSpan={Math.max(lineCount, 1)}
+                                  className="border-l border-border/60 px-3 py-2 align-middle"
+                                >
+                                  <div className="flex justify-center">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8 w-8 cursor-pointer border-border p-0 text-[#0369A1] transition-colors duration-200 hover:bg-sky-50 hover:text-[#0369A1]"
+                                      disabled={pdfBusy || lineCount === 0}
+                                      title="Download PO PDF"
+                                      aria-label="Download PO PDF"
+                                      onClick={() => void onDownloadPdf()}
+                                    >
+                                      <FileDown className="size-4 stroke-[2]" />
+                                    </Button>
+                                  </div>
+                                </td>
+                              </>
+                            ) : null}
+                          </tr>
+                        );
+                      })}
+                      {lineCount === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={emptyColSpan}
+                            className="px-3 py-8 text-center text-muted-foreground"
+                          >
+                            No lines on this purchase order.
+                          </td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
           )}
         </>
       ) : null}
@@ -1702,8 +1800,6 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
             });
           }}
           onSerialImportError={setReceiptModalError}
-          vendorInvoice={vendorInvoiceDraft}
-          onVendorInvoiceChange={setVendorInvoiceDraft}
           onConfirm={() => void confirmReceiptWithSerials()}
           onClose={closeReceiptSerialModal}
         />

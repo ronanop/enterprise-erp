@@ -26,10 +26,13 @@ import { cn } from "@/lib/utils";
 import { formatApiError } from "@/services/api-client";
 import {
   formatInr,
+  listProcurementInventory,
   listPurchaseOrders,
   listVendorOptions,
   invalidateProcurementListCache,
+  peekProcurementInventoryFromCache,
   peekPurchaseOrdersFromCache,
+  type ProcurementInventoryRow,
   type ProcOrder,
 } from "@/services/procurement-service";
 import {
@@ -47,18 +50,33 @@ import { deriveGrnStatus, filterOrdersByPoBucket, parsePoOverviewBucket, countPo
 type StatusFilter = "all" | "draft" | "open" | "partial" | "closed" | "cancelled";
 
 /** List Status column: approval state only (not GRN / receipt lifecycle). */
-function formatPoApprovalStatusLabel(status: string | null | undefined): string {
+function formatPoApprovalStatusLabel(
+  status: string | null | undefined,
+  stage?: string | null,
+): string {
   const raw = (status || "").trim().toLowerCase();
   if (!raw) return "-";
   if (raw === "cancelled" || raw === "canceled") return "Cancelled";
-  if (raw === "draft" || raw === "submitted") return "Pending approval";
+  if (raw === "draft") return "Draft";
+  if (raw === "submitted") {
+    if ((stage || "").trim().toLowerCase() === "management") {
+      return "Management approval left";
+    }
+    return "Admin approval left";
+  }
   return "Approved";
 }
 
-function poApprovalStatusBadgeClass(status: string | null | undefined): string {
-  const label = formatPoApprovalStatusLabel(status);
-  if (label === "Pending approval") {
+function poApprovalStatusBadgeClass(
+  status: string | null | undefined,
+  stage?: string | null,
+): string {
+  const label = formatPoApprovalStatusLabel(status, stage);
+  if (label === "Admin approval left" || label === "Management approval left") {
     return "border-amber-200 bg-amber-50 text-amber-900";
+  }
+  if (label === "Draft") {
+    return "border-slate-200 bg-slate-50 text-slate-700";
   }
   if (label === "Approved") {
     return "border-emerald-200 bg-emerald-50 text-emerald-900";
@@ -90,11 +108,31 @@ function isCancelled(status: string): boolean {
   return status.toLowerCase() === "cancelled";
 }
 
-/** Match list filter - numeric tokens prefer company PO sequence (005 → PO/CDT/005). */
+/** Units still in GRN stock, waiting on the Billing or delivery challan step. */
+function dcBillingLeftByOrder(inventory: ProcurementInventoryRow[]): Map<string, number> {
+  const qtyByOrder = new Map<string, number>();
+  for (const row of inventory) {
+    if (row.source !== "grn") continue;
+    const orderId = (row.order_id || "").trim();
+    if (!orderId) continue;
+    const qty = Number(row.received_quantity) || 0;
+    if (qty <= 0) continue;
+    qtyByOrder.set(orderId, (qtyByOrder.get(orderId) ?? 0) + qty);
+  }
+  return qtyByOrder;
+}
+
+function formatLeftQty(qty: number): string {
+  const rounded = Math.round(qty * 1000) / 1000;
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+}
+
+/** Match list filter. Numeric tokens prefer company PO sequence (005 → PO/CDT/005). */
 function orderMatchesQuery(
   row: ProcOrder,
   vendorLabel: string,
   rawQuery: string,
+  dcBillingLeft: number,
 ): boolean {
   const tokens = rawQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (tokens.length === 0) return true;
@@ -124,8 +162,17 @@ function orderMatchesQuery(
       textTokenMatch(approved, token) ||
       textTokenMatch(vendor, token) ||
       textTokenMatch(row.status, token) ||
-      textTokenMatch(formatPoApprovalStatusLabel(row.status), token) ||
-      grnStatusMatchesSearch(row.grn_status ?? "pending", token)
+      textTokenMatch(
+        formatPoApprovalStatusLabel(row.status, row.scm_approval_stage),
+        token,
+      ) ||
+      grnStatusMatchesSearch(row.grn_status ?? "pending", token) ||
+      (dcBillingLeft > 0 &&
+        (token === "left" ||
+          token === "dc" ||
+          token === "billing" ||
+          token === "challan" ||
+          textTokenMatch(`left ${formatLeftQty(dcBillingLeft)}`, token)))
     );
   });
 }
@@ -143,6 +190,9 @@ export function OrdersListPage() {
 
   const cachedOrdersOnMount = peekPurchaseOrdersFromCache();
   const [rows, setRows] = useState<ProcOrder[]>(() => cachedOrdersOnMount ?? []);
+  const [inventory, setInventory] = useState<ProcurementInventoryRow[]>(
+    () => peekProcurementInventoryFromCache() ?? [],
+  );
   const [vendors, setVendors] = useState<Record<string, { label: string; address: string }>>({});
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(() => cachedOrdersOnMount === null);
@@ -182,6 +232,11 @@ export function OrdersListPage() {
       .catch(() => {
         /* vendor labels are optional for the table */
       });
+    void listProcurementInventory()
+      .then(setInventory)
+      .catch(() => {
+        /* DC / billing leftover stays blank if stock cannot be loaded */
+      });
     try {
       const orders = await listPurchaseOrders();
       setRows(orders);
@@ -199,6 +254,8 @@ export function OrdersListPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const dcBillingLeft = useMemo(() => dcBillingLeftByOrder(inventory), [inventory]);
 
   const enriched = useMemo(
     () =>
@@ -253,11 +310,30 @@ export function OrdersListPage() {
     }
 
     const q = query.trim();
-    if (!q) return list;
-    return list.filter((row) =>
-      orderMatchesQuery(row, vendors[row.vendor_id]?.label || "", q),
-    );
-  }, [enriched, statusFilter, bucketFilter, query, vendors]);
+    if (q) {
+      list = list.filter((row) =>
+        orderMatchesQuery(
+          row,
+          vendors[row.vendor_id]?.label || "",
+          q,
+          dcBillingLeft.get(row.id) ?? 0,
+        ),
+      );
+    }
+
+    // Latest company PO number at top (numeric-aware, e.g. PO/CDT/012 before PO/CDT/003).
+    return [...list].sort((a, b) => {
+      const poA = (a.company_po_number || a.document_number || "").trim();
+      const poB = (b.company_po_number || b.document_number || "").trim();
+      if (poA !== poB) {
+        return poB.localeCompare(poA, undefined, { numeric: true, sensitivity: "base" });
+      }
+      const dateA = (a.document_date || "").slice(0, 10);
+      const dateB = (b.document_date || "").slice(0, 10);
+      if (dateA !== dateB) return dateB.localeCompare(dateA);
+      return String(b.id).localeCompare(String(a.id));
+    });
+  }, [enriched, statusFilter, bucketFilter, query, vendors, dcBillingLeft]);
 
   async function onExport() {
     setError(null);
@@ -396,29 +472,31 @@ export function OrdersListPage() {
           />
         </div>
         <div className={procurementUi.tableScroll}>
-          <table className={cn(procurementUi.table, "min-w-[1080px] leading-normal")}>
+          <table className={cn(procurementUi.table, "min-w-[1200px] leading-normal")}>
             <thead className={procurementUi.thead}>
               <tr>
                 <th className="px-3 py-3.5 font-bold">S.No</th>
                 <th className="px-3 py-3.5 font-bold">Company PO number</th>
+                <th className="px-3 py-3.5 font-bold">Kind</th>
                 <th className="px-3 py-3.5 font-bold">PO date</th>
                 <th className="px-3 py-3.5 font-bold">Vendor</th>
                 <th className="px-3 py-3.5 font-bold">Status</th>
                 <th className="px-3 py-3.5 font-bold">Amount</th>
                 <th className="px-3 py-3.5 font-bold">GRN</th>
+                <th className="px-3 py-3.5 font-bold">DC / Billing</th>
               </tr>
             </thead>
             <tbody>
               {loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
                     Loading purchase orders…
                   </td>
                 </tr>
               ) : null}
               {!loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
                     No purchase orders match this filter.
                   </td>
                 </tr>
@@ -426,39 +504,67 @@ export function OrdersListPage() {
               {filtered.map((row, index) => {
                 const orderHref = `/procurement/orders/${row.id}`;
                 return (
-                <tr
-                  key={row.id}
-                  className={cn(
-                    "border-b border-border/70 cursor-pointer transition-colors duration-200",
-                    "hover:bg-sky-50 active:bg-sky-100/80",
-                  )}
-                  onClick={() => router.push(orderHref)}
-                >
-                  <td className="px-3 py-3.5 tabular-nums text-muted-foreground">{index + 1}</td>
-                  <td className="px-3 py-3.5 font-medium tabular-nums">
-                    {row.company_po_number || row.document_number || "-"}
-                  </td>
-                  <td className={cn(procurementUi.tdNumeric, "py-3.5 text-muted-foreground")}>
-                    {row.document_date || "-"}
-                  </td>
-                  <td className="px-3 py-3.5">
-                    {vendors[row.vendor_id]?.label || row.vendor_id.slice(0, 8)}
-                  </td>
-                  <td className="px-3 py-3.5">
-                    <Badge
-                      variant="outline"
-                      className={cn("font-medium", poApprovalStatusBadgeClass(row.status))}
-                    >
-                      {formatPoApprovalStatusLabel(row.status)}
-                    </Badge>
-                  </td>
-                  <td className="px-3 py-3.5 tabular-nums">{formatInr(row.total_amount)}</td>
-                  <td className="px-3 py-3.5">
-                    <Badge variant={grnBadgeVariant(row.grn_status ?? "pending")} className="uppercase">
-                      {formatGrnStatusBadgeLabel(row.grn_status ?? "pending")}
-                    </Badge>
-                  </td>
-                </tr>
+                  <tr
+                    key={row.id}
+                    className={cn(
+                      "border-b border-border/70 cursor-pointer transition-colors duration-200",
+                      "hover:bg-sky-50 active:bg-sky-100/80",
+                    )}
+                    onClick={() => router.push(orderHref)}
+                  >
+                    <td className="px-3 py-3.5 tabular-nums text-muted-foreground">{index + 1}</td>
+                    <td className="px-3 py-3.5 font-medium tabular-nums">
+                      {row.company_po_number || row.document_number || "-"}
+                    </td>
+                    <td className="px-3 py-3.5">
+                      {row.order_kind === "internal_service" ? (
+                        <Badge variant="outline" className="font-medium">
+                          Internal Service
+                        </Badge>
+                      ) : row.order_kind === "vendor_service" ? (
+                        <Badge variant="outline" className="font-medium">
+                          Vendor Service
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">Product</span>
+                      )}
+                    </td>
+                    <td className={cn(procurementUi.tdNumeric, "py-3.5 text-muted-foreground")}>
+                      {row.document_date || "-"}
+                    </td>
+                    <td className="px-3 py-3.5">
+                      {vendors[row.vendor_id]?.label || row.vendor_id.slice(0, 8)}
+                    </td>
+                    <td className="px-3 py-3.5">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "font-medium",
+                          poApprovalStatusBadgeClass(row.status, row.scm_approval_stage),
+                        )}
+                      >
+                        {formatPoApprovalStatusLabel(row.status, row.scm_approval_stage)}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-3.5 tabular-nums">{formatInr(row.total_amount)}</td>
+                    <td className="px-3 py-3.5">
+                      <Badge variant={grnBadgeVariant(row.grn_status ?? "pending")} className="uppercase">
+                        {formatGrnStatusBadgeLabel(row.grn_status ?? "pending")}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-3.5">
+                      {(dcBillingLeft.get(row.id) ?? 0) > 0 ? (
+                        <Badge
+                          variant="outline"
+                          className="border-amber-200 bg-amber-50 font-medium text-amber-900"
+                        >
+                          Left · {formatLeftQty(dcBillingLeft.get(row.id) ?? 0)}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </td>
+                  </tr>
                 );
               })}
             </tbody>

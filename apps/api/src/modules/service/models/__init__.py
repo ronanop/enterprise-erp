@@ -26,7 +26,11 @@ from modules.service.models.service_sla import SvcServiceSla
 from modules.service.models.service_task import SvcServiceTask
 from modules.service.models.service_ticket import SvcServiceTicket
 from modules.service.models.service_ticket_field_engineer import SvcTicketFieldEngineer
+from modules.service.models.service_customer_priority_sla import SvcCustomerPrioritySla
+from modules.service.models.service_ticket_assignment_history import SvcTicketAssignmentHistory
 from modules.service.models.service_ticket_option import SvcTicketOption
+from modules.service.models.service_ticket_reopen_request import SvcTicketReopenRequest
+from modules.service.models.service_ticket_sla_pause import SvcTicketSlaPause
 from modules.service.models.service_time_entry import SvcServiceTimeEntry
 from modules.service.models.service_visit import SvcServiceVisit
 from modules.service.models.service_work_order import SvcServiceWorkOrder
@@ -35,6 +39,10 @@ __all__ = [
     "SvcEmailIngestLog",
     "SvcServiceCategory",
     "SvcTicketOption",
+    "SvcTicketAssignmentHistory",
+    "SvcTicketReopenRequest",
+    "SvcTicketSlaPause",
+    "SvcCustomerPrioritySla",
     "SvcTicketFieldEngineer",
     "SvcServiceRequest",
     "SvcServiceRequestComment",

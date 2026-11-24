@@ -238,9 +238,6 @@ export function AssetDiscoveryPanel({
 
         <div className="space-y-2">
           <Label>Optional reference commands</Label>
-          <p className="text-[11px] text-muted-foreground">
-            Labels below are for guidance only — they are not included in Copy Commands.
-          </p>
           <div
             className="max-h-40 space-y-2 overflow-auto rounded-md border bg-muted/20 p-3"
             data-testid="discovery-reference-commands"

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeft, FileText, Loader2, Lock, RefreshCw, Unlock } from "lucide-react";
+import { CheckCircle2, ChevronLeft, FileText, Loader2, Lock, RefreshCw, Unlock } from "lucide-react";
 
 import { LeaveAdjustPanel } from "@/components/hr/attendance/leave-adjust-panel";
 import { HrFormDialog } from "@/components/hr/hr-form-dialog";
@@ -28,6 +28,7 @@ import {
 import type { HrMasterOption } from "@/services/hr-master-connector";
 import { formatInr } from "@/services/payroll-service";
 import {
+  advancePayrollApproval,
   getPayrollRun,
   getPayrollRunAttendance,
   getPayrollRunEmployeeLine,
@@ -476,6 +477,42 @@ export function PayrollRunWorkspace({
           ) : null}
           <HrStatusBadge status={RUN_STATUS_LABELS[openRun.status] ?? openRun.status} />
           <div className="ml-auto flex flex-wrap gap-2">
+            {openRun.status === "pending_hr" || openRun.status === "pending_finance" ? (
+              <Button
+                type="button"
+                size="sm"
+                className="cursor-pointer"
+                title={
+                  openRun.status === "pending_hr"
+                    ? "Confirm HR review and send to Finance"
+                    : "Confirm Finance review and mark approved"
+                }
+                onClick={() => {
+                  try {
+                    const next = advancePayrollApproval(openRun.id);
+                    if (!next) {
+                      toast("Could not advance approval", "error");
+                      return;
+                    }
+                    toast(
+                      next.status === "pending_finance"
+                        ? "HR review done — sent to Finance review"
+                        : next.status === "approved"
+                          ? "Finance review done — payroll approved"
+                          : next.status === "paid"
+                            ? "Payroll marked paid"
+                            : `Status → ${RUN_STATUS_LABELS[next.status] ?? next.status}`,
+                    );
+                    onRefresh();
+                  } catch (err) {
+                    toast(err instanceof Error ? err.message : "Approval failed", "error");
+                  }
+                }}
+              >
+                <CheckCircle2 className="size-3.5" />
+                {openRun.status === "pending_hr" ? "Approve (HR)" : "Approve (Finance)"}
+              </Button>
+            ) : null}
             <Button
               type="button"
               size="sm"

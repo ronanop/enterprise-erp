@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database.session import get_db
@@ -68,11 +68,15 @@ def grant_module_access(
     ctx: Annotated[TenantContext, Depends(require_permission("foundation.user:update"))],
     db: Annotated[Session, Depends(get_db)],
 ) -> APIResponse[UserResponse]:
-    """ERP admin: give a user Admin or User access to one module."""
+    """ERP admin: give a user Admin or User access to one or more modules."""
+    try:
+        keys = body.resolved_module_keys()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     user = ModuleAccessService(db).grant(
         ctx,
         user_id,
-        module_key=body.module_key,
+        module_keys=keys,
         role=body.role,
         service_job_role=body.service_job_role,
     )

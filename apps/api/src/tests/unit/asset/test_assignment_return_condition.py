@@ -14,7 +14,7 @@ from modules.asset.domain.exceptions import AssignmentValidationError
     [
         ("good", "return_to_ready"),
         ("GOOD", "return_to_ready"),
-        ("outdated", "return_to_ready"),
+        ("outdated", "dispose"),
         ("dead", "return_to_ready"),
     ],
 )

@@ -60,12 +60,21 @@ function money(value: string | number | null | undefined): SpreadsheetCellValue 
   return { value: Number(n.toFixed(2)), type: Number, align: "right" };
 }
 
-export function buildOvfXlsxFilename(ovf: Ovf, quoteName?: string | null): string {
-  const base = (quoteName || ovf.quote_name || ovf.ovf_no || "OVF")
+export function buildOvfXlsxFilename(
+  ovf: Ovf,
+  quoteName?: string | null,
+  customerName?: string | null,
+): string {
+  const code = (ovf.ovf_no || "OVF")
+    .replace(/[\\/:*?"<>|]+/g, "_")
+    .trim()
+    .replace(/\s+/g, "_");
+  const label = (customerName || ovf.customer_name || quoteName || ovf.quote_name || "")
     .replace(/[\\/:*?"<>|]+/g, " ")
     .trim()
-    .replace(/\s+/g, " ");
-  return `OVF_${base || ovf.ovf_no}.xlsx`;
+    .replace(/\s+/g, "_")
+    .slice(0, 48);
+  return label ? `OVF_${code}_${label}.xlsx` : `OVF_${code}.xlsx`;
 }
 
 export async function exportOvfXlsx(input: OvfXlsxExportInput): Promise<void> {
@@ -171,7 +180,7 @@ export async function exportOvfXlsx(input: OvfXlsxExportInput): Promise<void> {
     ]),
   ];
 
-  await downloadXlsxMatrix(buildOvfXlsxFilename(ovf, input.quoteName), [
+  await downloadXlsxMatrix(buildOvfXlsxFilename(ovf, input.quoteName, input.customerName), [
     { name: "OVF Overview", data: overview },
     { name: "Customer PO Summary", data: customerTable },
     { name: "Vendor PO Summary", data: vendorTable },

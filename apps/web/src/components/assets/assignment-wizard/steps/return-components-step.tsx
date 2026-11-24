@@ -11,8 +11,6 @@ import { cn } from "@/lib/utils";
 const OUTCOMES: { value: ComponentReturnOutcome; label: string }[] = [
   { value: "RETURNED", label: "Returned" },
   { value: "MISSING", label: "Missing" },
-  { value: "DAMAGED", label: "Damaged" },
-  { value: "RETAINED", label: "Retained" },
 ];
 
 export type ReturnComponentsStepProps = {
@@ -41,45 +39,43 @@ export function ReturnComponentsStep({ state, onChange }: ReturnComponentsStepPr
   }
 
   return (
-    <div className="grid max-w-lg gap-3">
-      <p className="text-sm text-muted-foreground">
-        Reconcile each component issued with this assignment.
-      </p>
+    <div className="grid max-w-lg gap-3" data-testid="return-components-step">
+      <p className="text-sm text-muted-foreground">Mark each component as returned or missing.</p>
       <ul className="m-0 list-none space-y-3 p-0">
         {state.componentReturns.map((line) => (
           <li
             key={line.componentId}
-            className={cn("rounded-lg border border-border px-3 py-2 transition-colors duration-200")}
+            className={cn(
+              "flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5 transition-colors duration-200",
+            )}
           >
-            <div className="text-sm font-medium">{line.label}</div>
-            <div className="text-xs text-muted-foreground">S/N: {line.serialNumber || "—"}</div>
-            <label className="mt-2 block text-xs font-medium text-muted-foreground">
-              Outcome
-              <select
-                className="mt-1 flex h-9 w-full cursor-pointer rounded-md border border-input bg-background px-2 text-sm"
-                value={line.issueStatus}
-                onChange={(e) =>
-                  updateLine(line.componentId, {
-                    issueStatus: e.target.value as ComponentReturnOutcome,
-                  })
-                }
-              >
-                {OUTCOMES.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium">{line.label}</div>
+              <div className="text-xs text-muted-foreground">
+                S/N: {line.serialNumber || "—"}
+              </div>
+            </div>
+            <label className="sr-only" htmlFor={`component-outcome-${line.componentId}`}>
+              Outcome for {line.label}
             </label>
-            <label className="mt-2 block text-xs font-medium text-muted-foreground">
-              Remarks
-              <input
-                className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                value={line.returnRemarks}
-                onChange={(e) => updateLine(line.componentId, { returnRemarks: e.target.value })}
-                placeholder="Optional"
-              />
-            </label>
+            <select
+              id={`component-outcome-${line.componentId}`}
+              aria-label={`Outcome for ${line.label}`}
+              data-testid={`component-outcome-${line.componentId}`}
+              className="h-9 w-[8.5rem] shrink-0 cursor-pointer rounded-md border border-input bg-background px-2 text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={line.issueStatus === "MISSING" ? "MISSING" : "RETURNED"}
+              onChange={(e) =>
+                updateLine(line.componentId, {
+                  issueStatus: e.target.value as ComponentReturnOutcome,
+                })
+              }
+            >
+              {OUTCOMES.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
           </li>
         ))}
       </ul>

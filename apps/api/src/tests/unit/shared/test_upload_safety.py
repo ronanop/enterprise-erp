@@ -3,6 +3,7 @@
 import pytest
 
 from shared.upload_safety import (
+    OUTLOOK_MAIL_EXPORT_EXTENSIONS,
     UnsafeUploadError,
     content_disposition_type,
     sanitize_filename,
@@ -76,4 +77,41 @@ def test_override_still_blocks_html() -> None:
             content_type="text/html",
             raw=b"<html></html>",
             allowed_extensions=frozenset({".html"}),
+        )
+
+
+def test_outlook_export_allows_eml_and_msg() -> None:
+    eml_name, eml_media = validate_upload(
+        file_name="vendor.eml",
+        content_type="message/rfc822",
+        raw=b"From: a@b.com\r\nTo: c@d.com\r\nSubject: Quote\r\n\r\nHi",
+        allowed_extensions=OUTLOOK_MAIL_EXPORT_EXTENSIONS,
+    )
+    assert eml_name == "vendor.eml"
+    assert eml_media == "message/rfc822"
+
+    msg_name, msg_media = validate_upload(
+        file_name="vendor.msg",
+        content_type="application/octet-stream",
+        raw=b"\xd0\xcf\x11\xe0" + b"\x00" * 32,
+        allowed_extensions=OUTLOOK_MAIL_EXPORT_EXTENSIONS,
+    )
+    assert msg_name == "vendor.msg"
+    assert msg_media == "application/vnd.ms-outlook"
+
+
+def test_outlook_export_rejects_pdf_and_fake_msg() -> None:
+    with pytest.raises(UnsafeUploadError, match="Outlook email export"):
+        validate_upload(
+            file_name="quote.pdf",
+            content_type="application/pdf",
+            raw=b"%PDF-1.4",
+            allowed_extensions=OUTLOOK_MAIL_EXPORT_EXTENSIONS,
+        )
+    with pytest.raises(UnsafeUploadError, match="does not look like an Outlook"):
+        validate_upload(
+            file_name="fake.msg",
+            content_type="application/octet-stream",
+            raw=b"%PDF-1.4xxxx",
+            allowed_extensions=OUTLOOK_MAIL_EXPORT_EXTENSIONS,
         )

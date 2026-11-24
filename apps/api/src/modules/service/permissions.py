@@ -119,7 +119,21 @@ SERVICE_COORDINATOR_PERMISSIONS = [
 ] + list(SERVICE_LOOKUP_PERMISSIONS)
 SERVICE_ADMIN_PERMISSIONS = list(_ALL) + list(SERVICE_LOOKUP_PERMISSIONS)
 
-# Field engineers only need FE dashboard + mark-solved (read permission covers both routes).
+# Legacy FE portal role (dashboard removed). Kept for existing seeded users only.
 SERVICE_FIELD_ENGINEER_PERMISSIONS = [
     "service.request:read",
 ]
+
+# Plan aliases (same permission sets; display / seed names only):
+# Service Delivery Head ≈ SERVICE_COORDINATOR / SERVICE_MANAGER (approve + assign)
+# Knock TL ≈ SERVICE_MANAGER / SERVICE_COORDINATOR (assign + approve)
+# Service Engineer ≈ SERVICE_ENGINEER
+# Admin ≈ SERVICE_ADMIN
+SERVICE_ROLE_ALIASES: dict[str, tuple[str, str]] = {
+    "SERVICE_DELIVERY_HEAD": ("SERVICE_COORDINATOR", "Service Delivery Head"),
+    "KNOCK_TL": ("SERVICE_MANAGER", "Knock TL"),
+    "SERVICE_ENGINEER": ("SERVICE_ENGINEER", "Service Engineer"),
+    "SERVICE_ADMIN": ("SERVICE_ADMIN", "Service Admin"),
+}
+SERVICE_DELIVERY_HEAD_PERMISSIONS = list(SERVICE_COORDINATOR_PERMISSIONS)
+KNOCK_TL_PERMISSIONS = list(SERVICE_MANAGER_PERMISSIONS)

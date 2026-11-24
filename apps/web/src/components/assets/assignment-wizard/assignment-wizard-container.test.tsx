@@ -24,6 +24,7 @@ vi.mock("@/services/assets-service", () => ({
 
 const createDraft = vi.fn();
 const loadDraft = vi.fn();
+const loadAssignment = vi.fn();
 const updateDraft = vi.fn();
 const submitDraft = vi.fn();
 const activateAssignment = vi.fn();
@@ -36,6 +37,7 @@ const formatError = vi.fn((err: unknown, fallback: string) =>
 const service: AssignmentWizardContainerService = {
   createDraft,
   loadDraft,
+  loadAssignment,
   updateDraft,
   submitDraft,
   activateAssignment,
@@ -95,6 +97,7 @@ beforeEach(() => {
   listEmployees.mockReset();
   createDraft.mockReset();
   loadDraft.mockReset();
+  loadAssignment.mockReset();
   updateDraft.mockReset();
   submitDraft.mockReset();
   activateAssignment.mockReset();
@@ -105,6 +108,7 @@ beforeEach(() => {
   createDraft.mockResolvedValue({ ...draftRow, id: "new-1", version: 1 });
   updateDraft.mockResolvedValue({ ...draftRow, version: 2 });
   loadDraft.mockResolvedValue(draftRow);
+  loadAssignment.mockResolvedValue(draftRow);
   submitDraft.mockResolvedValue({ ...draftRow, status: "submitted" });
   activateAssignment.mockResolvedValue({ ...draftRow, status: "active" });
   formatError.mockImplementation((err: unknown, fallback: string) =>
@@ -228,6 +232,7 @@ describe("AssignmentWizardContainer — draft create", () => {
       />,
     );
     await waitForWizard();
+    await advanceToSubmit(user);
     await user.click(screen.getByRole("button", { name: /Save draft/i }));
     await waitFor(() => expect(createDraft).toHaveBeenCalled());
     expect(createDraft.mock.calls[0]?.[0]).toMatchObject({
@@ -248,6 +253,7 @@ describe("AssignmentWizardContainer — draft create", () => {
       />,
     );
     await waitForWizard();
+    await advanceToSubmit(user);
     await user.click(screen.getByRole("button", { name: /Save draft/i }));
     await waitFor(() => expect(createDraft).toHaveBeenCalled());
     expect(onSuccess).not.toHaveBeenCalled();
@@ -264,6 +270,7 @@ describe("AssignmentWizardContainer — draft create", () => {
       />,
     );
     await waitForWizard();
+    await advanceToSubmit(user);
     await user.click(screen.getByRole("button", { name: /Save draft/i }));
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent(/create failed/i);
@@ -283,6 +290,7 @@ describe("AssignmentWizardContainer — draft update", () => {
     );
     await waitFor(() => expect(loadDraft).toHaveBeenCalled());
     await waitForWizard();
+    await advanceToSubmit(user);
     await user.click(screen.getByRole("button", { name: /Save draft/i }));
     await waitFor(() => expect(updateDraft).toHaveBeenCalled());
     expect(updateDraft.mock.calls[0]?.[0]).toBe("d1");
@@ -297,6 +305,7 @@ describe("AssignmentWizardContainer — draft update", () => {
       <AssignmentWizardContainer draftId="d1" service={service} listEmployees={listEmployees} />,
     );
     await waitForWizard();
+    await advanceToSubmit(user);
     await user.click(screen.getByRole("button", { name: /Save draft/i }));
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent(/version conflict/i);
@@ -314,6 +323,7 @@ describe("AssignmentWizardContainer — draft update", () => {
       />,
     );
     await waitForWizard();
+    await advanceToSubmit(user);
     await user.click(screen.getByRole("button", { name: /Save draft/i }));
     await waitFor(() => expect(createDraft).toHaveBeenCalledTimes(1));
     await user.click(screen.getByRole("button", { name: /Save draft/i }));
@@ -340,7 +350,9 @@ describe("AssignmentWizardContainer — submit and activate", () => {
     await waitFor(() => expect(createDraft).toHaveBeenCalled());
     await waitFor(() => expect(submitDraft).toHaveBeenCalledWith("new-1"));
     await waitFor(() => expect(activateAssignment).toHaveBeenCalledWith("new-1"));
-    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("new-1"));
+    await waitFor(() =>
+      expect(onSuccess).toHaveBeenCalledWith("new-1", expect.objectContaining({ assetId: "a1" })),
+    );
   });
 
   it("update → submit → activate for existing draft", async () => {
@@ -360,11 +372,14 @@ describe("AssignmentWizardContainer — submit and activate", () => {
     await waitFor(() => expect(updateDraft).toHaveBeenCalled());
     await waitFor(() => expect(submitDraft).toHaveBeenCalledWith("d1"));
     await waitFor(() => expect(activateAssignment).toHaveBeenCalledWith("d1"));
-    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("d1"));
+    await waitFor(() =>
+      expect(onSuccess).toHaveBeenCalledWith("d1", expect.objectContaining({ assetId: "a1" })),
+    );
   });
 
-  it("still succeeds when activateAssignment fails", async () => {
+  it("still succeeds when activateAssignment fails but assignment stays submitted for approval", async () => {
     activateAssignment.mockRejectedValue(new Error("needs more approvers"));
+    loadAssignment.mockResolvedValue({ ...draftRow, id: "new-1", status: "submitted" });
     const onSuccess = vi.fn();
     const user = userEvent.setup();
     render(
@@ -378,7 +393,31 @@ describe("AssignmentWizardContainer — submit and activate", () => {
     await waitForWizard();
     await advanceToSubmit(user);
     await user.click(screen.getByRole("button", { name: /^Submit$/i }));
-    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("new-1"));
+    await waitFor(() =>
+      expect(onSuccess).toHaveBeenCalledWith("new-1", expect.objectContaining({ assetId: "a1" })),
+    );
+  });
+
+  it("shows error when activate fails and assignment is not pending approval", async () => {
+    activateAssignment.mockRejectedValue(new Error("activation failed"));
+    loadAssignment.mockResolvedValue({ ...draftRow, id: "new-1", status: "draft" });
+    const onSuccess = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <AssignmentWizardContainer
+        initialState={{ employeeId: "e1", assetId: "a1", branchId: "b1" }}
+        service={service}
+        listEmployees={listEmployees}
+        onSuccess={onSuccess}
+      />,
+    );
+    await waitForWizard();
+    await advanceToSubmit(user);
+    await user.click(screen.getByRole("button", { name: /^Submit$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent(/activation failed/i);
+    });
+    expect(onSuccess).not.toHaveBeenCalled();
   });
 
   it("shows error and skips activate when submitDraft fails", async () => {
@@ -467,6 +506,7 @@ describe("AssignmentWizardContainer — cancel and UX", () => {
       />,
     );
     await waitForWizard();
+    await advanceToSubmit(user);
     await user.click(screen.getByRole("button", { name: /Save draft/i }));
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: /Retry/i }));
@@ -502,6 +542,7 @@ describe("AssignmentWizardContainer — payload mapping", () => {
       />,
     );
     await waitForWizard();
+    await advanceToSubmit(user);
     await user.click(screen.getByRole("button", { name: /Save draft/i }));
     await waitFor(() => expect(createDraft).toHaveBeenCalled());
     expect(createDraft.mock.calls[0]?.[0]).toMatchObject({
@@ -518,6 +559,7 @@ describe("AssignmentWizardContainer — payload mapping", () => {
       <AssignmentWizardContainer draftId="d1" service={service} listEmployees={listEmployees} />,
     );
     await waitForWizard();
+    await advanceToSubmit(user);
     await user.click(screen.getByRole("button", { name: /Save draft/i }));
     await waitFor(() => expect(updateDraft).toHaveBeenCalled());
     expect(updateDraft.mock.calls[0]?.[1]).toMatchObject({ version: 4 });
@@ -545,19 +587,27 @@ describe("AssignmentWizardContainer — asset change", () => {
     ).toBeInTheDocument();
   });
 
-  it("reloads components when asset selected", async () => {
+  it("loads components for the preselected asset only", async () => {
     const user = userEvent.setup();
-    listReadyAssets.mockResolvedValue([
-      ...readyAssets(),
-      {
-        id: "a2",
-        label: "Monitor",
-        code: "AST-2",
-        operationalStatus: "READY_TO_MOVE",
-        branchLabel: "HQ",
-        branchId: "b1",
-      },
-    ]);
+    render(
+      <AssignmentWizardContainer
+        initialState={{ employeeId: "e1", assetId: "a1", branchId: "b1" }}
+        service={service}
+        listEmployees={listEmployees}
+      />,
+    );
+    await waitForWizard();
+    await waitFor(() => expect(listComponents).toHaveBeenCalledWith("a1"));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId("assignment-asset-selected")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Laptop")).toBeInTheDocument();
+    expect(screen.queryByRole("listbox", { name: /Select asset/i })).not.toBeInTheDocument();
+  });
+
+  it("shows empty asset guidance when no asset was preselected", async () => {
+    const user = userEvent.setup();
     render(
       <AssignmentWizardContainer
         initialState={{ employeeId: "e1" }}
@@ -567,39 +617,9 @@ describe("AssignmentWizardContainer — asset change", () => {
     );
     await waitForWizard();
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
-    await waitFor(() => screen.getByRole("option", { name: /Monitor/i }));
-    await user.click(screen.getByRole("option", { name: /Monitor/i }));
-    await waitFor(() => expect(listComponents).toHaveBeenCalledWith("a2"));
-  });
-
-  it("clears issued items when listComponents fails on asset change", async () => {
-    const user = userEvent.setup();
-    listComponents
-      .mockResolvedValueOnce([{ id: "c1", label: "Dock", status: "active" }])
-      .mockRejectedValueOnce(new Error("components down"));
-    listReadyAssets.mockResolvedValue([
-      ...readyAssets(),
-      {
-        id: "a2",
-        label: "Monitor",
-        code: "AST-2",
-        operationalStatus: "READY_TO_MOVE",
-        branchLabel: "HQ",
-        branchId: "b1",
-      },
-    ]);
-    render(
-      <AssignmentWizardContainer
-        initialState={{ employeeId: "e1", assetId: "a1", branchId: "b1" }}
-        service={service}
-        listEmployees={listEmployees}
-      />,
-    );
-    await waitForWizard();
-    await user.click(screen.getByRole("button", { name: /^Next$/i }));
-    await waitFor(() => screen.getByRole("option", { name: /Monitor/i }));
-    await user.click(screen.getByRole("option", { name: /Monitor/i }));
-    await waitFor(() => expect(listComponents).toHaveBeenCalledWith("a2"));
+    await waitFor(() => {
+      expect(screen.getByTestId("assignment-asset-locked-empty")).toBeInTheDocument();
+    });
   });
 });
 
@@ -614,6 +634,7 @@ describe("AssignmentWizardContainer — service contract", () => {
       />,
     );
     await waitForWizard();
+    await advanceToSubmit(user);
     await user.click(screen.getByRole("button", { name: /Save draft/i }));
     await waitFor(() => expect(createDraft).toHaveBeenCalled());
     expect(submitDraft).not.toHaveBeenCalled();
@@ -645,6 +666,7 @@ describe("AssignmentWizardContainer — service contract", () => {
       />,
     );
     await waitForWizard();
+    await advanceToSubmit(user);
     await user.click(screen.getByRole("button", { name: /Save draft/i }));
     await waitFor(() => expect(createDraft).toHaveBeenCalled());
     expect(createDraft.mock.calls[0]?.[0]).toMatchObject({

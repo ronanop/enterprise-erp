@@ -16,7 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiClientError, formatApiError } from "@/services/api-client";
-import { formatReportCellTitle, formatReportCellValue } from "@/lib/crm/report-amount";
+import { ReportStageAwareCell } from "@/components/crm/sales/report-stage-cell";
 import {
   createSavedCrmReport,
   getSavedCrmReport,
@@ -425,9 +425,8 @@ export function ReportBuilderPage({
                             <td
                               key={col.key}
                               className="max-w-[240px] truncate px-4 py-2.5 text-muted-foreground"
-                              title={formatReportCellTitle(col.key, row[col.key])}
                             >
-                              {formatReportCellValue(col.key, row[col.key])}
+                              <ReportStageAwareCell columnKey={col.key} value={row[col.key]} />
                             </td>
                           ))}
                         </tr>

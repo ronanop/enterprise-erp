@@ -33,25 +33,6 @@ def test_hr_employee_includes_scoped_workspace_reads() -> None:
     assert "hr.superadmin:manage" not in HR_EMPLOYEE_PERMISSIONS
 
 
-def test_hr_module_assignment_unlocks_nested_workspace_permissions() -> None:
-    from modules.foundation.domain.erp_modules import assignment_module_keys_for_permission
-
-    assert assignment_module_keys_for_permission("organization.department:create") == [
-        "organization",
-        "hr",
-    ]
-    assert assignment_module_keys_for_permission("payroll.structure:create") == [
-        "payroll",
-        "hr",
-    ]
-    assert assignment_module_keys_for_permission("master.employee:create") == [
-        "master-data",
-        "hr",
-    ]
-    assert assignment_module_keys_for_permission("hr.designation:create") == ["hr"]
-    assert assignment_module_keys_for_permission("finance.journal:create") == ["finance"]
-
-
 def test_generated_hr_login_password_meets_policy() -> None:
     from security.password import validate_password_policy
     from modules.hr.service.superadmin_service import generate_hr_login_password

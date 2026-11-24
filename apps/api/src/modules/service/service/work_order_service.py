@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
-from modules.platform.compat.audit_facade import PlatformAuditFacade
+from modules.foundation.service.audit_service import AuditService
 from modules.service.domain.enums import SvcEntityType
 from modules.service.models import SvcServiceWorkOrder
 from modules.service.repository.service_work_order_repository import ServiceWorkOrderRepository
@@ -21,10 +21,10 @@ class WorkOrderService:
         self._scope = ServiceScopeValidator(db)
         self._numbers = DocumentNumberService(db)
         self._engine = ServiceWorkOrderEngine()
-        self._audit = PlatformAuditFacade(db)
+        self._audit = AuditService(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
-        cid = self._scope.resolve_list_company_id(ctx, company_id)
+        cid = self._scope.resolve_company_id(ctx, company_id)
         return self._repo.list_rows(ctx, cid)
 
     def get(self, ctx: TenantContext, row_id: UUID) -> SvcServiceWorkOrder:

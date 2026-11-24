@@ -168,10 +168,9 @@ export function PortalLifecycleTimeline({
                       </span>
                     ) : null}
                   </div>
-                  <p className="text-sm font-medium text-foreground">{event.title}</p>
-                  {event.detail ? (
-                    <p className="text-xs leading-relaxed text-muted-foreground">{event.detail}</p>
-                  ) : null}
+                  <p className="text-sm font-medium capitalize text-foreground">
+                    {event.title}
+                  </p>
                   {event.meta && event.meta.length > 0 ? (
                     <dl className="mt-2 grid gap-1.5 sm:grid-cols-2">
                       {event.meta.map((item) => (

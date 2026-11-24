@@ -1,20 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import {
   Calendar,
+  ChevronDown,
+  ChevronRight,
   Pencil,
   Plus,
   RotateCcw,
   Search,
-  Video,
 } from "lucide-react";
 
 import {
   formatPostedOn,
   interviewTimeWindow,
 } from "@/components/hr/recruitment/dashboard/dashboard-model";
-import { VerticalKebab } from "@/components/hr/recruitment/dashboard/data-table";
 import { InitialsAvatar } from "@/components/hr/recruitment/dashboard/status-badge";
 import { EmsPagination } from "@/components/hr/workforce/ems-primitives";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,14 @@ type Filters = {
   dateTo: string;
 };
 
+type CandidateGroup = {
+  candidateId: string;
+  candidate?: AtsCandidate;
+  interviews: AtsInterview[];
+  latest: AtsInterview;
+  job?: JobOpening;
+};
+
 const EMPTY: Filters = {
   query: "",
   status: "all",
@@ -55,7 +63,7 @@ const ROUND_OPTIONS = [
   { value: "all", label: "All Interview Types" },
   { value: "round_1", label: "Round 1" },
   { value: "round_2", label: "Round 2" },
-  { value: "hr", label: "HR Discussion" },
+  { value: "hr", label: "Negotiation Round" },
 ];
 
 const STATUS_OPTIONS = [
@@ -69,11 +77,11 @@ const STATUS_OPTIONS = [
 function roundBadge(round: InterviewRound | string): { label: string; tone: string } {
   switch (round) {
     case "round_1":
-      return { label: "Technical", tone: "bg-[#F5F3FF] text-[#7C3AED]" };
+      return { label: "Technical", tone: "bg-primary/10 text-primary" };
     case "round_2":
       return { label: "Manager Round", tone: "bg-[#FFF4E5] text-[#FF8904]" };
     case "hr":
-      return { label: "HR Round", tone: "bg-[#F5F3FF] text-[#7C3AED]" };
+      return { label: "HR Round", tone: "bg-primary/10 text-primary" };
     default:
       return {
         label: INTERVIEW_ROUND_LABELS[round as InterviewRound] ?? String(round),
@@ -85,7 +93,7 @@ function roundBadge(round: InterviewRound | string): { label: string; tone: stri
 function statusBadge(status: AtsInterview["status"]): { label: string; tone: string } {
   switch (status) {
     case "scheduled":
-      return { label: "Scheduled", tone: "bg-[#F5F3FF] text-[#7C3AED]" };
+      return { label: "Scheduled", tone: "bg-primary/10 text-primary" };
     case "completed":
       return { label: "Completed", tone: "bg-[#ECFDF5] text-[#00A866]" };
     case "cancelled":
@@ -136,6 +144,49 @@ function inDateRange(date: string, from: string, to: string): boolean {
   return true;
 }
 
+function interviewSortKey(i: AtsInterview): string {
+  return `${i.date || ""}T${i.time || "00:00"}`;
+}
+
+function matchesFilters(
+  interview: AtsInterview,
+  filters: Filters,
+  candById: Map<string, AtsCandidate>,
+  jobById: Map<string, JobOpening>,
+): boolean {
+  if (filters.status !== "all" && interview.status !== filters.status) return false;
+  if (filters.round !== "all" && (interview.round || interview.interviewType) !== filters.round) {
+    return false;
+  }
+  if (filters.recruiter !== "all") {
+    const names = [interview.interviewer, ...(interview.participantNames ?? [])]
+      .map((n) => n.trim())
+      .filter(Boolean);
+    if (!names.includes(filters.recruiter)) return false;
+  }
+  if (!inDateRange(interview.date, filters.dateFrom, filters.dateTo)) return false;
+  const q = filters.query.trim().toLowerCase();
+  if (!q) return true;
+  const cand = candById.get(interview.candidateId);
+  const job = jobById.get(interview.jobId);
+  return [
+    cand?.fullName,
+    cand?.email,
+    job?.title,
+    interview.interviewer,
+    ...(interview.participantNames ?? []),
+    interview.interviewCode,
+  ]
+    .join(" ")
+    .toLowerCase()
+    .includes(q);
+}
+
+function groupMatchesTab(group: CandidateGroup, statusTab: StatusTab): boolean {
+  if (statusTab === "all") return true;
+  return group.interviews.some((i) => i.status === statusTab);
+}
+
 export function InterviewsPanel({
   interviews,
   candidates,
@@ -152,7 +203,7 @@ export function InterviewsPanel({
   const [filters, setFilters] = useState<Filters>(EMPTY);
   const [statusTab, setStatusTab] = useState<StatusTab>("all");
   const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const candById = useMemo(() => new Map(candidates.map((c) => [c.id, c])), [candidates]);
   const jobById = useMemo(() => new Map(jobs.map((j) => [j.id, j])), [jobs]);
@@ -171,29 +222,55 @@ export function InterviewsPanel({
     ];
   }, [interviews]);
 
-  const counts = useMemo(() => {
-    const base = interviews.filter((i) => matchesFilters(i, filters, candById, jobById, "all"));
-    return {
-      all: base.length,
-      scheduled: base.filter((i) => i.status === "scheduled").length,
-      completed: base.filter((i) => i.status === "completed").length,
-      rescheduled: base.filter((i) => i.status === "rescheduled").length,
-      cancelled: base.filter((i) => i.status === "cancelled").length,
-    };
+  const groups = useMemo((): CandidateGroup[] => {
+    const filteredInterviews = interviews.filter((i) =>
+      matchesFilters(i, filters, candById, jobById),
+    );
+    const map = new Map<string, AtsInterview[]>();
+    for (const i of filteredInterviews) {
+      const list = map.get(i.candidateId) ?? [];
+      list.push(i);
+      map.set(i.candidateId, list);
+    }
+    const rows: CandidateGroup[] = [];
+    for (const [candidateId, list] of map) {
+      const sorted = list
+        .slice()
+        .sort((a, b) => interviewSortKey(b).localeCompare(interviewSortKey(a)));
+      const latest = sorted[0];
+      rows.push({
+        candidateId,
+        candidate: candById.get(candidateId),
+        interviews: sorted,
+        latest,
+        job: jobById.get(latest.jobId),
+      });
+    }
+    return rows.sort((a, b) =>
+      (a.candidate?.fullName || "").localeCompare(b.candidate?.fullName || ""),
+    );
   }, [interviews, filters, candById, jobById]);
 
-  const filtered = useMemo(
-    () => interviews.filter((i) => matchesFilters(i, filters, candById, jobById, statusTab)),
-    [interviews, filters, candById, jobById, statusTab],
+  const counts = useMemo(() => {
+    return {
+      all: groups.length,
+      scheduled: groups.filter((g) => g.interviews.some((i) => i.status === "scheduled")).length,
+      completed: groups.filter((g) => g.interviews.some((i) => i.status === "completed")).length,
+      rescheduled: groups.filter((g) => g.interviews.some((i) => i.status === "rescheduled"))
+        .length,
+      cancelled: groups.filter((g) => g.interviews.some((i) => i.status === "cancelled")).length,
+    };
+  }, [groups]);
+
+  const filteredGroups = useMemo(
+    () => groups.filter((g) => groupMatchesTab(g, statusTab)),
+    [groups, statusTab],
   );
 
   const pageRows = useMemo(() => {
     const start = (page - 1) * PAGE;
-    return filtered.slice(start, start + PAGE);
-  }, [filtered, page]);
-
-  const allPageSelected =
-    pageRows.length > 0 && pageRows.every((i) => selected.has(i.id));
+    return filteredGroups.slice(start, start + PAGE);
+  }, [filteredGroups, page]);
 
   function updateFilter<K extends keyof Filters>(key: K, value: Filters[K]) {
     setFilters((f) => ({ ...f, [key]: value }));
@@ -204,6 +281,7 @@ export function InterviewsPanel({
     setFilters(EMPTY);
     setStatusTab("all");
     setPage(1);
+    setExpandedId(null);
   }
 
   const statusTabs: { id: StatusTab; label: string; count: number }[] = [
@@ -221,7 +299,7 @@ export function InterviewsPanel({
         <Button
           type="button"
           size="sm"
-          className="h-9 cursor-pointer rounded-full bg-[#7C3AED] px-3.5 text-[13px] text-white hover:bg-[#6D28D9]"
+          className="h-9 cursor-pointer rounded-full bg-primary px-3.5 text-[13px] text-primary-foreground hover:bg-primary/90"
           onClick={onSchedule}
         >
           <Plus className="size-3.5" strokeWidth={2} />
@@ -277,7 +355,7 @@ export function InterviewsPanel({
           <button
             type="button"
             onClick={resetFilters}
-            className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium text-[#7C3AED] hover:bg-[#F4EDFB]"
+            className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium text-primary hover:bg-primary/10"
           >
             <RotateCcw className="size-3.5" strokeWidth={1.75} />
             Reset
@@ -293,6 +371,7 @@ export function InterviewsPanel({
             onClick={() => {
               setStatusTab(t.id);
               setPage(1);
+              setExpandedId(null);
             }}
             className={cn(
               "cursor-pointer border-b-2 px-3 py-1.5 text-[13px] font-medium transition-colors",
@@ -307,183 +386,232 @@ export function InterviewsPanel({
       </div>
 
       <div className="overflow-hidden rounded-[12px] border border-[#EEEFF3] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-        {filtered.length === 0 ? (
+        {filteredGroups.length === 0 ? (
           <div className="flex flex-col items-center gap-3 px-4 py-12 text-center">
             <p className="text-sm text-muted-foreground">No interviews match these filters</p>
-            <Button size="sm" className="cursor-pointer bg-[#7C3AED] text-white hover:bg-[#6D28D9]" onClick={onSchedule}>
+            <Button
+              size="sm"
+              className="cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90"
+              onClick={onSchedule}
+            >
               Schedule Interview
             </Button>
           </div>
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1080px] text-left">
+              <table className="w-full min-w-[920px] text-left">
                 <thead>
                   <tr className="border-b border-[#F3F4F6] text-[11px] font-medium tracking-wide text-[#9CA3AF] uppercase">
-                    <th className="w-10 px-3 py-2">
-                      <input
-                        type="checkbox"
-                        className="cursor-pointer accent-primary"
-                        checked={allPageSelected}
-                        onChange={(e) => {
-                          setSelected((prev) => {
-                            const next = new Set(prev);
-                            for (const row of pageRows) {
-                              if (e.target.checked) next.add(row.id);
-                              else next.delete(row.id);
-                            }
-                            return next;
-                          });
-                        }}
-                      />
-                    </th>
+                    <th className="w-8 px-3 py-2 font-medium" />
                     <th className="px-3 py-2 font-medium">Candidate</th>
-                    <th className="px-3 py-2 font-medium">Job Title</th>
-                    <th className="px-3 py-2 font-medium">Interview Type</th>
-                    <th className="px-3 py-2 font-medium">Interviewers</th>
-                    <th className="px-3 py-2 font-medium">Date & Time</th>
+                    <th className="px-3 py-2 font-medium">Job</th>
+                    <th className="px-3 py-2 font-medium">Rounds</th>
+                    <th className="px-3 py-2 font-medium">Latest interview</th>
                     <th className="px-3 py-2 font-medium">Status</th>
                     <th className="px-3 py-2 font-medium">Feedback</th>
                     <th className="px-3 py-2 font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {pageRows.map((interview, idx) => {
-                    const cand = candById.get(interview.candidateId);
-                    const job = jobById.get(interview.jobId);
-                    const type = roundBadge(interview.round || interview.interviewType);
-                    const st = statusBadge(interview.status);
-                    const fb = feedbackBadge(interview);
-                    const names =
-                      interview.participantNames?.length > 0
-                        ? interview.participantNames
-                        : interview.interviewer
-                          ? [interview.interviewer]
-                          : [];
+                  {pageRows.map((group, idx) => {
+                    const expanded = expandedId === group.candidateId;
+                    const latestType = roundBadge(
+                      group.latest.round || group.latest.interviewType,
+                    );
+                    const latestStatus = statusBadge(group.latest.status);
+                    const latestFb = feedbackBadge(group.latest);
+                    const scheduledCount = group.interviews.filter(
+                      (i) => i.status === "scheduled",
+                    ).length;
+                    const completedCount = group.interviews.filter(
+                      (i) => i.status === "completed",
+                    ).length;
+
                     return (
-                      <tr
-                        key={interview.id}
-                        className="border-b border-[#F8F8FA] text-[12px] text-[#374151] last:border-0 transition-colors duration-150 hover:bg-[#FAFAFC]"
-                      >
-                        <td className="px-3 py-2">
-                          <input
-                            type="checkbox"
-                            className="cursor-pointer accent-primary"
-                            checked={selected.has(interview.id)}
-                            onChange={(e) => {
-                              setSelected((prev) => {
-                                const next = new Set(prev);
-                                if (e.target.checked) next.add(interview.id);
-                                else next.delete(interview.id);
-                                return next;
-                              });
-                            }}
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <span className="flex items-center gap-2.5">
-                            <InitialsAvatar name={cand?.fullName ?? "?"} toneIndex={idx} />
-                            <span className="min-w-0">
-                              <span className="block font-semibold text-[#111827]">
-                                {cand?.fullName ?? "—"}
+                      <Fragment key={group.candidateId}>
+                        <tr className="border-b border-[#F8F8FA] text-[12px] text-[#374151] transition-colors duration-150 hover:bg-[#FAFAFC]">
+                          <td className="px-3 py-2">
+                            <button
+                              type="button"
+                              aria-label={expanded ? "Collapse history" : "Expand history"}
+                              className="inline-flex size-7 cursor-pointer items-center justify-center rounded-md text-[#9CA3AF] transition-colors duration-150 hover:bg-[#F3F4F6] hover:text-[#374151]"
+                              onClick={() =>
+                                setExpandedId(expanded ? null : group.candidateId)
+                              }
+                            >
+                              {expanded ? (
+                                <ChevronDown className="size-4" />
+                              ) : (
+                                <ChevronRight className="size-4" />
+                              )}
+                            </button>
+                          </td>
+                          <td className="px-3 py-2">
+                            <button
+                              type="button"
+                              className="flex w-full cursor-pointer items-center gap-2.5 text-left"
+                              onClick={() =>
+                                setExpandedId(expanded ? null : group.candidateId)
+                              }
+                            >
+                              <InitialsAvatar
+                                name={group.candidate?.fullName ?? "?"}
+                                toneIndex={idx}
+                              />
+                              <span className="min-w-0">
+                                <span className="block font-semibold text-[#111827]">
+                                  {group.candidate?.fullName ?? "—"}
+                                </span>
+                                <span className="block truncate text-[11px] text-[#9CA3AF]">
+                                  {group.candidate?.email || "—"}
+                                </span>
                               </span>
-                              <span className="block truncate text-[11px] text-[#9CA3AF]">
-                                {cand?.email || interview.interviewCode}
-                              </span>
+                            </button>
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {group.job?.title ?? "—"}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className="text-[12px] font-medium text-[#111827]">
+                              {group.interviews.length} round
+                              {group.interviews.length === 1 ? "" : "s"}
                             </span>
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap">{job?.title ?? "—"}</td>
-                        <td className="px-3 py-2">
-                          <span
-                            className={cn(
-                              "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap",
-                              type.tone,
-                            )}
-                          >
-                            {type.label}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2">
-                          <InterviewerStack names={names} />
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          <span className="block font-medium text-[#111827]">
-                            {formatPostedOn(interview.date)}
-                          </span>
-                          <span className="block text-[11px] text-[#9CA3AF]">
-                            {interviewTimeWindow(interview.time)}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2">
-                          <span
-                            className={cn(
-                              "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
-                              st.tone,
-                            )}
-                          >
-                            {st.label}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2">
-                          {fb ? (
+                            <span className="mt-0.5 block text-[10px] text-[#9CA3AF]">
+                              {completedCount} done
+                              {scheduledCount ? ` · ${scheduledCount} scheduled` : ""}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <span
+                              className={cn(
+                                "mb-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                                latestType.tone,
+                              )}
+                            >
+                              {latestType.label}
+                            </span>
+                            <span className="block font-medium text-[#111827]">
+                              {formatPostedOn(group.latest.date)}
+                            </span>
+                            <span className="block text-[11px] text-[#9CA3AF]">
+                              {interviewTimeWindow(group.latest.time)}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
                             <span
                               className={cn(
                                 "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
-                                fb.tone,
+                                latestStatus.tone,
                               )}
                             >
-                              {fb.label}
+                              {latestStatus.label}
                             </span>
-                          ) : (
-                            <span className="text-[#9CA3AF]">—</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2">
-                          <div className="flex items-center gap-1">
-                            {interview.meetingLink ? (
-                              <a
-                                href={interview.meetingLink}
-                                target="_blank"
-                                rel="noreferrer"
-                                title="Join meeting"
-                                className="inline-flex size-7 cursor-pointer items-center justify-center rounded-md border border-[#EEEFF3] text-[#6B7280] transition-colors hover:bg-[#F8F8FC] hover:text-[#111827]"
-                              >
-                                <Video className="size-3.5" />
-                              </a>
-                            ) : (
+                          </td>
+                          <td className="px-3 py-2">
+                            {latestFb ? (
                               <span
-                                title="No meeting link"
-                                className="inline-flex size-7 items-center justify-center rounded-md border border-[#EEEFF3] text-[#D1D5DB]"
+                                className={cn(
+                                  "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
+                                  latestFb.tone,
+                                )}
                               >
-                                <Video className="size-3.5" />
+                                {latestFb.label}
                               </span>
+                            ) : (
+                              <span className="text-[#9CA3AF]">—</span>
                             )}
+                          </td>
+                          <td className="px-3 py-2">
                             <button
                               type="button"
-                              title="Record outcome"
-                              className="inline-flex size-7 cursor-pointer items-center justify-center rounded-md border border-[#EEEFF3] text-[#6B7280] transition-colors hover:bg-[#F8F8FC] hover:text-[#111827]"
-                              onClick={() => onOutcome(interview)}
+                              title="Edit / record outcome"
+                              className="inline-flex size-7 cursor-pointer items-center justify-center rounded-md border border-[#EEEFF3] text-[#6B7280] transition-colors duration-150 hover:bg-[#F8F8FC] hover:text-[#111827]"
+                              onClick={() => onOutcome(group.latest)}
                             >
                               <Pencil className="size-3.5" />
                             </button>
-                            <VerticalKebab
-                              items={[
-                                { label: "Record outcome", onClick: () => onOutcome(interview) },
-                                ...(interview.meetingLink
-                                  ? [
-                                      {
-                                        label: "Open meeting link",
-                                        onClick: () =>
-                                          window.open(interview.meetingLink, "_blank", "noopener"),
-                                      },
-                                    ]
-                                  : []),
-                              ]}
-                            />
-                          </div>
-                        </td>
-                      </tr>
+                          </td>
+                        </tr>
+                        {expanded ? (
+                          <tr className="border-b border-[#F8F8FA] bg-[#FAFBFC]">
+                            <td colSpan={8} className="px-3 py-3">
+                              <p className="mb-2 text-[11px] font-semibold tracking-wide text-[#6B7280] uppercase">
+                                Interview history
+                              </p>
+                              <ul className="space-y-2">
+                                {group.interviews.map((interview) => {
+                                  const type = roundBadge(
+                                    interview.round || interview.interviewType,
+                                  );
+                                  const st = statusBadge(interview.status);
+                                  const fb = feedbackBadge(interview);
+                                  const names =
+                                    interview.participantNames?.length > 0
+                                      ? interview.participantNames
+                                      : interview.interviewer
+                                        ? [interview.interviewer]
+                                        : [];
+                                  const job = jobById.get(interview.jobId);
+                                  return (
+                                    <li
+                                      key={interview.id}
+                                      className="flex flex-wrap items-center gap-3 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2.5"
+                                    >
+                                      <span
+                                        className={cn(
+                                          "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
+                                          type.tone,
+                                        )}
+                                      >
+                                        {type.label}
+                                      </span>
+                                      <span className="min-w-[140px] text-[12px] text-[#111827]">
+                                        <span className="block font-medium">
+                                          {formatPostedOn(interview.date)}
+                                        </span>
+                                        <span className="text-[11px] text-[#9CA3AF]">
+                                          {interviewTimeWindow(interview.time)}
+                                        </span>
+                                      </span>
+                                      <span className="text-[11px] text-[#6B7280]">
+                                        {job?.title ?? "—"}
+                                      </span>
+                                      <InterviewerStack names={names} />
+                                      <span
+                                        className={cn(
+                                          "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
+                                          st.tone,
+                                        )}
+                                      >
+                                        {st.label}
+                                      </span>
+                                      {fb ? (
+                                        <span
+                                          className={cn(
+                                            "inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
+                                            fb.tone,
+                                          )}
+                                        >
+                                          {fb.label}
+                                        </span>
+                                      ) : null}
+                                      <button
+                                        type="button"
+                                        title="Edit / record outcome"
+                                        className="ml-auto inline-flex size-7 cursor-pointer items-center justify-center rounded-md border border-[#EEEFF3] text-[#6B7280] transition-colors duration-150 hover:bg-[#F8F8FC] hover:text-[#111827]"
+                                        onClick={() => onOutcome(interview)}
+                                      >
+                                        <Pencil className="size-3.5" />
+                                      </button>
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
                     );
                   })}
                 </tbody>
@@ -493,7 +621,7 @@ export function InterviewsPanel({
               <EmsPagination
                 page={page}
                 pageSize={PAGE}
-                total={filtered.length}
+                total={filteredGroups.length}
                 onPageChange={setPage}
               />
             </div>
@@ -526,43 +654,4 @@ function InterviewerStack({ names }: { names: string[] }) {
       ) : null}
     </span>
   );
-}
-
-function matchesFilters(
-  interview: AtsInterview,
-  filters: Filters,
-  candById: Map<string, AtsCandidate>,
-  jobById: Map<string, JobOpening>,
-  statusTab: StatusTab,
-): boolean {
-  if (statusTab !== "all" && interview.status !== statusTab) return false;
-  if (filters.status !== "all" && interview.status !== filters.status) return false;
-  if (filters.round !== "all" && (interview.round || interview.interviewType) !== filters.round) {
-    return false;
-  }
-  if (filters.recruiter !== "all") {
-    const names = [
-      interview.interviewer,
-      ...(interview.participantNames ?? []),
-    ]
-      .map((n) => n.trim())
-      .filter(Boolean);
-    if (!names.includes(filters.recruiter)) return false;
-  }
-  if (!inDateRange(interview.date, filters.dateFrom, filters.dateTo)) return false;
-  const q = filters.query.trim().toLowerCase();
-  if (!q) return true;
-  const cand = candById.get(interview.candidateId);
-  const job = jobById.get(interview.jobId);
-  return [
-    cand?.fullName,
-    cand?.email,
-    job?.title,
-    interview.interviewer,
-    ...(interview.participantNames ?? []),
-    interview.interviewCode,
-  ]
-    .join(" ")
-    .toLowerCase()
-    .includes(q);
 }

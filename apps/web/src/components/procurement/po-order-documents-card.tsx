@@ -326,16 +326,16 @@ export function PoOrderDocumentsCard({
         <div className="min-w-0 space-y-0.5">
           <h2 className="flex items-center gap-2 text-sm font-bold tracking-tight">
             <Paperclip className="size-3.5 text-[#0369A1]" aria-hidden />
-            OVF documents
+            CRM documents
           </h2>
           <p className="text-xs text-muted-foreground">
-            Files from the OVF, quote, and opportunity.
+            Files from the opportunity, quote, and OVF (when linked).
           </p>
         </div>
         <DocumentList
           loading={loading}
           rows={ovfDocuments}
-          emptyLabel="No OVF documents attached."
+          emptyLabel="No CRM documents attached."
           openingId={openingId}
           downloadingId={downloadingId}
         />

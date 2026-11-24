@@ -127,11 +127,46 @@ def test_start_blocks_pending_transfer() -> None:
         validator.validate_start_readiness(ctx, row)
 
 
-def test_update_only_draft() -> None:
+def test_update_blocks_structural_fields_after_draft() -> None:
     validator = MaintenanceValidator(MagicMock())
     row = SimpleNamespace(status="submitted", asset_id=uuid4())
-    with pytest.raises(MaintenanceValidationError, match="Only draft"):
+    with pytest.raises(MaintenanceValidationError, match="Only cost, technician, and vendor"):
         validator.validate_update_fields(_ctx(), row, {"maintenance_type": "emergency"})
+
+
+def test_update_allows_service_details_while_in_progress() -> None:
+    validator = MaintenanceValidator(MagicMock())
+    row = SimpleNamespace(
+        status="in_progress",
+        asset_id=uuid4(),
+        vendor_id=None,
+        cost_amount=None,
+        technician_employee_id=None,
+    )
+    vendor_id = uuid4()
+    technician_id = uuid4()
+    with (
+        patch.object(validator._master, "get_vendor", return_value=object()) as get_vendor,
+        patch.object(validator._master, "get_employee", return_value=object()) as get_employee,
+    ):
+        validator.validate_update_fields(
+            _ctx(),
+            row,
+            {
+                "cost_amount": "125.50",
+                "vendor_id": vendor_id,
+                "technician_employee_id": technician_id,
+            },
+        )
+    get_vendor.assert_called_once()
+    get_employee.assert_called_once()
+
+
+def test_update_blocks_completed_work_order() -> None:
+    validator = MaintenanceValidator(MagicMock())
+    row = SimpleNamespace(status="completed", asset_id=uuid4())
+    with pytest.raises(MaintenanceValidationError, match="Completed or cancelled"):
+        validator.validate_update_fields(_ctx(), row, {"cost_amount": 10})
 
 
 def test_reopen_blocked_when_another_open_work_order_exists() -> None:

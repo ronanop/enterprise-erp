@@ -21,6 +21,8 @@ from modules.crm.schemas import (
     QuoteLineUpdate,
     QuoteMarginSummaryResponse,
     QuoteResponse,
+    QuoteRevisionPrintPayload,
+    QuoteRevisionRow,
     QuoteSendForApprovalRequest,
     QuoteSplitBalanceRow,
     QuoteSplitRequest,
@@ -188,6 +190,47 @@ def get_quote_margin(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=QuoteService(db).margin_summary(ctx, quote_id))
+
+
+@quotes_router.get("/{quote_id}/revisions", response_model=APIResponse[list[QuoteRevisionRow]])
+def list_quote_revisions(
+    quote_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.quote:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=QuoteService(db).list_revisions(ctx, quote_id))
+
+
+@quotes_router.get(
+    "/{quote_id}/revisions/{revision_no}/print-payload",
+    response_model=APIResponse[QuoteRevisionPrintPayload],
+)
+def get_quote_revision_print_payload(
+    quote_id: UUID,
+    revision_no: int,
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.quote:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=QuoteService(db).revision_print_payload(ctx, quote_id, revision_no),
+    )
+
+
+@quotes_router.post(
+    "/{quote_id}/revisions/current/discard",
+    response_model=APIResponse[QuoteResponse],
+)
+def discard_current_quote_revision(
+    quote_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.quote:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Remove the unapproved current revision and restore the prior approved version."""
+    return APIResponse(
+        message="OK",
+        data=QuoteService(db).discard_current_revision(ctx, quote_id),
+    )
 
 
 @quotes_router.post("/{quote_id}/send-for-approval", response_model=APIResponse[QuoteResponse])

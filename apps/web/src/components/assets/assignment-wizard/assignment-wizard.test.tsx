@@ -72,14 +72,14 @@ describe("ReturnWizard cancel", () => {
 });
 
 describe("WizardShell", () => {
-  it("renders branch label when provided", () => {
+  it("renders title without branch label", () => {
     render(
-      <WizardShell title="T" stepTitle="S" branchLabel="HQ" footer={<div />}>
+      <WizardShell title="T" stepTitle="S" footer={<div />}>
         body
       </WizardShell>,
     );
-    expect(screen.getByText(/Branch:/)).toBeInTheDocument();
-    expect(screen.getByText("HQ")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "T" })).toBeInTheDocument();
+    expect(screen.queryByText(/Branch:/)).not.toBeInTheDocument();
   });
 });
 
@@ -248,7 +248,8 @@ describe("AssignmentWizard", () => {
     expect(screen.queryByRole("heading", { name: /^Asset$/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Next$/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Submit$/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("progressbar", { name: /wizard progress/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Save draft/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("progressbar", { name: /wizard progress/i })).not.toBeInTheDocument();
   });
 
   it("blocks Next on allocation until employee is set", async () => {
@@ -316,7 +317,7 @@ describe("AssignmentWizard", () => {
     expect(screen.getByTestId("issue-step-error")).toHaveTextContent(/Delivery reference/i);
   });
 
-  it("shows missing summary on review after clearing identity via step rail", async () => {
+  it("disables submit on review after clearing identity via step rail", async () => {
     const user = userEvent.setup();
     render(
       <AssignmentWizard
@@ -333,14 +334,21 @@ describe("AssignmentWizard", () => {
     await user.click(screen.getAllByRole("button", { name: /Allocation & Employee/i })[0]!);
     await user.click(screen.getByRole("button", { name: /Enter manually/i }));
     await user.click(screen.getAllByRole("button", { name: /Review & Submit/i })[0]!);
-    expect(screen.getByTestId("issue-missing-summary")).toBeInTheDocument();
+    expect(screen.queryByTestId("issue-missing-summary")).toBeNull();
     expect(screen.getByRole("button", { name: /^Submit$/i })).toBeDisabled();
   });
 
-  it("calls onSaveDraft from footer without requiring completeness", async () => {
+  it("calls onSaveDraft from review footer without requiring completeness", async () => {
     const user = userEvent.setup();
     const onSaveDraft = vi.fn();
-    render(<AssignmentWizard onCancel={vi.fn()} onSaveDraft={onSaveDraft} />);
+    render(
+      <AssignmentWizard
+        onCancel={vi.fn()}
+        onSaveDraft={onSaveDraft}
+        initialState={{ employeeId: "emp-1", assetId: "asset-1" }}
+      />,
+    );
+    await advanceToReview(user);
     await user.click(screen.getByRole("button", { name: /Save draft/i }));
     expect(onSaveDraft).toHaveBeenCalled();
   });
@@ -374,21 +382,24 @@ describe("ReturnWizard", () => {
     expect(screen.getByText(/How is the asset being returned/i)).toBeInTheDocument();
   });
 
-  it("selects outdated condition", async () => {
+  it("selects outdated condition and hides remarks on review", async () => {
     const user = userEvent.setup();
     render(<ReturnWizard onCancel={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: /Next/i }));
     await user.click(screen.getByRole("radio", { name: /Outdated/i }));
     await user.click(screen.getByRole("button", { name: /Next/i }));
     await user.click(screen.getByRole("button", { name: /Next/i }));
-    expect(screen.getByLabelText(/Return remarks/i)).toBeInTheDocument();
+    expect(screen.getByText(/Outdated — Send to Disposal/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Return remarks/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Reason \(audit\)/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: /Not working/i })).not.toBeInTheDocument();
   });
 
   it("calls onFinish on confirm", async () => {
     const user = userEvent.setup();
     const onFinish = vi.fn();
     render(<ReturnWizard onCancel={vi.fn()} onFinish={onFinish} />);
-    for (let i = 0; i < 4; i += 1) {
+    for (let i = 0; i < 3; i += 1) {
       await user.click(screen.getByRole("button", { name: /Next/i }));
     }
     await user.click(screen.getByRole("button", { name: /Confirm return/i }));
@@ -396,10 +407,15 @@ describe("ReturnWizard", () => {
       expect.objectContaining({ returnCondition: "good" }),
     );
   });
+
+  it("does not render a progress bar", () => {
+    render(<ReturnWizard onCancel={vi.fn()} />);
+    expect(screen.queryByRole("progressbar", { name: /wizard progress/i })).not.toBeInTheDocument();
+  });
 });
 
 describe("ReturnConditionStep", () => {
-  it("defaults to good", () => {
+  it("defaults to good and omits pending disposal", () => {
     render(
       <ReturnConditionStep
         state={{ returnCondition: "good", returnRemarks: "", reason: "", componentReturns: [] }}
@@ -407,19 +423,18 @@ describe("ReturnConditionStep", () => {
       />,
     );
     expect(screen.getByRole("radio", { name: /Good/i })).toBeChecked();
+    expect(screen.queryByRole("radio", { name: /Not working/i })).not.toBeInTheDocument();
   });
 });
 
-describe("AssetStep empty state", () => {
-  it("shows empty state when no assets", () => {
+describe("AssetStep locked selection", () => {
+  it("prompts to open All Assets when no asset is preselected", () => {
     render(
       <AssetStep state={EMPTY_ASSIGNMENT_WIZARD_STATE} onChange={vi.fn()} assets={[]} />,
     );
-    expect(screen.getByTestId("assignment-no-ready-assets")).toBeInTheDocument();
-    expect(screen.getByText("No assets are currently ready to move.")).toBeInTheDocument();
-    expect(
-      screen.getByText("Register and approve an asset before assigning it."),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("assignment-asset-locked-empty")).toBeInTheDocument();
+    expect(screen.getByText("No asset selected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Open All Assets/i })).toBeInTheDocument();
   });
 
   it("shows unavailable deep-link message and choose-another action", async () => {
@@ -430,7 +445,7 @@ describe("AssetStep empty state", () => {
         state={EMPTY_ASSIGNMENT_WIZARD_STATE}
         onChange={vi.fn()}
         assets={[]}
-        unavailableAssetMessage="Choose another Ready to Move asset."
+        unavailableAssetMessage="Choose another In Stock asset."
         onClearUnavailableAsset={onClear}
       />,
     );
@@ -438,15 +453,15 @@ describe("AssetStep empty state", () => {
     expect(
       screen.getByText("This asset is no longer available for assignment."),
     ).toBeInTheDocument();
-    expect(screen.getByText("Choose another Ready to Move asset.")).toBeInTheDocument();
+    expect(screen.getByText("Choose another In Stock asset.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Choose another asset/i }));
     expect(onClear).toHaveBeenCalled();
   });
 
-  it("lists only provided eligible assets with operational badge", () => {
+  it("shows only the preselected asset card", () => {
     render(
       <AssetStep
-        state={EMPTY_ASSIGNMENT_WIZARD_STATE}
+        state={{ ...EMPTY_ASSIGNMENT_WIZARD_STATE, assetId: "a1" }}
         onChange={vi.fn()}
         assets={[
           {
@@ -464,10 +479,11 @@ describe("AssetStep empty state", () => {
         ]}
       />,
     );
-    expect(screen.getByRole("option", { name: /Laptop One/i })).toBeInTheDocument();
-    expect(screen.getByText("Ready to Move")).toBeInTheDocument();
+    expect(screen.getByTestId("assignment-asset-selected")).toBeInTheDocument();
+    expect(screen.getByText("Laptop One")).toBeInTheDocument();
+    expect(screen.getByText("In Stock")).toBeInTheDocument();
     expect(screen.getByText(/S\/N: SN-1/)).toBeInTheDocument();
-    expect(screen.queryByText("Assigned")).not.toBeInTheDocument();
+    expect(screen.queryByRole("listbox", { name: /Select asset/i })).not.toBeInTheDocument();
   });
 });
 
@@ -481,8 +497,14 @@ describe("IssuedItemsStep empty state", () => {
 });
 
 describe("RETURN_WIZARD_STEPS", () => {
-  it("has five steps including components reconciliation", () => {
-    expect(RETURN_WIZARD_STEPS).toHaveLength(5);
+  it("has four steps with remarks folded into review", () => {
+    expect(RETURN_WIZARD_STEPS).toHaveLength(4);
+    expect(RETURN_WIZARD_STEPS.map((s) => s.id)).toEqual([
+      "summary",
+      "condition",
+      "components",
+      "review",
+    ]);
   });
 });
 
@@ -524,8 +546,8 @@ describe("WizardFooter back", () => {
 });
 
 describe("responsive layout", () => {
-  it("renders a step progress bar on the issue wizard", () => {
+  it("does not render a step progress bar on the issue wizard", () => {
     render(<AssignmentWizard onCancel={vi.fn()} />);
-    expect(screen.getByRole("progressbar", { name: /wizard progress/i })).toBeInTheDocument();
+    expect(screen.queryByRole("progressbar", { name: /wizard progress/i })).not.toBeInTheDocument();
   });
 });

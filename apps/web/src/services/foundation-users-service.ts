@@ -67,17 +67,21 @@ export async function syncHrmsUsers(): Promise<HrmsUserSyncResult> {
   return res.data;
 }
 
-/** ERP admin: give a user Admin or User access to one module. */
+/** ERP admin: give a user Admin or User access to one or more modules (one email). */
 export async function grantModuleAccess(
   userId: string,
-  moduleKey: string,
+  moduleKeys: string | string[],
   role: ModuleAccessRole,
   serviceJobRole?: string,
 ): Promise<FoundationUser> {
+  const keys = (Array.isArray(moduleKeys) ? moduleKeys : [moduleKeys])
+    .map((k) => k.trim())
+    .filter(Boolean);
   const res = await apiClient<FoundationUser>(`/users/${userId}/module-access`, {
     method: "POST",
     body: {
-      module_key: moduleKey,
+      module_keys: keys,
+      ...(keys.length === 1 ? { module_key: keys[0] } : {}),
       role,
       ...(serviceJobRole ? { service_job_role: serviceJobRole } : {}),
     },

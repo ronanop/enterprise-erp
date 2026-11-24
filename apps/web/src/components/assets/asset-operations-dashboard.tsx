@@ -2,311 +2,214 @@
 
 import { useRouter } from "next/navigation";
 import {
-  Archive,
   AlertCircle,
-  ArrowLeftRight,
   Boxes,
-  Clock,
-  Globe,
+  ChevronRight,
   Package,
   PackagePlus,
   Plus,
-  ScanSearch,
   Trash2,
   Truck,
-  Undo2,
   UserCheck,
   UserPlus,
+  type LucideIcon,
 } from "lucide-react";
 
+import { AssetReportsWorkspace } from "@/components/assets/asset-reports-workspace";
 import {
   BRANCH_ALL_VALUE,
-  QuickActionCard,
-  StatCard,
-  StatusBadge,
-  type StatCardTrend,
-  TABLE_SERIAL_HEADER_LABEL,
-  tableRowSerial,
-  tableRowSerialFromIndex,
-  tableSerialCellClassName,
-  tableSerialHeaderClassName,
-} from "@/components/assets/shared";
-import {
   ASSETS_ACCENT_BTN,
-  ASSETS_SURFACE_CARD,
   AssetsPremiumPage,
-} from "@/components/assets/shared/premium-surface";
+} from "@/components/assets/shared";
 import type {
   AssetOperationsKpiModel,
   AssetOperationsKpiTrends,
-  DashboardTransferRow,
-  LocationBreakdownRow,
 } from "@/components/assets/dashboard.mapper";
 import {
   navigateDashboardKpi,
   navigateDashboardQuickAction,
   type DashboardKpiId,
+  type DashboardQuickActionId,
 } from "@/components/assets/navigation/dashboard-navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 export type AssetOperationsDashboardProps = {
   kpisLoading?: boolean;
-  transfersLoading?: boolean;
   kpis?: AssetOperationsKpiModel | null;
   kpiTrends?: AssetOperationsKpiTrends | null;
-  byLocationRows?: LocationBreakdownRow[];
-  transferRows?: DashboardTransferRow[];
-  transferTotal?: number;
-  transferError?: string | null;
   errorMessage?: string | null;
   onRetry?: () => void;
-  branchLookup?: Record<string, string>;
   className?: string;
 };
+
+type KpiTone = "default" | "success" | "warning" | "danger";
+
+type OpsKpiDef = {
+  id: DashboardKpiId;
+  label: string;
+  ariaLabel: string;
+  icon: LucideIcon;
+  tone: KpiTone;
+  valueKey: keyof AssetOperationsKpiModel;
+  trendKey?: keyof AssetOperationsKpiTrends;
+};
+
+const KPI_DEFS: OpsKpiDef[] = [
+  {
+    id: "total",
+    label: "Total Assets",
+    ariaLabel: "Open All Assets",
+    icon: Boxes,
+    tone: "default",
+    valueKey: "totalAssets",
+  },
+  {
+    id: "ready",
+    label: "In Stock",
+    ariaLabel: "Open In Stock assets",
+    icon: Truck,
+    tone: "warning",
+    valueKey: "readyToMove",
+    trendKey: "readyToMove",
+  },
+  {
+    id: "assigned",
+    label: "Assigned",
+    ariaLabel: "Open Assigned assets",
+    icon: UserCheck,
+    tone: "success",
+    valueKey: "assigned",
+    trendKey: "assigned",
+  },
+  {
+    id: "disposed",
+    label: "Disposed",
+    ariaLabel: "Open Disposed assets",
+    icon: Trash2,
+    tone: "danger",
+    valueKey: "disposed",
+    trendKey: "disposed",
+  },
+];
+
+const HERO_TONE_RING: Record<KpiTone, string> = {
+  default: "",
+  success: "ring-1 ring-inset ring-emerald-300/25",
+  warning: "ring-1 ring-inset ring-amber-300/30",
+  danger: "ring-1 ring-inset ring-red-300/30",
+};
+
+const QUICK_ACTIONS: {
+  id: DashboardQuickActionId;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+}[] = [
+    {
+      id: "register",
+      title: "Register Asset",
+      description: "Add a new asset to inventory",
+      icon: PackagePlus,
+    },
+    {
+      id: "assign",
+      title: "Assign Asset",
+      description: "Issue asset to an employee",
+      icon: UserPlus,
+    },
+  ];
 
 function formatKpiValue(value: number | undefined): string {
   if (value === undefined) return "—";
   return String(value);
 }
 
-function resolveBranchLabel(
-  branchId: string | null,
-  lookup: Record<string, string>,
-): string {
-  if (!branchId) return "—";
-  return lookup[branchId] ?? branchId.slice(0, 8);
-}
-
-function LocationBreakdownSection({
-  rows,
+function OpsKpiTile({
+  label,
+  value,
+  icon: Icon,
+  tone,
   loading,
+  empty,
+  ariaLabel,
+  onClick,
 }: {
-  rows: LocationBreakdownRow[];
+  label: string;
+  value: string;
+  icon: LucideIcon;
+  tone: KpiTone;
   loading?: boolean;
+  empty?: boolean;
+  ariaLabel: string;
+  onClick: () => void;
 }) {
-  if (loading || rows.length === 0) return null;
-
-  return (
-    <Card
-      className={cn(ASSETS_SURFACE_CARD, "overflow-hidden")}
-      data-testid="asset-ops-location-breakdown"
-    >
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border/50 bg-muted/15 pb-3 pt-4">
-        <CardTitle className="text-sm font-semibold tracking-tight">By Location</CardTitle>
-        <span className="rounded-md border border-border/70 bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-          {rows.length} locations
-        </span>
-      </CardHeader>
-      <CardContent className="pt-3 pb-3">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[520px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-border/60 text-[11px] uppercase tracking-wide text-muted-foreground">
-                <th className={tableSerialHeaderClassName()} scope="col">
-                  {TABLE_SERIAL_HEADER_LABEL}
-                </th>
-                <th className="pb-1.5 pr-2 font-semibold">Location</th>
-                <th className="pb-1.5 pr-2 font-semibold text-right">Total</th>
-                <th className="pb-1.5 pr-2 font-semibold text-right">Ready</th>
-                <th className="pb-1.5 pr-2 font-semibold text-right">Assigned</th>
-                <th className="pb-1.5 pr-2 font-semibold text-right">Retired</th>
-                <th className="pb-1.5 pr-2 font-semibold text-right">Pending</th>
-                <th className="pb-1.5 font-semibold text-right">Disposed</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, index) => (
-                <tr
-                  key={row.locationId}
-                  className="border-b border-border/40 transition-colors duration-150 last:border-0 hover:bg-muted/30"
-                >
-                  <td className={tableSerialCellClassName()}>{tableRowSerialFromIndex(index)}</td>
-                  <td className="py-1.5 pr-2 text-[13px] font-medium text-foreground">{row.label}</td>
-                  <td className="py-1.5 pr-2 text-right font-mono text-[13px] tabular-nums">
-                    {row.totalAssets}
-                  </td>
-                  <td className="py-1.5 pr-2 text-right font-mono text-[13px] tabular-nums text-muted-foreground">
-                    {row.readyToMove}
-                  </td>
-                  <td className="py-1.5 pr-2 text-right font-mono text-[13px] tabular-nums text-muted-foreground">
-                    {row.assigned}
-                  </td>
-                  <td className="py-1.5 pr-2 text-right font-mono text-[13px] tabular-nums text-muted-foreground">
-                    {row.retired}
-                  </td>
-                  <td className="py-1.5 pr-2 text-right font-mono text-[13px] tabular-nums text-muted-foreground">
-                    {row.pendingDisposal}
-                  </td>
-                  <td className="py-1.5 text-right font-mono text-[13px] tabular-nums text-muted-foreground">
-                    {row.disposed}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function TransferListSection({
-  rows,
-  total,
-  loading,
-  error,
-  branchLookup,
-  onViewAll,
-}: {
-  rows: DashboardTransferRow[];
-  total: number;
-  loading?: boolean;
-  error?: string | null;
-  branchLookup: Record<string, string>;
-  onViewAll: () => void;
-}) {
-  return (
-    <section aria-labelledby="asset-ops-transfers-heading" data-testid="asset-ops-transfers">
-      <div className="mb-2.5 flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h2
-            id="asset-ops-transfers-heading"
-            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-          >
-            Transfer list
-          </h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Recent asset transfers with document, asset, locations, and status
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="cursor-pointer gap-1.5 transition-colors duration-200"
-          onClick={onViewAll}
-        >
-          <ArrowLeftRight className="size-3.5" aria-hidden />
-          View all transfers
-        </Button>
+  if (loading) {
+    return (
+      <div
+        className="flex h-full min-h-[108px] flex-col overflow-hidden rounded-xl border border-white/10 p-3.5 shadow-sm bg-[linear-gradient(135deg,var(--kpi-hero-from)_0%,var(--kpi-hero-via)_45%,var(--kpi-hero-to)_100%)]"
+        aria-busy="true"
+        aria-label="Loading statistic"
+      >
+        <div className="h-3 w-20 animate-pulse rounded bg-white/20 motion-reduce:animate-none" />
+        <div className="mt-3 h-8 w-14 animate-pulse rounded bg-white/20 motion-reduce:animate-none" />
       </div>
+    );
+  }
 
-      <Card className={cn(ASSETS_SURFACE_CARD, "overflow-hidden border-l-[3px] border-l-[#0369A1]/70")}>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border/50 bg-muted/15 pb-3 pt-4">
-          <CardTitle className="text-sm font-semibold tracking-tight">Transfers</CardTitle>
-          <span
-            className="rounded-md border border-border/70 bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
-            aria-label={`${total} total`}
-            data-testid="asset-ops-transfer-count"
-          >
-            {total} total
-          </span>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[960px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-border/60 bg-muted/20 text-[11px] uppercase tracking-wide text-muted-foreground">
-                  <th className={tableSerialHeaderClassName()} scope="col">
-                    {TABLE_SERIAL_HEADER_LABEL}
-                  </th>
-                  <th className="px-3 py-2 font-semibold">Document</th>
-                  <th className="px-3 py-2 font-semibold">Asset</th>
-                  <th className="px-3 py-2 font-semibold">From location</th>
-                  <th className="px-3 py-2 font-semibold">To location</th>
-                  <th className="px-3 py-2 font-semibold">From branch</th>
-                  <th className="px-3 py-2 font-semibold">To branch</th>
-                  <th className="px-3 py-2 font-semibold">Effective</th>
-                  <th className="px-3 py-2 font-semibold">Reason</th>
-                  <th className="px-3 py-2 font-semibold">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={10} className="px-3 py-10 text-center text-sm text-muted-foreground">
-                      Loading transfers…
-                    </td>
-                  </tr>
-                ) : error ? (
-                  <tr>
-                    <td colSpan={10} className="px-3 py-10 text-center text-sm text-destructive">
-                      {error}
-                    </td>
-                  </tr>
-                ) : rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={10} className="px-3 py-10 text-center text-sm text-muted-foreground">
-                      No transfers found.
-                    </td>
-                  </tr>
-                ) : (
-                  rows.map((row, index) => (
-                    <tr
-                      key={row.id}
-                      className="border-b border-border/40 transition-colors duration-150 last:border-0 hover:bg-muted/30"
-                    >
-                      <td className={tableSerialCellClassName()}>{tableRowSerialFromIndex(index)}</td>
-                      <td className="px-3 py-2 font-mono text-xs text-foreground">{row.documentNumber}</td>
-                      <td className="px-3 py-2">
-                        <div className="text-[13px] font-medium text-foreground">{row.assetName}</div>
-                        <div className="font-mono text-[11px] text-muted-foreground">{row.assetCode}</div>
-                      </td>
-                      <td className="px-3 py-2 text-[13px] text-muted-foreground">{row.fromLocation}</td>
-                      <td className="px-3 py-2 text-[13px] text-muted-foreground">{row.toLocation}</td>
-                      <td className="px-3 py-2 text-[13px] text-muted-foreground">
-                        {resolveBranchLabel(row.fromBranchId, branchLookup)}
-                      </td>
-                      <td className="px-3 py-2 text-[13px] text-muted-foreground">
-                        {resolveBranchLabel(row.toBranchId, branchLookup)}
-                      </td>
-                      <td className="px-3 py-2 font-mono text-[12px] tabular-nums text-muted-foreground">
-                        {row.effectiveDate ?? "—"}
-                      </td>
-                      <td className="max-w-[180px] truncate px-3 py-2 text-[13px] text-muted-foreground">
-                        {row.reason ?? "—"}
-                      </td>
-                      <td className="px-3 py-2">
-                        <StatusBadge kind="lifecycle" status={row.status} />
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-    </section>
+  return (
+    <button
+      type="button"
+      aria-label={ariaLabel}
+      onClick={onClick}
+      className={cn(
+        "group relative flex h-full min-h-[108px] w-full cursor-pointer flex-col overflow-hidden rounded-xl border border-white/10 p-3.5 text-left text-white shadow-sm",
+        "bg-[linear-gradient(135deg,var(--kpi-hero-from)_0%,var(--kpi-hero-via)_45%,var(--kpi-hero-to)_100%)]",
+        HERO_TONE_RING[tone],
+        "transition-[box-shadow,filter] duration-200 hover:brightness-[1.06] hover:shadow-md",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        "motion-reduce:transition-none",
+      )}
+    >
+      <span
+        className="pointer-events-none absolute -top-12 -right-10 size-32 rounded-full bg-white/10 blur-2xl"
+        aria-hidden
+      />
+      <span
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-black/15 to-transparent"
+        aria-hidden
+      />
+      <div className="relative flex items-start justify-between gap-2">
+        <p className="text-[10px] font-semibold tracking-[0.08em] text-white/80 uppercase">
+          {label}
+        </p>
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white/15 text-white ring-1 ring-white/10">
+          <Icon className="size-3.5" aria-hidden />
+        </span>
+      </div>
+      <p className="relative mt-auto pt-3 text-[1.75rem] leading-none font-semibold tracking-tight tabular-nums text-white">
+        {empty ? "—" : value}
+      </p>
+    </button>
   );
 }
 
 export function AssetOperationsDashboard({
   kpisLoading = false,
-  transfersLoading = false,
   kpis = null,
-  kpiTrends = null,
-  byLocationRows = [],
-  transferRows = [],
-  transferTotal = 0,
-  transferError = null,
+  kpiTrends: _kpiTrends = null,
   errorMessage,
   onRetry,
-  branchLookup = {},
   className,
 }: AssetOperationsDashboardProps) {
+  void _kpiTrends;
   const router = useRouter();
   const kpiEmpty = !kpisLoading && !kpis;
-  const showLocationBreakdown = byLocationRows.length > 0;
   const push = (href: string) => {
     router.push(href);
   };
-
-  const trend = (key: keyof AssetOperationsKpiTrends): StatCardTrend | undefined =>
-    kpiTrends?.[key];
 
   const openKpi = (kpi: DashboardKpiId) => {
     navigateDashboardKpi(push, kpi, BRANCH_ALL_VALUE);
@@ -314,29 +217,30 @@ export function AssetOperationsDashboard({
 
   return (
     <AssetsPremiumPage
-      className={cn("px-1 py-2 sm:px-2 md:px-0 md:py-3", className)}
+      className={cn("space-y-5", className)}
       testId="asset-operations-dashboard"
     >
       <PageHeader
-        title="IT Asset Operations"
-        description="Operational status, location mix, and transfer activity — click a KPI to open All Assets filtered."
+        title="Dashboard"
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Button
               type="button"
               variant="outline"
-              className="cursor-pointer gap-2 transition-colors duration-200"
+              size="sm"
+              className="h-8 cursor-pointer gap-1.5 rounded-lg px-3 text-sm transition-colors duration-200"
               onClick={() => openKpi("total")}
             >
-              <Package className="size-4" aria-hidden />
+              <Package className="size-3.5" aria-hidden />
               All assets
             </Button>
             <Button
               type="button"
-              className={ASSETS_ACCENT_BTN}
+              size="sm"
+              className={cn(ASSETS_ACCENT_BTN, "h-8 rounded-lg px-3 text-sm")}
               onClick={() => push("/assets/assets/new")}
             >
-              <Plus className="size-4" aria-hidden />
+              <Plus className="size-3.5" aria-hidden />
               Add asset
             </Button>
           </div>
@@ -345,7 +249,7 @@ export function AssetOperationsDashboard({
 
       {errorMessage ? (
         <Card
-          className="border-destructive/30 bg-destructive/5 shadow-sm"
+          className="rounded-xl border-destructive/30 bg-destructive/5 shadow-sm"
           role="alert"
           data-testid="asset-ops-error-card"
         >
@@ -366,162 +270,97 @@ export function AssetOperationsDashboard({
         </Card>
       ) : null}
 
-      <section aria-labelledby="asset-ops-kpi-heading" className="space-y-2.5">
-        <div>
-          <h2
-            id="asset-ops-kpi-heading"
-            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-          >
-            Counts by operational status
-          </h2>
-          <p className="mt-0.5 text-xs text-muted-foreground" data-testid="asset-ops-kpi-ops-note">
-            Click any card to open All Assets with that status filter applied
-          </p>
-        </div>
+      <section aria-label="Operational status">
         <div
-          className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-7"
+          className="grid auto-rows-fr grid-cols-2 gap-2.5 sm:grid-cols-4 xl:grid-cols-4"
           data-testid="asset-ops-kpi-grid"
         >
-          <StatCard
-            title="Total Assets"
-            icon={Boxes}
-            tone="default"
-            loading={kpisLoading}
-            value={kpis ? formatKpiValue(kpis.totalAssets) : undefined}
-            empty={kpiEmpty}
-            aria-label="Open All Assets"
-            onClick={() => openKpi("total")}
-          />
-          <StatCard
-            title="Ready to Move"
-            icon={Truck}
-            tone="sky"
-            loading={kpisLoading}
-            value={kpis ? formatKpiValue(kpis.readyToMove) : undefined}
-            trend={trend("readyToMove")}
-            empty={kpiEmpty}
-            aria-label="Open Ready to Move assets"
-            onClick={() => openKpi("ready")}
-          />
-          <StatCard
-            title="Assigned"
-            icon={UserCheck}
-            tone="emerald"
-            loading={kpisLoading}
-            value={kpis ? formatKpiValue(kpis.assigned) : undefined}
-            trend={trend("assigned")}
-            empty={kpiEmpty}
-            aria-label="Open Assigned assets"
-            onClick={() => openKpi("assigned")}
-          />
-          <StatCard
-            title="In Use as Component"
-            icon={Boxes}
-            tone="slate"
-            loading={kpisLoading}
-            value={kpis ? formatKpiValue(kpis.inUseAsComponent) : undefined}
-            trend={trend("inUseAsComponent")}
-            empty={kpiEmpty}
-            aria-label="Open In Use as Component assets"
-            onClick={() => openKpi("inUseAsComponent")}
-          />
-          <StatCard
-            title="Retired"
-            icon={Archive}
-            tone="slate"
-            loading={kpisLoading}
-            value={kpis ? formatKpiValue(kpis.retired) : undefined}
-            trend={trend("retired")}
-            empty={kpiEmpty}
-            aria-label="Open Retired assets"
-            onClick={() => openKpi("retired")}
-          />
-          <StatCard
-            title="Pending Disposal"
-            icon={Clock}
-            tone="amber"
-            loading={kpisLoading}
-            value={kpis ? formatKpiValue(kpis.pendingDisposal) : undefined}
-            trend={trend("pendingDisposal")}
-            empty={kpiEmpty}
-            aria-label="Open Pending Disposal assets"
-            onClick={() => openKpi("pendingDisposal")}
-          />
-          <StatCard
-            title="Disposed"
-            icon={Trash2}
-            tone="rose"
-            loading={kpisLoading}
-            value={kpis ? formatKpiValue(kpis.disposed) : undefined}
-            trend={trend("disposed")}
-            empty={kpiEmpty}
-            aria-label="Open Disposed assets"
-            onClick={() => openKpi("disposed")}
-          />
+          {KPI_DEFS.map((def) => (
+            <OpsKpiTile
+              key={def.id}
+              label={def.label}
+              icon={def.icon}
+              tone={def.tone}
+              loading={kpisLoading}
+              empty={kpiEmpty}
+              value={kpis ? formatKpiValue(kpis[def.valueKey]) : "—"}
+              ariaLabel={def.ariaLabel}
+              onClick={() => openKpi(def.id)}
+            />
+          ))}
         </div>
       </section>
 
-      {showLocationBreakdown ? (
-        <LocationBreakdownSection rows={byLocationRows} loading={kpisLoading} />
-      ) : null}
+      <section aria-label="Reports" className="min-w-0">
+        <AssetReportsWorkspace
+          embedded
+          fleetKpis={
+            kpis
+              ? {
+                totalAssets: kpis.totalAssets,
+                inStock: kpis.readyToMove,
+                assigned: kpis.assigned,
+              }
+              : null
+          }
+          fleetKpisLoading={kpisLoading}
+        />
+      </section>
 
-      <TransferListSection
-        rows={transferRows}
-        total={transferTotal}
-        loading={transfersLoading}
-        error={transferError}
-        branchLookup={branchLookup}
-        onViewAll={() => push("/assets/asset-transfers")}
-      />
-
-      <section aria-labelledby="asset-ops-quick-actions-heading">
-        <h2
-          id="asset-ops-quick-actions-heading"
-          className="mb-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-        >
-          Quick actions
-        </h2>
+      <section
+        aria-labelledby="asset-ops-quick-actions-heading"
+        className="overflow-hidden rounded-xl border border-border/70 bg-background/95 shadow-sm"
+      >
+        <div className="flex items-center gap-2.5 border-b border-border/60 px-4 py-3">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[rgba(3,105,161,0.1)] text-[#0369A1]">
+            <PackagePlus className="size-3.5" aria-hidden />
+          </span>
+          <h2
+            id="asset-ops-quick-actions-heading"
+            className="text-sm font-semibold tracking-tight text-foreground"
+          >
+            Quick actions
+          </h2>
+        </div>
         <div
-          className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-5"
+          className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-2 sm:p-4"
           data-testid="asset-ops-quick-actions-grid"
         >
-          <QuickActionCard
-            compact
-            title="Register Asset"
-            icon={PackagePlus}
-            description="Add a new asset to inventory"
-            onPress={() => navigateDashboardQuickAction(push, "register", BRANCH_ALL_VALUE)}
-          />
-          <QuickActionCard
-            compact
-            title="Assign Asset"
-            icon={UserPlus}
-            description="Issue asset to an employee"
-            onPress={() => navigateDashboardQuickAction(push, "assign", BRANCH_ALL_VALUE)}
-          />
-          <QuickActionCard
-            compact
-            title="Return Asset"
-            icon={Undo2}
-            description="Process a return from holder"
-            onPress={() => navigateDashboardQuickAction(push, "return", BRANCH_ALL_VALUE)}
-          />
-          <QuickActionCard
-            compact
-            title="Discovery"
-            icon={ScanSearch}
-            description="Review discovery signals"
-            onPress={() => navigateDashboardQuickAction(push, "discovery", BRANCH_ALL_VALUE)}
-          />
-          <QuickActionCard
-            compact
-            title="Information Portal"
-            icon={Globe}
-            description="Open asset information portal"
-            onPress={() =>
-              navigateDashboardQuickAction(push, "informationPortal", BRANCH_ALL_VALUE)
-            }
-          />
+          {QUICK_ACTIONS.map((action) => {
+            const Icon = action.icon;
+            return (
+              <button
+                key={action.id}
+                type="button"
+                onClick={() => navigateDashboardQuickAction(push, action.id)}
+                className={cn(
+                  "group flex cursor-pointer items-center gap-3 rounded-xl border border-border/60 bg-card px-3.5 py-3 text-left",
+                  "transition-[border-color,background-color,box-shadow] duration-200",
+                  "hover:border-primary/35 hover:bg-accent/40 hover:shadow-sm",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  "motion-reduce:transition-none",
+                )}
+              >
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[rgba(3,105,161,0.1)] text-[#0369A1]">
+                  <Icon className="size-4" aria-hidden />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="truncate text-sm font-semibold text-foreground">
+                      {action.title}
+                    </span>
+                    <ChevronRight
+                      className="size-4 shrink-0 text-muted-foreground/40 transition-colors duration-200 group-hover:text-primary"
+                      aria-hidden
+                    />
+                  </span>
+                  <span className="mt-0.5 block truncate text-[11px] leading-snug text-muted-foreground">
+                    {action.description}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
         </div>
       </section>
     </AssetsPremiumPage>

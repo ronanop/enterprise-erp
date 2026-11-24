@@ -1,11 +1,15 @@
 import type { DeliveryChallanRecord } from "@/utils/delivery-challan-storage";
 import type { DeliveryStatusFormValue } from "@/components/procurement/delivery-status-form";
-import { sendDeliveryDispatchNotification } from "@/utils/delivery-dispatch-email";
+import {
+  sendDeliveryDispatchNotification,
+  sendDeliveryOutcomeNotification,
+} from "@/utils/delivery-dispatch-email";
 import { runDeliveryReminderSweep } from "@/utils/delivery-status-reminders";
 import {
   deriveDeliveryStatusLabel,
   firstDeliveryStatusFormError,
   getDeliveryStatus,
+  isDelayedShipmentStatus,
   isFailedShipmentStatus,
   stampDeliveredDate,
   upsertDeliveryStatus,
@@ -15,14 +19,15 @@ import {
 import { syncOvfTimelineForDeliveryStatus } from "@/utils/ovf-timeline-sync";
 
 export type PersistDeliveryStatusResult =
-  | { ok: true; trackingOnly: boolean; emailWarning?: string }
+  | { ok: true; trackingOnly: boolean; emailWarning?: string; emailSkipped?: boolean; deliveredEmailTo?: string }
   | { ok: false; message: string; fieldErrors?: DeliveryStatusFormErrors };
 
 export async function persistDeliveryStatusFromForm(
   challan: DeliveryChallanRecord,
   form: DeliveryStatusFormValue,
 ): Promise<PersistDeliveryStatusResult> {
-  const errors = validateDeliveryStatusForm(form);
+  const requireDispatch = challan.grnKind !== "billing";
+  const errors = validateDeliveryStatusForm(form, { requireDispatch });
   const message = firstDeliveryStatusFormError(errors);
   if (message) {
     return { ok: false, message, fieldErrors: errors };
@@ -30,24 +35,29 @@ export async function persistDeliveryStatusFromForm(
 
   const existing = getDeliveryStatus(challan.id);
   const failed = isFailedShipmentStatus(form.shipmentStatus);
+  const delayed = isDelayedShipmentStatus(form.shipmentStatus);
   const markingDelivered =
     !failed &&
+    !delayed &&
     (form.shipmentStatus.trim() === "Delivered" ||
       Boolean(form.actualDeliveryDate?.trim()));
-  const actualDeliveryDate = failed
-    ? ""
-    : markingDelivered
-      ? stampDeliveredDate(form.dispatchDate, form.actualDeliveryDate)
-      : form.actualDeliveryDate?.trim() || "";
+  const actualDeliveryDate =
+    failed || delayed
+      ? ""
+      : markingDelivered
+        ? stampDeliveredDate(form.dispatchDate, form.actualDeliveryDate)
+        : form.actualDeliveryDate?.trim() || "";
   const shipmentStatus = failed
     ? "Failed delivery"
-    : markingDelivered
-      ? "Delivered"
-      : deriveDeliveryStatusLabel({
-          ...form,
-          actualDeliveryDate,
-          shipmentStatus: "",
-        });
+    : delayed
+      ? "Delayed"
+      : markingDelivered
+        ? "Delivered"
+        : deriveDeliveryStatusLabel({
+            ...form,
+            actualDeliveryDate,
+            shipmentStatus: "",
+          });
   const normalized: DeliveryStatusFormValue = {
     ...form,
     actualDeliveryDate,
@@ -71,6 +81,12 @@ export async function persistDeliveryStatusFromForm(
     billDocument: existing?.billDocument ?? form.billDocument ?? null,
     billRemarks: existing?.billRemarks ?? form.billRemarks ?? "",
     billedAt: existing?.billedAt ?? form.billedAt ?? "",
+    outForDeliveryEmailSentAt:
+      (existing?.outForDeliveryEmailSentAt || form.outForDeliveryEmailSentAt || "").trim(),
+    outcomeEmailSentAt:
+      (existing?.outcomeEmailSentAt || form.outcomeEmailSentAt || "").trim(),
+    outcomeEmailKind:
+      (existing?.outcomeEmailKind || form.outcomeEmailKind || "").trim(),
   };
 
   const delivered = !failed && markingDelivered;
@@ -97,7 +113,56 @@ export async function persistDeliveryStatusFromForm(
   }, existing);
   runDeliveryReminderSweep();
 
-  if (normalized.reminderEmail?.trim()) {
+  const outcomeToEmail: "Delivered" | "Failed delivery" | "Delayed" | null = delivered
+    ? "Delivered"
+    : failed
+      ? "Failed delivery"
+      : delayed
+        ? "Delayed"
+        : null;
+  const outcomeEmailAlreadySent =
+    Boolean((existing?.outcomeEmailSentAt || "").trim()) &&
+    (existing?.outcomeEmailKind || "").trim() === (outcomeToEmail || "");
+
+  if (outcomeToEmail && !outcomeEmailAlreadySent) {
+    const email = await sendDeliveryOutcomeNotification(
+      challan,
+      normalized,
+      outcomeToEmail,
+    );
+    if (!email.ok) {
+      return {
+        ok: true,
+        trackingOnly: false,
+        emailWarning: email.message ?? "Unknown error",
+        deliveredEmailTo: email.to,
+      };
+    }
+    if (email.skipped) {
+      return { ok: true, trackingOnly: false, emailSkipped: true };
+    }
+    upsertDeliveryStatus({
+      challanId: challan.id,
+      ...normalized,
+      billStatus,
+      requiresInstallation: delivered ? Boolean(normalized.requiresInstallation) : false,
+      outcomeEmailSentAt: new Date().toISOString(),
+      outcomeEmailKind: outcomeToEmail,
+    });
+    return {
+      ok: true,
+      trackingOnly: false,
+      deliveredEmailTo: email.to,
+    };
+  }
+
+  // Out-for-delivery mail on first successful send (retries if prior SMTP attempt failed).
+  const nowDispatched =
+    normalized.deliveryMode === "hand" || normalized.deliveryMode === "courier";
+  const dispatchEmailAlreadySent = Boolean(
+    (existing?.outForDeliveryEmailSentAt || "").trim(),
+  );
+  if (!delivered && !failed && !delayed && nowDispatched && !dispatchEmailAlreadySent) {
     const email = await sendDeliveryDispatchNotification(challan, normalized);
     if (!email.ok) {
       return {
@@ -106,6 +171,16 @@ export async function persistDeliveryStatusFromForm(
         emailWarning: email.message ?? "Unknown error",
       };
     }
+    if (email.skipped) {
+      return { ok: true, trackingOnly: false, emailSkipped: true };
+    }
+    upsertDeliveryStatus({
+      challanId: challan.id,
+      ...normalized,
+      billStatus,
+      requiresInstallation: delivered ? Boolean(normalized.requiresInstallation) : false,
+      outForDeliveryEmailSentAt: new Date().toISOString(),
+    });
   }
 
   return { ok: true, trackingOnly: false };

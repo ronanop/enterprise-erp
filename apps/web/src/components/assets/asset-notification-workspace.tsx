@@ -29,6 +29,7 @@ import {
   notificationService,
 } from "@/services/assets-service";
 import { ApiClientError, resourceService } from "@/services/api-client";
+import { formatDropdownLabel } from "@/components/assets/shared/format-dropdown-label";
 
 type AssetRow = {
   id: string;
@@ -239,7 +240,7 @@ export function AssetNotificationWorkspace() {
                 <SelectItem value="__all__">All types</SelectItem>
                 {NOTIFICATION_TYPES.map((t) => (
                   <SelectItem key={t} value={t}>
-                    {t}
+                    {formatDropdownLabel(t)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -260,7 +261,7 @@ export function AssetNotificationWorkspace() {
               <SelectContent>
                 {DELIVERY_OPTIONS.map((d) => (
                   <SelectItem key={d || "__all__"} value={d || "__all__"}>
-                    {d || "All delivery"}
+                    {d ? formatDropdownLabel(d) : "All delivery"}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -281,7 +282,7 @@ export function AssetNotificationWorkspace() {
               <SelectContent>
                 {STATUS_OPTIONS.map((s) => (
                   <SelectItem key={s || "__all__"} value={s || "__all__"}>
-                    {s || "All status"}
+                    {s ? formatDropdownLabel(s) : "All status"}
                   </SelectItem>
                 ))}
               </SelectContent>

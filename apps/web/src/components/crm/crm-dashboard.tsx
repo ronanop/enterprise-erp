@@ -36,7 +36,10 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { crmPipelineStages } from "@/config/crm";
 import { isAuthenticated } from "@/lib/auth";
+import { dashboardWidgetVisible } from "@/lib/crm/crm-settings-ui";
+import { orderedDashboardWidgets } from "@/services/crm-settings-service";
 import { cn } from "@/lib/utils";
+import { useCrmSettingsEffective } from "@/hooks/use-crm-settings";
 import {
   asNumber,
   asStatus,
@@ -50,6 +53,7 @@ import {
   type CrmOverview,
   type CrmRow,
 } from "@/services/crm-service";
+
 
 function recentLeads(rows: CrmRow[], limit = 6): CrmRow[] {
   return [...rows]
@@ -76,7 +80,28 @@ const STAGE_COLORS = [
 export function CrmDashboard() {
   const [data, setData] = useState<CrmOverview | null>(null);
   const [loading, setLoading] = useState(true);
+  const { settings } = useCrmSettingsEffective();
   const authenticated = typeof window !== "undefined" ? isAuthenticated() : false;
+  const show = (key: string) => dashboardWidgetVisible(settings, key, true);
+
+  const customWidgets = useMemo(
+    () =>
+      orderedDashboardWidgets(settings).filter(
+        (w) => w.key.startsWith("cf_") || w.source === "saved_report" || w.type === "chart",
+      ),
+    [settings],
+  );
+
+  const stockWidgetKeys = new Set([
+    "kpi_leads",
+    "kpi_opportunities",
+    "kpi_pipeline",
+    "chart_pipeline",
+    "chart_stage",
+    "chart_revenue",
+    "recent_leads",
+    "activity",
+  ]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -212,107 +237,146 @@ export function CrmDashboard() {
         </div>
       ) : null}
 
+      {customWidgets.filter((w) => !stockWidgetKeys.has(w.key)).length > 0 ? (
+        <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+          {customWidgets
+            .filter((w) => !stockWidgetKeys.has(w.key))
+            .map((w) => (
+              <CrmSection
+                key={w.key}
+                title={w.label}
+                icon={LayoutGrid}
+                badge={<Badge variant="outline">{(w.type ?? "widget").toUpperCase()}</Badge>}
+              >
+                <p className="text-sm text-muted-foreground">
+                  Custom dashboard widget placeholder
+                  {w.source ? ` · ${w.source}` : ""}.
+                </p>
+              </CrmSection>
+            ))}
+        </div>
+      ) : null}
+
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
-        <CrmKpiCard variant="hero" 
-          label="Open leads"
-          value={String(kpis.openLeads)}
-          hint={`${data?.leads.length ?? 0} total`}
-          icon={UserPlus}
-          tone={kpis.openLeads > 0 ? "warning" : "success"}
-          href="/crm/leads"
-          loading={loading}
-        />
-        <CrmKpiCard variant="hero" 
-          label="Open opportunities"
-          value={String(kpis.openOpps)}
-          hint={`${countByStatus(data?.opportunities ?? [], ["won"])} won`}
-          icon={Handshake}
-          tone="default"
-          href="/crm/opportunities"
-          loading={loading}
-        />
-        <CrmKpiCard variant="hero" 
-          label="Win rate"
-          value={`${kpis.winRate}%`}
-          hint={`${formatInr(kpis.wonValue)} won value`}
-          icon={TrendingUp}
-          tone="success"
-          loading={loading}
-        />
-        <CrmKpiCard variant="hero" 
-          label="Open tasks"
-          value={String(kpis.pendingTasks)}
-          hint={`${kpis.missedFollowups} missed follow-ups`}
-          icon={ClipboardList}
-          tone={kpis.pendingTasks > 0 || kpis.missedFollowups > 0 ? "warning" : "success"}
-          href="/crm/tasks"
-          loading={loading}
-        />
+        {show("kpi_leads") ? (
+          <CrmKpiCard
+            variant="hero"
+            label="Open leads"
+            value={String(kpis.openLeads)}
+            hint={`${data?.leads.length ?? 0} total`}
+            icon={UserPlus}
+            tone={kpis.openLeads > 0 ? "warning" : "success"}
+            href="/crm/leads"
+            loading={loading}
+          />
+        ) : null}
+        {show("kpi_opportunities") ? (
+          <CrmKpiCard
+            variant="hero"
+            label="Open opportunities"
+            value={String(kpis.openOpps)}
+            hint={`${countByStatus(data?.opportunities ?? [], ["won"])} won`}
+            icon={Handshake}
+            tone="default"
+            href="/crm/opportunities"
+            loading={loading}
+          />
+        ) : null}
+        {show("kpi_pipeline") ? (
+          <CrmKpiCard
+            variant="hero"
+            label="Win rate"
+            value={`${kpis.winRate}%`}
+            hint={`${formatInr(kpis.wonValue)} won value`}
+            icon={TrendingUp}
+            tone="success"
+            loading={loading}
+          />
+        ) : null}
+        {show("activity") ? (
+          <CrmKpiCard
+            variant="hero"
+            label="Open tasks"
+            value={String(kpis.pendingTasks)}
+            hint={`${kpis.missedFollowups} missed follow-ups`}
+            icon={ClipboardList}
+            tone={kpis.pendingTasks > 0 || kpis.missedFollowups > 0 ? "warning" : "success"}
+            href="/crm/tasks"
+            loading={loading}
+          />
+        ) : null}
       </div>
 
       <div className="grid gap-3 xl:grid-cols-3">
-        <CrmSection
-          title="Pipeline funnel"
-          icon={BarChart3}
-          badge={<Badge variant="secondary">Counts</Badge>}
-        >
-          <CrmPipelineBarChart data={pipelineChart} loading={loading} />
-          <ol className="mt-1 flex flex-wrap gap-x-3 gap-y-1 border-t border-border/60 pt-2">
-            {crmPipelineStages.map((stage, i) => (
-              <li key={stage.key}>
-                <Link
-                  href={stage.href}
-                  className="inline-flex cursor-pointer items-center gap-1.5 text-[11px] text-muted-foreground transition-colors duration-200 hover:text-foreground"
-                >
-                  <span
-                    className="size-1.5 rounded-full"
-                    style={{ backgroundColor: STAGE_COLORS[i % STAGE_COLORS.length] }}
-                  />
-                  {stage.title}
-                </Link>
-              </li>
-            ))}
-          </ol>
-        </CrmSection>
-
-        <CrmSection
-          title="Stage mix"
-          icon={PieChart}
-          badge={<Badge variant="secondary">Share</Badge>}
-        >
-          <CrmStageDonutChart data={stageDonut} loading={loading} />
-          <ul className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-border/60 pt-2">
-            {STAGE_DEFS.map((s, i) => {
-              const count = countByStage(data?.opportunities ?? [], [s.key]);
-              if (!count && !loading) return null;
-              return (
-                <li key={s.key} className="flex items-center justify-between gap-2 text-[11px]">
-                  <span className="flex min-w-0 items-center gap-1.5 truncate text-muted-foreground">
+        {show("chart_pipeline") ? (
+          <CrmSection
+            title="Pipeline funnel"
+            icon={BarChart3}
+            badge={<Badge variant="secondary">Counts</Badge>}
+          >
+            <CrmPipelineBarChart data={pipelineChart} loading={loading} />
+            <ol className="mt-1 flex flex-wrap gap-x-3 gap-y-1 border-t border-border/60 pt-2">
+              {crmPipelineStages.map((stage, i) => (
+                <li key={stage.key}>
+                  <Link
+                    href={stage.href}
+                    className="inline-flex cursor-pointer items-center gap-1.5 text-[11px] text-muted-foreground transition-colors duration-200 hover:text-foreground"
+                  >
                     <span
-                      className="size-1.5 shrink-0 rounded-full"
+                      className="size-1.5 rounded-full"
                       style={{ backgroundColor: STAGE_COLORS[i % STAGE_COLORS.length] }}
                     />
-                    {s.label}
-                  </span>
-                  <span className="font-medium tabular-nums text-foreground">
-                    {loading ? "-" : count}
-                  </span>
+                    {stage.title}
+                  </Link>
                 </li>
-              );
-            })}
-          </ul>
-        </CrmSection>
+              ))}
+            </ol>
+          </CrmSection>
+        ) : null}
 
-        <CrmSection
-          title="Pipeline value"
-          icon={Target}
-          badge={<Badge variant="secondary">INR</Badge>}
-        >
-          <CrmRevenueBarChart data={revenueByStage} loading={loading} formatValue={formatInr} />
-        </CrmSection>
+        {show("chart_stage") ? (
+          <CrmSection
+            title="Stage mix"
+            icon={PieChart}
+            badge={<Badge variant="secondary">Share</Badge>}
+          >
+            <CrmStageDonutChart data={stageDonut} loading={loading} />
+            <ul className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-border/60 pt-2">
+              {STAGE_DEFS.map((s, i) => {
+                const count = countByStage(data?.opportunities ?? [], [s.key]);
+                if (!count && !loading) return null;
+                return (
+                  <li key={s.key} className="flex items-center justify-between gap-2 text-[11px]">
+                    <span className="flex min-w-0 items-center gap-1.5 truncate text-muted-foreground">
+                      <span
+                        className="size-1.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: STAGE_COLORS[i % STAGE_COLORS.length] }}
+                      />
+                      {s.label}
+                    </span>
+                    <span className="font-medium tabular-nums text-foreground">
+                      {loading ? "-" : count}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </CrmSection>
+        ) : null}
+
+        {show("chart_revenue") ? (
+          <CrmSection
+            title="Pipeline value"
+            icon={Target}
+            badge={<Badge variant="secondary">INR</Badge>}
+          >
+            <CrmRevenueBarChart data={revenueByStage} loading={loading} formatValue={formatInr} />
+          </CrmSection>
+        ) : null}
       </div>
 
       <div className="grid gap-3 xl:grid-cols-2">
+        {show("recent_leads") ? (
         <CrmListPanel>
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div className="flex items-center gap-2.5">
@@ -390,7 +454,9 @@ export function CrmDashboard() {
             </table>
           </div>
         </CrmListPanel>
+        ) : null}
 
+        {show("kpi_opportunities") ? (
         <CrmListPanel>
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div className="flex items-center gap-2.5">
@@ -450,8 +516,10 @@ export function CrmDashboard() {
             )}
           </ul>
         </CrmListPanel>
+        ) : null}
       </div>
 
+      {show("activity") ? (
       <div className="grid gap-2.5 sm:grid-cols-3">
         <CrmActivityTile
           label="Meetings"
@@ -475,6 +543,7 @@ export function CrmDashboard() {
           href="/crm/campaigns"
         />
       </div>
+      ) : null}
     </CrmPage>
   );
 }

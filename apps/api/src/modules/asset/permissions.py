@@ -116,28 +116,64 @@ ASSET_PERMISSIONS: list[tuple[str, str, str, str]] = [
 
 _ALL = [p[0] for p in ASSET_PERMISSIONS]
 
-ASSET_EXECUTIVE_PERMISSIONS = [
-    p
-    for p in _ALL
-    if not any(
-        x in p
-        for x in (
-            ":approve",
-            ":post",
-            "depreciation:calculate",
-            "disposal:approve",
-            "revaluation:approve",
-            "asset.module:admin",
-        )
+# Org/master lookups used by Configuration + Excel import.
+ASSET_MEMBER_WORKSPACE_READ_PERMISSIONS = [
+    "master.employee:read",
+    "organization.company:read",
+    "organization.branch:read",
+    "organization.department:read",
+    "organization.location:read",
+]
+
+# Assets → Configuration → Departments (organization master CRUD).
+ASSET_DEPARTMENT_MANAGE_PERMISSIONS = [
+    "organization.department:read",
+    "organization.department:create",
+    "organization.department:update",
+    "organization.department:delete",
+]
+
+ASSET_EXECUTIVE_PERMISSIONS = list(
+    dict.fromkeys(
+        [
+            p
+            for p in _ALL
+            if not any(
+                x in p
+                for x in (
+                    ":approve",
+                    ":post",
+                    "depreciation:calculate",
+                    "disposal:approve",
+                    "revaluation:approve",
+                    "asset.module:admin",
+                )
+            )
+        ]
+        + ASSET_MEMBER_WORKSPACE_READ_PERMISSIONS
+        + ASSET_DEPARTMENT_MANAGE_PERMISSIONS
     )
-]
+)
 
-ASSET_MANAGER_PERMISSIONS = list(_ALL)
+ASSET_MANAGER_PERMISSIONS = list(
+    dict.fromkeys(
+        list(_ALL) + ASSET_MEMBER_WORKSPACE_READ_PERMISSIONS + ASSET_DEPARTMENT_MANAGE_PERMISSIONS
+    )
+)
 
-ASSET_AUDITOR_PERMISSIONS = [
-    p
-    for p in _ALL
-    if p.endswith(":read") or p.startswith("asset.audit:") or p.startswith("asset.report:")
-]
+ASSET_AUDITOR_PERMISSIONS = list(
+    dict.fromkeys(
+        [
+            p
+            for p in _ALL
+            if p.endswith(":read") or p.startswith("asset.audit:") or p.startswith("asset.report:")
+        ]
+        + ASSET_MEMBER_WORKSPACE_READ_PERMISSIONS
+    )
+)
 
-ASSET_ADMIN_PERMISSIONS = list(_ALL)
+ASSET_ADMIN_PERMISSIONS = list(
+    dict.fromkeys(
+        list(_ALL) + ASSET_MEMBER_WORKSPACE_READ_PERMISSIONS + ASSET_DEPARTMENT_MANAGE_PERMISSIONS
+    )
+)

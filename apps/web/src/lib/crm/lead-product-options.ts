@@ -36,13 +36,15 @@ const LEGACY_QUOTE_SERVICE_TYPE_MAP: Record<string, QuoteServiceType> = {
 
 export function normalizeQuoteServiceType(
   value: string | null | undefined,
+  allowedTypes?: readonly string[],
 ): QuoteServiceType | "" {
   const trimmed = (value ?? "").trim();
   if (!trimmed) return "";
   const legacy = LEGACY_QUOTE_SERVICE_TYPE_MAP[trimmed.toLowerCase()];
   if (legacy) return legacy;
-  const match = QUOTE_SERVICE_TYPES.find((type) => type.toLowerCase() === trimmed.toLowerCase());
-  return match ?? "";
+  const types = allowedTypes?.length ? allowedTypes : QUOTE_SERVICE_TYPES;
+  const match = types.find((type) => type.toLowerCase() === trimmed.toLowerCase());
+  return (match as QuoteServiceType | undefined) ?? "";
 }
 
 export function isQuoteServiceType(value: string | null | undefined): boolean {

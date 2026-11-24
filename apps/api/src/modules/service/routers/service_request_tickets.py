@@ -1,5 +1,6 @@
 """Dedicated router for Service Request Ticket Management (SOP)."""
 
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -8,19 +9,31 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from modules.service.dependencies import PaginationParams, TenantContext, get_db, get_pagination, get_tenant_context, paginate, require_permission
+from modules.service.service.service_itsm_dashboard_service import ServiceItsmDashboardService
 from modules.service.service.service_request_ticket_service import ServiceRequestTicketService
+from modules.service.service_itsm_schemas import ServiceDashboardSummary
 from modules.service.service_request_ticket_schemas import (
+    AssignmentHistoryItem,
+    CircuitHistoryResponse,
     ServiceRequestAssignOwner,
     ServiceRequestAttachmentCreate,
     ServiceRequestAttachmentResponse,
     ServiceAssignableEmployee,
+    ServiceRequestClosePayload,
     ServiceRequestCoOwnerCreate,
     ServiceRequestCoOwnerResponse,
     ServiceRequestCommentCreate,
     ServiceRequestCommentResponse,
     ServiceRequestFollowUpPayload,
+    ServiceRequestReopenDecision,
     ServiceRequestReopenPayload,
+    ServiceRequestReopenRejection,
+    ServiceRequestReopenRequestCreate,
+    ServiceRequestReopenRequestResponse,
     ServiceRequestResolvePayload,
+    ServiceRequestSlaPauseItem,
+    ServiceRequestSlaPausePayload,
+    ServiceRequestSlaResumePayload,
     ServiceRequestStakeholderCreate,
     ServiceRequestStakeholderResponse,
     ServiceRequestStakeholderView,
@@ -43,7 +56,7 @@ from shared.schemas import APIResponse
 
 service_request_tickets_router = APIRouter(
     prefix="/service-request-tickets",
-    tags=["Service - Request Tickets (SOP)"],
+    tags=["Service — Request Tickets (SOP)"],
 )
 
 
@@ -96,12 +109,80 @@ def list_assignable_employees(
 def list_ticket_sla_tracker(
     ctx: Annotated[TenantContext, Depends(require_permission("service.request:read"))],
     db: Annotated[Session, Depends(get_db)],
-    pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
     mine: bool = False,
 ):
+    # Full active list (newest first). Table UI paginates client-side so older tickets stay reachable.
     items = ServiceRequestTicketService(db).list_sla_tracker(ctx, company_id=company_id, mine=mine)
-    return APIResponse(message="OK", data=paginate(items, pagination))
+    return APIResponse(message="OK", data=items)
+
+
+@service_request_tickets_router.get(
+    "/dashboard-summary",
+    response_model=APIResponse[ServiceDashboardSummary],
+)
+def service_dashboard_summary(
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+    mine: bool = False,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+):
+    data = ServiceItsmDashboardService(db).summary(
+        ctx,
+        company_id=company_id,
+        mine=mine,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    return APIResponse(message="OK", data=data)
+
+
+@service_request_tickets_router.get(
+    "/reopen-requests/pending",
+    response_model=APIResponse[list[ServiceRequestReopenRequestResponse]],
+)
+def list_pending_reopen_requests(
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:approve"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+):
+    items = ServiceRequestTicketService(db).list_pending_reopen_requests(ctx, company_id=company_id)
+    return APIResponse(message="OK", data=items)
+
+
+@service_request_tickets_router.post(
+    "/reopen-requests/{reopen_request_id}/approve",
+    response_model=APIResponse[ServiceRequestTicketDetail],
+)
+def approve_reopen_request(
+    reopen_request_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:approve"))],
+    db: Annotated[Session, Depends(get_db)],
+    body: ServiceRequestReopenDecision | None = None,
+):
+    note = body.note if body else None
+    data = ServiceRequestTicketService(db).approve_reopen(ctx, reopen_request_id, note=note)
+    db.commit()
+    return APIResponse(message="Reopen approved", data=data)
+
+
+@service_request_tickets_router.post(
+    "/reopen-requests/{reopen_request_id}/reject",
+    response_model=APIResponse[ServiceRequestReopenRequestResponse],
+)
+def reject_reopen_request(
+    reopen_request_id: UUID,
+    body: ServiceRequestReopenRejection,
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:approve"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    data = ServiceRequestTicketService(db).reject_reopen(
+        ctx, reopen_request_id, rejection_reason=body.rejection_reason
+    )
+    db.commit()
+    return APIResponse(message="Reopen rejected", data=data)
 
 
 @service_request_tickets_router.get(
@@ -125,16 +206,16 @@ def sla_compliance_summary(
 def list_resolved_tickets(
     ctx: Annotated[TenantContext, Depends(require_permission("service.request:read"))],
     db: Annotated[Session, Depends(get_db)],
-    pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
     q: str | None = None,
     sla_outcome: str | None = Query(default=None, pattern="^(within|breach)$"),
     mine: bool = False,
 ):
+    # Full list (newest first). Table UI paginates client-side so older tickets stay reachable.
     items = ServiceRequestTicketService(db).list_resolved_tickets(
         ctx, company_id=company_id, q=q, sla_outcome=sla_outcome, mine=mine
     )
-    return APIResponse(message="OK", data=paginate(items, pagination))
+    return APIResponse(message="OK", data=items)
 
 
 @service_request_tickets_router.get("/export.xlsx")
@@ -255,7 +336,9 @@ def assign_ticket_owner(
     ctx: Annotated[TenantContext, Depends(require_permission("service.request:approve"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    data = ServiceRequestTicketService(db).assign_owner(ctx, row_id, owner_employee_id=body.owner_employee_id)
+    data = ServiceRequestTicketService(db).assign_owner(
+        ctx, row_id, owner_employee_id=body.owner_employee_id, reason=body.reason
+    )
     db.commit()
     return APIResponse(message="Owner assigned", data=data)
 
@@ -268,7 +351,7 @@ def open_ticket(
 ):
     data = ServiceRequestTicketService(db).open_ticket(ctx, row_id)
     db.commit()
-    return APIResponse(message="Ticket opened - SLA started", data=data)
+    return APIResponse(message="Ticket opened — SLA started", data=data)
 
 
 @service_request_tickets_router.post("/{row_id}/resolve", response_model=APIResponse[ServiceRequestTicketDetail])
@@ -284,9 +367,85 @@ def resolve_ticket(
         solution_type=body.solution_type,
         solution_summary=body.solution_summary,
         reason=body.reason,
+        issue_reported_code=body.issue_reported_code,
+        resolution_comment_code=body.resolution_comment_code,
+        other_remarks=body.other_remarks,
     )
     db.commit()
     return APIResponse(message="Ticket resolved", data=data)
+
+
+@service_request_tickets_router.post("/{row_id}/close", response_model=APIResponse[ServiceRequestTicketDetail])
+def close_ticket(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:update"))],
+    db: Annotated[Session, Depends(get_db)],
+    body: ServiceRequestClosePayload | None = None,
+):
+    payload = body or ServiceRequestClosePayload()
+    data = ServiceRequestTicketService(db).close_ticket(
+        ctx,
+        row_id,
+        reason=payload.reason,
+        other_remarks=payload.other_remarks,
+        field_engineer=payload.field_engineer,
+    )
+    db.commit()
+    return APIResponse(message="Ticket closed", data=data)
+
+
+@service_request_tickets_router.post("/{row_id}/confirm-asset", response_model=APIResponse[ServiceRequestTicketDetail])
+def confirm_asset(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    data = ServiceRequestTicketService(db).confirm_asset(ctx, row_id)
+    db.commit()
+    return APIResponse(message="Asset confirmed", data=data)
+
+
+@service_request_tickets_router.get(
+    "/{row_id}/circuit-history",
+    response_model=APIResponse[CircuitHistoryResponse],
+)
+def circuit_history(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=ServiceRequestTicketService(db).get_circuit_history(ctx, row_id),
+    )
+
+
+@service_request_tickets_router.get(
+    "/{row_id}/assignment-history",
+    response_model=APIResponse[list[AssignmentHistoryItem]],
+)
+def assignment_history(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    items = ServiceRequestTicketService(db).list_assignment_history(ctx, row_id)
+    return APIResponse(message="OK", data=items)
+
+
+@service_request_tickets_router.post(
+    "/{row_id}/reopen-request",
+    response_model=APIResponse[ServiceRequestReopenRequestResponse],
+)
+def create_reopen_request(
+    row_id: UUID,
+    body: ServiceRequestReopenRequestCreate,
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    data = ServiceRequestTicketService(db).request_reopen(ctx, row_id, reason=body.reason)
+    db.commit()
+    return APIResponse(message="Reopen request submitted", data=data)
 
 
 @service_request_tickets_router.post("/{row_id}/resume", response_model=APIResponse[ServiceRequestTicketDetail])
@@ -300,6 +459,50 @@ def resume_ticket(
     data = ServiceRequestTicketService(db).resume_ticket(ctx, row_id, reason=reason)
     db.commit()
     return APIResponse(message="Ticket resumed", data=data)
+
+
+@service_request_tickets_router.post(
+    "/{row_id}/sla/pause",
+    response_model=APIResponse[ServiceRequestTicketDetail],
+)
+def pause_ticket_sla(
+    row_id: UUID,
+    body: ServiceRequestSlaPausePayload,
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    data = ServiceRequestTicketService(db).pause_sla(ctx, row_id, reason=body.reason)
+    db.commit()
+    return APIResponse(message="SLA paused", data=data)
+
+
+@service_request_tickets_router.post(
+    "/{row_id}/sla/resume",
+    response_model=APIResponse[ServiceRequestTicketDetail],
+)
+def resume_ticket_sla(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:update"))],
+    db: Annotated[Session, Depends(get_db)],
+    body: ServiceRequestSlaResumePayload | None = None,
+):
+    reason = body.reason if body else None
+    data = ServiceRequestTicketService(db).resume_sla(ctx, row_id, reason=reason)
+    db.commit()
+    return APIResponse(message="SLA resumed", data=data)
+
+
+@service_request_tickets_router.get(
+    "/{row_id}/sla-pauses",
+    response_model=APIResponse[list[ServiceRequestSlaPauseItem]],
+)
+def list_ticket_sla_pauses(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    items = ServiceRequestTicketService(db).list_sla_pauses(ctx, row_id)
+    return APIResponse(message="OK", data=items)
 
 
 @service_request_tickets_router.post("/{row_id}/awaiting-assignment", response_model=APIResponse[ServiceRequestTicketDetail])
@@ -614,7 +817,7 @@ def field_engineer_mark_solved(
     row_id: UUID,
     field_engineer_id: UUID,
     body: TicketFieldEngineerSolve,
-    ctx: Annotated[TenantContext, Depends(require_permission("service.request:read"))],
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:update"))],
     db: Annotated[Session, Depends(get_db)],
 ):
     data = ServiceRequestTicketService(db).field_engineer_mark_solved(
@@ -625,4 +828,4 @@ def field_engineer_mark_solved(
         attachments=[a.model_dump() for a in body.attachments],
     )
     db.commit()
-    return APIResponse(message="Marked solved by field engineer", data=data)
+    return APIResponse(message="Field engineer visit marked complete", data=data)

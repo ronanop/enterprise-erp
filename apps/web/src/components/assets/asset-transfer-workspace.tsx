@@ -97,7 +97,8 @@ function formatPlace(label?: string | null, id?: string | null): string {
 function formatStatusLabel(status: string): string {
   const key = status.trim().toLowerCase();
   if (!key) return "—";
-  return key.charAt(0).toUpperCase() + key.slice(1);
+  if (key === "completed" || key === "cancelled") return "Completed";
+  return "In Progress";
 }
 
 export function AssetTransferWorkspace() {
@@ -405,10 +406,10 @@ export function AssetTransferWorkspace() {
   }
 
   function renderStatusBadge(row: TransferRow) {
+    const label = formatStatusLabel(row.status);
     return (
-      <Badge variant="secondary" className="font-mono text-xs">
-        {formatStatusLabel(row.status)}
-        {row.workflow_status ? ` / ${row.workflow_status}` : ""}
+      <Badge variant={label === "Completed" ? "outline" : "default"} className="text-xs">
+        {label}
       </Badge>
     );
   }
@@ -558,9 +559,6 @@ export function AssetTransferWorkspace() {
                     rows.map((row, index) => {
                       const asset = assetMap.get(row.asset_id);
                       const isSelected = selected?.id === row.id;
-                      const assetLabel = asset
-                        ? `${asset.asset_code} — ${asset.asset_name}`
-                        : row.asset_id.slice(0, 8);
                       return (
                         <tr
                           key={row.id}
@@ -574,11 +572,8 @@ export function AssetTransferWorkspace() {
                             {tableRowSerial(page, pageSize, index)}
                           </td>
                           <td className="px-3 py-2 font-mono text-xs">{row.document_number}</td>
-                          <td className="px-3 py-2">
-                            <div className="font-medium">{asset?.asset_name ?? "Unresolved asset"}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {asset?.asset_code ?? assetLabel}
-                            </div>
+                          <td className="px-3 py-2 font-medium">
+                            {asset?.asset_name ?? "Unresolved asset"}
                           </td>
                           <td className="px-3 py-2 text-xs text-muted-foreground">
                             {formatPlace(row.from_location_label, row.from_branch_id)}

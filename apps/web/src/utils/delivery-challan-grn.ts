@@ -543,13 +543,17 @@ export type DeliveryStatusGrnItemRow = {
   orderedQty: string;
   grnQty: string;
   unitCost: string;
+  /** Tax amount for GRN qty (display). */
+  tax: string;
+  /** Taxable + tax for GRN qty (display). */
+  totalAmount: string;
 };
 
 function lineDescription(
   product: string,
   extra?: string | null,
 ): string {
-  const fromField = (extra || "").trim();
+  const fromField = (extra || "").replace(/^\[quote:[^\]]+\]\s*/i, "").trim();
   if (fromField && fromField.toLowerCase() !== product.trim().toLowerCase()) {
     return fromField;
   }
@@ -559,20 +563,52 @@ function lineDescription(
   return "";
 }
 
+function formatGrnMoney(value: number): string {
+  if (!Number.isFinite(value)) return "-";
+  return value.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function grnLineMoneyFields(
+  qtyRaw: string | number,
+  rateRaw: string | number,
+  taxPctRaw: string | number | null | undefined,
+): Pick<DeliveryStatusGrnItemRow, "tax" | "totalAmount"> {
+  const qty = Number(qtyRaw);
+  const rate = Number(rateRaw);
+  const taxPct = Number(taxPctRaw);
+  if (!Number.isFinite(qty) || !Number.isFinite(rate) || qty <= 0) {
+    return { tax: "-", totalAmount: "-" };
+  }
+  const taxable = qty * rate;
+  const pct = Number.isFinite(taxPct) && taxPct > 0 ? taxPct : 0;
+  const taxAmt = taxable * (pct / 100);
+  return {
+    tax: formatGrnMoney(taxAmt),
+    totalAmount: formatGrnMoney(taxable + taxAmt),
+  };
+}
+
 export function deliveryStatusGrnItemRowsFromChallan(
   challan: DeliveryChallanRecord,
 ): DeliveryStatusGrnItemRow[] {
+  const taxPct = Number(challan.taxPercentage) || 0;
   return (challan.lines || [])
     .filter((line) => (line.product || "").trim() || (line.itemName || "").trim() || (line.quantitySent || "").trim())
     .map((line, index) => {
       const product = (line.product || "").trim() || (line.itemName || "").trim() || "-";
+      const grnQty = (line.quantitySent || "").trim() || "-";
+      const unitCost = (line.rate || "").trim() || "-";
       return {
         id: line.id || `challan-line-${index}`,
         product,
         description: lineDescription(product, line.itemName) || "-",
         orderedQty: "-",
-        grnQty: (line.quantitySent || "").trim() || "-",
-        unitCost: (line.rate || "").trim() || "-",
+        grnQty,
+        unitCost,
+        ...grnLineMoneyFields(grnQty, unitCost, taxPct),
       };
     });
 }
@@ -582,7 +618,7 @@ export function deliveryStatusGrnItemRowsFromBatches(
   order: ProcOrder | null,
 ): DeliveryStatusGrnItemRow[] {
   const orderLineById = new Map((order?.lines || []).map((ln) => [ln.id, ln]));
-  const byLine = new Map<string, DeliveryStatusGrnItemRow>();
+  const byLine = new Map<string, DeliveryStatusGrnItemRow & { _rate: number; _taxPct: number }>();
   for (const batch of batches) {
     for (const ln of batch.lines || []) {
       const qty = Number(ln.quantity) || 0;
@@ -596,10 +632,13 @@ export function deliveryStatusGrnItemRowsFromBatches(
       ).trim();
       const description =
         lineDescription(product, ol?.description || ol?.product_code) || "-";
+      const rate = Number(ol?.unit_cost) || 0;
+      const taxPct = Number(ol?.tax_rate) || 0;
       const prev = byLine.get(ln.order_line_id);
       if (prev) {
         const nextQty = (Number(prev.grnQty) || 0) + qty;
         prev.grnQty = String(nextQty);
+        Object.assign(prev, grnLineMoneyFields(nextQty, prev._rate, prev._taxPct));
       } else {
         byLine.set(ln.order_line_id, {
           id: ln.order_line_id,
@@ -607,12 +646,35 @@ export function deliveryStatusGrnItemRowsFromBatches(
           description,
           orderedQty: ol ? String(Number(ol.quantity) || 0) : "-",
           grnQty: String(qty),
-          unitCost: ol ? String(Number(ol.unit_cost) || 0) : "-",
+          unitCost: ol ? String(rate) : "-",
+          ...grnLineMoneyFields(qty, rate, taxPct),
+          _rate: rate,
+          _taxPct: taxPct,
         });
       }
     }
   }
-  return [...byLine.values()];
+  return [...byLine.values()].map(({ _rate: _r, _taxPct: _t, ...row }) => row);
+}
+
+/** Expand "PO/001, PO/002" style labels into individual GRN numbers. */
+export function expandGrnNumberList(
+  values: ReadonlyArray<string | null | undefined>,
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of values) {
+    const parts = String(raw ?? "")
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+    for (const part of parts) {
+      if (seen.has(part)) continue;
+      seen.add(part);
+      out.push(part);
+    }
+  }
+  return out;
 }
 
 export function matchChallanReceiptBatches(
@@ -620,9 +682,7 @@ export function matchChallanReceiptBatches(
   challan: DeliveryChallanRecord,
 ): ScmReceiptBatch[] {
   const selectedKeys = new Set((challan.selectedGrnKeys || []).filter(Boolean));
-  const selectedNums = new Set(
-    (challan.selectedGrnNumbers || []).map((n) => String(n ?? "").trim()).filter(Boolean),
-  );
+  const selectedNums = new Set(expandGrnNumberList(challan.selectedGrnNumbers || []));
   const matched = batches.filter((batch) => {
     if (selectedKeys.has(receiptBatchKey(batch))) return true;
     const grn = (batch.grn_number || "").trim();
@@ -630,4 +690,52 @@ export function matchChallanReceiptBatches(
   });
   if (matched.length > 0) return matched;
   return batches.filter((batch) => (batch.lines || []).some((ln) => Number(ln.quantity) > 0));
+}
+
+/**
+ * Prefer challan line quantities (what was billed / shipped from stock selection).
+ * Fall back to matched GRN receive quantities only when the challan has no qty lines.
+ */
+export function resolveDeliveryStatusGrnItems(input: {
+  challan: DeliveryChallanRecord;
+  matchedBatches: ScmReceiptBatch[];
+  order: ProcOrder | null;
+  /** Accounts My Jobs billed qty — overrides display when challan lines drifted. */
+  invoiceQuantity?: number | null;
+}): DeliveryStatusGrnItemRow[] {
+  const fromChallan = deliveryStatusGrnItemRowsFromChallan(input.challan);
+  const challanHasQty = fromChallan.some((row) => (Number(row.grnQty) || 0) > 0);
+  let rows = challanHasQty
+    ? fromChallan
+    : deliveryStatusGrnItemRowsFromBatches(input.matchedBatches, input.order);
+
+  const invoiceQty = Number(input.invoiceQuantity);
+  if (!(invoiceQty > 0) || rows.length === 0) return rows;
+
+  const shownQty = rows.reduce((sum, row) => sum + (Number(row.grnQty) || 0), 0);
+  if (!(shownQty > 0) || Math.abs(shownQty - invoiceQty) < 1e-6) return rows;
+
+  const taxPct = Number(input.challan.taxPercentage) || 0;
+  if (rows.length === 1) {
+    const row = rows[0];
+    const rate = Number(row.unitCost) || 0;
+    return [
+      {
+        ...row,
+        grnQty: String(invoiceQty),
+        ...grnLineMoneyFields(invoiceQty, rate, taxPct),
+      },
+    ];
+  }
+
+  const scale = invoiceQty / shownQty;
+  return rows.map((row) => {
+    const nextQty = Math.round((Number(row.grnQty) || 0) * scale * 1e6) / 1e6;
+    const rate = Number(row.unitCost) || 0;
+    return {
+      ...row,
+      grnQty: String(nextQty),
+      ...grnLineMoneyFields(nextQty, rate, taxPct),
+    };
+  });
 }

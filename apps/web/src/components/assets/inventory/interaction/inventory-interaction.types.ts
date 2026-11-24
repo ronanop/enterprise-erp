@@ -135,17 +135,12 @@ export const INVENTORY_MENU_ITEMS: Array<{
   label: string;
   permissionKey: keyof InventoryActionPermissions;
 }> = [
-  { id: "viewDetails", label: "View Details", permissionKey: "viewDetails" },
   // Edit is shown in the overflow menu (not as a direct row button).
   { id: "edit", label: "Edit", permissionKey: "edit" },
   { id: "assign", label: "Assign Asset", permissionKey: "assign" },
   { id: "return", label: "Return Asset", permissionKey: "return" },
   // History + Discovery live inside Information Portal — single menu entry.
   { id: "portal", label: "Information Portal", permissionKey: "portal" },
-  { id: "qr", label: "QR Code", permissionKey: "qr" },
-  { id: "transfer", label: "User Transfer", permissionKey: "transfer" },
   { id: "maintenance", label: "Maintenance", permissionKey: "maintenance" },
   { id: "startDisposal", label: "Dispose", permissionKey: "startDisposal" },
-  // Destructive action — always last in the overflow menu.
-  { id: "delete", label: "Delete", permissionKey: "delete" },
 ];

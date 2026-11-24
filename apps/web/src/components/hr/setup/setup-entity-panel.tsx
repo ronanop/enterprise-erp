@@ -447,6 +447,11 @@ export function SetupEntityPanel({
       }
     }
 
+    // Prefer session company (header pin), then derive from branch / first org lookup.
+    const sessionCompanyId = getStoredOrgContext()?.companyId?.trim() || "";
+    if (!initial.company_id && sessionCompanyId) {
+      initial.company_id = sessionCompanyId;
+    }
     // If branch selected and company empty, derive company from branch
     if (initial.branch_id && !initial.company_id) {
       const br = orgLookups.branches.find((b) => b.value === initial.branch_id);
@@ -456,9 +461,12 @@ export function SetupEntityPanel({
       initial.company_id = orgLookups.companies[0].value;
     }
     if (!initial.branch_id && orgLookups.branches[0]) {
-      initial.branch_id = orgLookups.branches[0].value;
-      if (!initial.company_id && orgLookups.branches[0].companyId) {
-        initial.company_id = orgLookups.branches[0].companyId;
+      const preferredBranch =
+        orgLookups.branches.find((b) => b.companyId && b.companyId === initial.company_id) ||
+        orgLookups.branches[0];
+      initial.branch_id = preferredBranch.value;
+      if (!initial.company_id && preferredBranch.companyId) {
+        initial.company_id = preferredBranch.companyId;
       }
     }
 

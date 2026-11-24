@@ -57,16 +57,18 @@ describe("navigateDashboardQuickAction", () => {
     clearInventoryUiSnapshot();
   });
 
-  it("navigates register/assign/return/qr to direct routes", () => {
+  it("navigates register/assign/return/reports/qr to direct routes", () => {
     const push = vi.fn();
     navigateDashboardQuickAction(push, "register");
     navigateDashboardQuickAction(push, "assign");
     navigateDashboardQuickAction(push, "return");
+    navigateDashboardQuickAction(push, "reports");
     navigateDashboardQuickAction(push, "qr");
     expect(push.mock.calls.map((c) => c[0])).toEqual([
       "/assets/assets/new",
       "/assets/asset-assignments/new",
       "/assets/asset-assignments/return",
+      "/assets/reports",
       "/assets/qr-barcode",
     ]);
   });

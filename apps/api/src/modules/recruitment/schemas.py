@@ -31,6 +31,8 @@ class JobRequisitionCreate(BaseModel):
     currency_code: str | None = "INR"
     job_description: str | None = None
     justification: str | None = None
+    posting_audience: str = "external"
+    evidence_email_file_name: str | None = None
     status: str | None = "draft"
 
 
@@ -39,9 +41,15 @@ class JobRequisitionUpdate(BaseModel):
     openings_count: int | None = None
     priority: str | None = None
     target_hire_date: date | None = None
+    min_experience_years: Decimal | None = None
+    max_experience_years: Decimal | None = None
     salary_band_min: Decimal | None = None
     salary_band_max: Decimal | None = None
     job_description: str | None = None
+    justification: str | None = None
+    employment_type: str | None = None
+    posting_audience: str | None = None
+    evidence_email_file_name: str | None = None
     status: str | None = None
     version: int | None = None
 
@@ -65,6 +73,9 @@ class JobRequisitionResponse(OrmModel):
     currency_code: str | None
     job_description: str | None
     justification: str | None
+    posting_audience: str = "external"
+    evidence_email_file_name: str | None = None
+    evidence_email_path: str | None = None
     status: str
     workflow_status: str | None
     workflow_instance_id: UUID | None
@@ -173,6 +184,7 @@ class CandidateUpdate(BaseModel):
     current_title: str | None = None
     current_employer: str | None = None
     total_experience_years: Decimal | None = None
+    highest_education: str | None = None
     status: str | None = None
     version: int | None = None
 
@@ -195,6 +207,24 @@ class CandidateResponse(OrmModel):
     status: str
     company_id: UUID
     version: int
+    # Populated by list/get enrichment — ATS Source column (e.g. company_website)
+    source_code: str | None = None
+    source_name: str | None = None
+    # Careers / resume profile enrichment (from RecResume.parsed_skills_json)
+    gender: str | None = None
+    date_of_birth: str | None = None
+    address: str | None = None
+    state: str | None = None
+    pincode: str | None = None
+    location: str | None = None
+    alternate_phone: str | None = None
+    expected_ctc: float | None = None
+    notice_period_days: int | None = None
+    linkedin_url: str | None = None
+    portfolio_url: str | None = None
+    resume_name: str | None = None
+    skills: list[str] | None = None
+    profile_json: dict | None = None
 
 class CandidateDocumentCreate(BaseModel):
     company_id: UUID | None = None
@@ -632,3 +662,15 @@ class RecruitmentReportResponse(OrmModel):
 class OnboardingCompleteRequest(BaseModel):
     designation: str
     management_group_id: UUID | None = None
+
+
+class JobFormLookupOption(BaseModel):
+    id: UUID
+    name: str
+    company_id: UUID | None = None
+    branch_id: UUID | None = None
+
+
+class JobFormLookupsResponse(BaseModel):
+    departments: list[JobFormLookupOption]
+    designations: list[JobFormLookupOption]

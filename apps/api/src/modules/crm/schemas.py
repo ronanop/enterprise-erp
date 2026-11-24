@@ -2,6 +2,7 @@
 
 from datetime import date, datetime, time
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
@@ -142,6 +143,7 @@ class SalesLeadUpdate(BaseModel):
     distributor_department: str | None = None
     end_customer_name: str | None = None
     end_customer_location: str | None = None
+    sale_type: str | None = None
     entity_name: str | None = None
     entity_email: str | None = None
     entity_address: str | None = None
@@ -153,6 +155,8 @@ class SalesLeadUpdate(BaseModel):
     presales_owner_id: UUID | None = None
     presales_call_aligned: bool | None = None
     presales_call_contact_name: str | None = None
+    presales_call_by_product: str | None = None
+    custom_fields: dict[str, Any] | None = None
 
 
 class LeadAssignRequest(BaseModel):
@@ -236,6 +240,7 @@ class LeadResponse(OrmModel):
     distributor_department: str | None = None
     end_customer_name: str | None = None
     end_customer_location: str | None = None
+    sale_type: str | None = None
     notes: str | None
     convert_remark: str | None = None
     lost_reason: str | None = None
@@ -244,6 +249,7 @@ class LeadResponse(OrmModel):
     presales_owner_id: UUID | None = None
     presales_call_aligned: bool | None = None
     presales_call_contact_name: str | None = None
+    presales_call_by_product: str | None = None
     version: int
 
 
@@ -259,6 +265,7 @@ class OpportunityCreate(BaseModel):
     probability_percent: Decimal = Decimal("0")
     expected_close_date: date | None = None
     current_stage: str = "qualification"
+    custom_fields: dict[str, Any] | None = None
 
 
 class OpportunityUpdate(BaseModel):
@@ -277,6 +284,9 @@ class OpportunityUpdate(BaseModel):
     migration_credit_phase2: Decimal | None = None
     migration_credit_phase3: Decimal | None = None
     marketing_event_id: UUID | None = None
+    service_sourcing_channel: str | None = Field(
+        default=None, pattern="^(Outsourced|Cache Service)$"
+    )
     purchase_model: str | None = Field(default=None, pattern="^(capex|opex)$")
     lease_type: str | None = Field(default=None, pattern="^(finance|operating)$")
     lease_partner: str | None = Field(default=None, max_length=255)
@@ -330,6 +340,10 @@ class OpportunityResponse(OrmModel):
     po_terms_at: datetime | None = None
     cloud_blueprint_variant: str | None = None
     product_type: str | None = None
+    has_hardware: bool = False
+    has_software: bool = False
+    has_services: bool = False
+    service_sourcing_channel: str | None = None
     cloud_sub_product: str | None = None
     customer_mrr: Decimal | None = None
     customer_arr: Decimal | None = None
@@ -832,6 +846,7 @@ class CompanyCreate(BaseModel):
     shipping_country: str | None = None
     description: str | None = None
     master_customer_id: UUID | None = None
+    custom_fields: dict[str, Any] | None = None
 
     @field_validator(
         "customer_name",
@@ -909,6 +924,7 @@ class CompanyUpdate(BaseModel):
     shipping_country: str | None = None
     description: str | None = None
     status: str | None = None
+    custom_fields: dict[str, Any] | None = None
     version: int | None = None
 
     @field_validator(
@@ -986,6 +1002,7 @@ class CompanyResponse(OrmModel):
     master_customer_id: UUID | None
     status: str
     locked: bool
+    custom_fields: dict[str, Any] = Field(default_factory=dict)
     version: int
     created_at: datetime | None = None
 
@@ -1009,6 +1026,7 @@ class ContactCreate(BaseModel):
     title: str | None = Field(default=None, max_length=120, pattern=r"^[\w .'\-/&]{0,120}$")
     is_primary: bool = False
     owner_id: UUID | None = None
+    custom_fields: dict[str, Any] | None = None
 
     @field_validator("first_name", "last_name", "email", "phone", "mobile", "title")
     @classmethod
@@ -1029,6 +1047,7 @@ class ContactUpdate(BaseModel):
     title: str | None = Field(default=None, max_length=120)
     is_primary: bool | None = None
     status: str | None = None
+    custom_fields: dict[str, Any] | None = None
     version: int | None = None
 
     @field_validator("first_name", "last_name", "email", "phone", "mobile", "title", "status")
@@ -1055,6 +1074,7 @@ class ContactResponse(OrmModel):
     is_primary: bool
     owner_id: UUID | None
     status: str
+    custom_fields: dict[str, Any] = Field(default_factory=dict)
     version: int
 
 
@@ -1108,6 +1128,7 @@ class LeadCreateFromCompany(BaseModel):
     distributor_department: str | None = None
     end_customer_name: str | None = None
     end_customer_location: str | None = None
+    sale_type: str | None = None
     entity_name: str | None = None
     entity_email: str | None = None
     entity_address: str | None = None
@@ -1117,6 +1138,10 @@ class LeadCreateFromCompany(BaseModel):
     requires_sow: bool = False
     notes: str | None = None
     presales_owner_id: UUID | None = None
+    presales_call_aligned: bool | None = None
+    presales_call_contact_name: str | None = None
+    presales_call_by_product: str | None = None
+    custom_fields: dict[str, Any] | None = None
 
 
 class LeadLostRequest(BaseModel):
@@ -1170,11 +1195,14 @@ class SalesLeadResponse(OrmModel):
     distributor_department: str | None = None
     end_customer_name: str | None = None
     end_customer_location: str | None = None
+    sale_type: str | None = None
     notes: str | None = None
     converted_opportunity_id: UUID | None
     presales_owner_id: UUID | None = None
     presales_call_aligned: bool | None = None
     presales_call_contact_name: str | None = None
+    presales_call_by_product: str | None = None
+    custom_fields: dict[str, Any] = Field(default_factory=dict)
     version: int
 
 
@@ -1309,6 +1337,7 @@ class QuoteCreate(BaseModel):
     terms: str | None = None
     description: str | None = None
     reason_for_discount: str | None = None
+    custom_fields: dict[str, Any] | None = None
 
 
 class QuoteUpdate(BaseModel):
@@ -1448,10 +1477,13 @@ class QuoteLineCreate(BaseModel):
     product_name: str
     hsn_sac: str | None = None
     description: str | None = None
+    sub_product_category: str | None = None
     line_type: str = "hardware"
     qty: Decimal = Decimal("1")
     unit_cost: Decimal = Decimal("0")
     unit_sell: Decimal = Decimal("0")
+    # Optional entered markup % (up to 10 d.p.); when set with unit_cost, drives unit_sell.
+    margin_pct: Decimal | None = None
     gst_pct: Decimal = Decimal("0")
 
 
@@ -1459,10 +1491,12 @@ class QuoteLineUpdate(BaseModel):
     product_name: str | None = None
     hsn_sac: str | None = None
     description: str | None = None
+    sub_product_category: str | None = None
     line_type: str | None = None
     qty: Decimal | None = None
     unit_cost: Decimal | None = None
     unit_sell: Decimal | None = None
+    margin_pct: Decimal | None = None
     gst_pct: Decimal | None = None
     version: int | None = None
 
@@ -1475,6 +1509,7 @@ class QuoteLineResponse(OrmModel):
     product_name: str
     hsn_sac: str | None
     description: str | None = None
+    sub_product_category: str | None = None
     line_type: str
     qty: Decimal
     unit_cost: Decimal
@@ -1498,11 +1533,32 @@ class QuoteMarginSummaryResponse(BaseModel):
     line_types_present: list[str]
 
 
+class QuoteRevisionRow(BaseModel):
+    revision_no: int
+    avg_margin_pct: Decimal
+    grand_total: Decimal
+    total_margin_amount: Decimal
+    negotiation_pct: Decimal
+    is_current: bool = False
+    snapshotted_at: datetime | None = None
+    remark: str | None = None
+    has_print_payload: bool = False
+
+
+class QuoteRevisionPrintPayload(BaseModel):
+    revision_no: int
+    is_current: bool = False
+    quote: dict[str, Any]
+    lines: list[dict[str, Any]]
+
+
 class QuoteSendForApprovalRequest(BaseModel):
     team_role: str = "management"
     assigned_user_id: UUID | None = None
     assigned_user_ids: list[UUID] | None = None
     remarks: str | None = None
+    quotation_pdf_base64: str | None = None
+    quotation_pdf_filename: str | None = None
 
 
 class QuoteActionRequest(BaseModel):
@@ -1544,6 +1600,7 @@ class OvfCreate(BaseModel):
     negotiated_by: str | None = Field(default=None, max_length=50)
     negotiation_remark: str | None = None
     early_payment_discount_pct: Decimal | None = None
+    custom_fields: dict[str, Any] | None = None
 
 
 class OvfUpdate(BaseModel):
@@ -1664,8 +1721,9 @@ class OvfFreightRequest(BaseModel):
 
 
 class OvfSupportingItemInput(BaseModel):
-    product_name: str = Field(min_length=1, max_length=255)
-    qty: Decimal = Field(gt=0)
+    line_id: UUID | None = None
+    product_name: str = Field(default="", max_length=255)
+    qty: Decimal = Field(default=Decimal("1"), gt=0)
     unit_price: Decimal = Field(ge=0)
     distributor_name: str | None = Field(default=None, max_length=255)
     description: str | None = None
@@ -2007,6 +2065,8 @@ class OvfSendForApprovalRequest(BaseModel):
     assigned_user_id: UUID | None = None
     assigned_user_ids: list[UUID] | None = None
     remarks: str | None = None
+    ovf_pdf_base64: str | None = None
+    ovf_pdf_filename: str | None = None
 
 
 class OvfDealWonRequest(BaseModel):
@@ -2176,6 +2236,30 @@ class OpportunityTimelineResponse(BaseModel):
     events: list[OpportunityTimelineEventResponse]
 
 
+class DealTimelineListItem(BaseModel):
+    opportunity_id: UUID
+    opportunity_code: str | None = None
+    opportunity_name: str | None = None
+    customer_name: str | None = None
+    account_name: str | None = None
+    stage: str | None = None
+    status: str | None = None
+    # Coarse lifecycle phase: crm | ovf | scm | delivery | project | completed | lost
+    phase: str
+    timeline_status: str
+    deal_won: bool = False
+    updated_at: datetime | None = None
+
+
+class DealTimelineResponse(BaseModel):
+    opportunity_id: UUID
+    opportunity_code: str | None = None
+    opportunity_name: str | None = None
+    customer_name: str | None = None
+    timeline_status: str
+    events: list[OpportunityTimelineEventResponse]
+
+
 class BlueprintActionRequest(BaseModel):
     """Generic action payload - fields are action-specific and all optional.
 
@@ -2209,6 +2293,9 @@ class BlueprintActionRequest(BaseModel):
     operations_user_ids: list[UUID] | None = None
     # send_po_approval: Sales confirms they checked and verified the PO T&C.
     terms_accepted: bool | None = None
+    # Accepted quote print PDF attached to PO approval emails.
+    quotation_pdf_base64: str | None = None
+    quotation_pdf_filename: str | None = None
 
     def to_payload(self) -> dict:
         return self.model_dump(exclude_none=True)

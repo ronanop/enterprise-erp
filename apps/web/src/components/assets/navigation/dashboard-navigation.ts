@@ -25,6 +25,7 @@ export const dashboardNavigationPaths = {
   /** Entry: pick an asset then open Information Portal from inventory. */
   informationPortal: assignmentNavigationPaths.inventory,
   qrBarcode: "/assets/qr-barcode",
+  reports: "/assets/reports",
   inventory: assignmentNavigationPaths.inventory,
   assignments: assignmentNavigationPaths.list,
 } as const;
@@ -59,6 +60,7 @@ export type DashboardQuickActionId =
   | "return"
   | "discovery"
   | "informationPortal"
+  | "reports"
   | "qr";
 
 export function navigateDashboardQuickAction(
@@ -81,6 +83,9 @@ export function navigateDashboardQuickAction(
       break;
     case "informationPortal":
       openInventoryWithPreset(push, "all", locationId);
+      break;
+    case "reports":
+      push(dashboardNavigationPaths.reports);
       break;
     case "qr":
       push(dashboardNavigationPaths.qrBarcode);

@@ -9,6 +9,7 @@ import {
   Globe,
   LayoutList,
   Loader2,
+  Mail,
   Save,
   UserCheck,
 } from "lucide-react";
@@ -30,13 +31,22 @@ import {
 } from "@/components/hr/setup/setup-drawer";
 import { Button } from "@/components/ui/button";
 import { EMPLOYMENT_TYPE_OPTIONS, employmentDurationKind, formatEmploymentTypeLabel } from "@/config/hr-master-options";
-import { getPortalLoginUrl, type OnboardingAssignmentInput } from "@/services/onboarding-management-service";
-import { previewNextEmployeeCode } from "@/services/employee-management-service";
+import {
+  hydrateOnboardingCaseFiles,
+  mergeBgCheckDocumentsIntoCase,
+  type OnboardingAssignmentInput,
+} from "@/services/onboarding-management-service";
+import { previewNextEmployeeCodeForEntity } from "@/services/employee-management-service";
 import {
   loadHrMasterDirectory,
   type HrMasterOption,
 } from "@/services/hr-master-connector";
-import { listEmploymentTypeOptions, listEntityOptions, loadSetupOrgLookups } from "@/services/hr-setup-service";
+import {
+  listEmploymentTypeOptions,
+  listEntityOptions,
+  loadSetupOrgLookups,
+  type SetupMasterOption,
+} from "@/services/hr-setup-service";
 import type { ManagementGroup } from "@/services/management-group-service";
 import type {
   ChecklistItem,
@@ -47,7 +57,6 @@ import { PORTAL_STEPS } from "@/types/onboarding-management";
 import { resolveOnboardingDisplayStatus } from "@/lib/onboarding-display-status";
 import { maskAadhaar, maskEmail, maskPan, maskPhone } from "@/lib/pii-mask";
 import {
-  canActivateOnboardingCase,
   canApproveOnboardingCase,
   canCompleteOnboardingCase,
   hasOnboardingEmployeeRecord,
@@ -67,14 +76,15 @@ type Props = {
     status: OnboardingDocument["verifyStatus"],
   ) => void;
   onSaveAssignment: (caseId: string, input: OnboardingAssignmentInput) => Promise<void>;
-  onApprove: (caseId: string) => void;
+  onApprove: (caseId: string) => void | Promise<void>;
   onComplete: (
     caseId: string,
     managementGroup?: ManagementGroup,
     employeeCode?: string,
   ) => void | Promise<void>;
   onActivate: (caseId: string, managementGroup?: ManagementGroup) => void | Promise<void>;
-  onInvite: (caseRow: OnboardingCase) => void;
+  /** Resend onboarding invite email (portal link + login) via SMTP. */
+  onResendInvitation?: (caseId: string) => void | Promise<void>;
 };
 
 type AssignmentForm = {
@@ -122,17 +132,21 @@ export function CaseDetailDrawer({
   onApprove,
   onComplete,
   onActivate,
-  onInvite,
+  onResendInvitation,
 }: Props) {
   const [tab, setTab] = useState<"overview" | "portal" | "docs" | "checklist">("overview");
   const [note, setNote] = useState("");
   const [previewDoc, setPreviewDoc] = useState<OnboardingDocument | null>(null);
+  const [hydratedCase, setHydratedCase] = useState<OnboardingCase | null>(caseRow);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [managementGroupId, setManagementGroupId] = useState(
     () => caseRow?.managementGroupId ?? "",
   );
   const [form, setForm] = useState<AssignmentForm | null>(null);
   const [savingAssignment, setSavingAssignment] = useState(false);
-  const [actionBusy, setActionBusy] = useState<"complete" | "activate" | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [verifyingDocId, setVerifyingDocId] = useState<string | null>(null);
+  const [resendingInvite, setResendingInvite] = useState(false);
   const [masters, setMasters] = useState<{
     departments: HrMasterOption[];
     designations: HrMasterOption[];
@@ -145,12 +159,50 @@ export function CaseDetailDrawer({
     branches: [],
   });
   const [employmentTypes, setEmploymentTypes] = useState(EMPLOYMENT_TYPE_OPTIONS);
-  const [entities, setEntities] = useState<{ value: string; label: string }[]>([]);
+  const [entities, setEntities] = useState<SetupMasterOption[]>([]);
   const [nextAutoCode, setNextAutoCode] = useState("");
 
   useEffect(() => {
-    if (!open) setActionBusy(null);
+    if (!open) setActionBusy(false);
   }, [open]);
+
+  useEffect(() => {
+    if (!caseRow) {
+      setHydratedCase(null);
+      return;
+    }
+    // Keep file bytes from prior hydration; always take latest metadata (verifyStatus).
+    setHydratedCase((prev) => {
+      if (!prev || prev.id !== caseRow.id) return caseRow;
+      return {
+        ...caseRow,
+        portal: {
+          ...caseRow.portal,
+          documents: caseRow.portal.documents.map((d) => {
+            const prior = prev.portal.documents.find((x) => x.id === d.id);
+            if (!prior?.fileDataUrl?.trim() || d.fileDataUrl?.trim()) return d;
+            return {
+              ...d,
+              fileDataUrl: prior.fileDataUrl,
+              mimeType: d.mimeType || prior.mimeType,
+            };
+          }),
+          policies: {
+            ...caseRow.portal.policies,
+            signatureDataUrl:
+              caseRow.portal.policies.signatureDataUrl?.trim() ||
+              prev.portal.policies.signatureDataUrl,
+            signatureMimeType:
+              caseRow.portal.policies.signatureMimeType ||
+              prev.portal.policies.signatureMimeType,
+            signatureFileName:
+              caseRow.portal.policies.signatureFileName ||
+              prev.portal.policies.signatureFileName,
+          },
+        },
+      };
+    });
+  }, [caseRow]);
 
   useEffect(() => {
     if (!caseRow) {
@@ -160,6 +212,87 @@ export function CaseDetailDrawer({
     setForm(formFromCase(caseRow));
     setManagementGroupId(caseRow.managementGroupId ?? "");
   }, [caseRow?.id, caseRow?.updatedAt]);
+
+  useEffect(() => {
+    if (!open || tab !== "docs" || !caseRow) return;
+    let cancelled = false;
+    const metaCase = caseRow;
+    void (async () => {
+      const [hydrated, withBg] = await Promise.all([
+        hydrateOnboardingCaseFiles(metaCase),
+        mergeBgCheckDocumentsIntoCase(metaCase),
+      ]);
+      if (cancelled) return;
+      // Prefer current caseRow verifyStatus over anything hydrate may have reloaded.
+      setHydratedCase((prev) => {
+        const statusSource = prev && prev.id === metaCase.id ? prev : metaCase;
+        const hydratedById = new Map(hydrated.portal.documents.map((d) => [d.id, d]));
+        const mergedDocs = withBg.portal.documents.map((d) => {
+          const fromHydrate = hydratedById.get(d.id);
+          const prior = statusSource.portal.documents.find((x) => x.id === d.id);
+          const base = prior ?? d;
+          if (base.fileDataUrl?.trim()) return { ...d, ...base, source: d.source ?? base.source };
+          if (fromHydrate?.fileDataUrl?.trim()) {
+            return {
+              ...d,
+              ...base,
+              fileDataUrl: fromHydrate.fileDataUrl,
+              mimeType: base.mimeType || fromHydrate.mimeType,
+              source: d.source ?? base.source,
+            };
+          }
+          return { ...base, ...d, source: d.source ?? base.source };
+        });
+        // Keep any hydrated-only docs not present after BG merge keying
+        for (const d of hydrated.portal.documents) {
+          if (!mergedDocs.some((x) => x.id === d.id)) mergedDocs.push(d);
+        }
+        return {
+          ...statusSource,
+          portal: {
+            ...statusSource.portal,
+            documents: mergedDocs,
+            policies: {
+              ...statusSource.portal.policies,
+              signatureDataUrl:
+                statusSource.portal.policies.signatureDataUrl?.trim() ||
+                hydrated.portal.policies.signatureDataUrl,
+              signatureMimeType:
+                statusSource.portal.policies.signatureMimeType ||
+                hydrated.portal.policies.signatureMimeType,
+              signatureFileName:
+                statusSource.portal.policies.signatureFileName ||
+                hydrated.portal.policies.signatureFileName,
+            },
+          },
+        };
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, tab, caseRow?.id, caseRow?.updatedAt]);
+
+  async function openDocPreview(doc: OnboardingDocument) {
+    const base = hydratedCase ?? caseRow;
+    if (!base) {
+      setPreviewDoc(doc);
+      return;
+    }
+    if (doc.fileDataUrl?.trim()) {
+      setPreviewDoc(doc);
+      return;
+    }
+    setPreviewLoading(true);
+    try {
+      const next = await hydrateOnboardingCaseFiles(base);
+      setHydratedCase(next);
+      const restored = next.portal.documents.find((d) => d.id === doc.id) ?? doc;
+      setPreviewDoc(restored);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -188,9 +321,21 @@ export function CaseDetailDrawer({
       });
       setEmploymentTypes(types);
       setEntities(entityOpts);
-      setNextAutoCode(previewNextEmployeeCode());
     });
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !form) return;
+    const ent = entities.find((e) => e.value === form.entityId);
+    const code = ent?.code;
+    let cancelled = false;
+    void previewNextEmployeeCodeForEntity(form.entityId || undefined, code).then((next) => {
+      if (!cancelled) setNextAutoCode(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, form?.entityId, entities]);
 
   if (!caseRow || !form) return null;
 
@@ -199,38 +344,47 @@ export function CaseDetailDrawer({
   const showChecklist = caseRow.status === "joined" && caseRow.checklist.length > 0;
   const canApprove = canApproveOnboardingCase(caseRow);
   const canComplete = canCompleteOnboardingCase(caseRow);
-  const canActivate = canActivateOnboardingCase(caseRow);
   const isPendingJoin = caseRow.status === "pending_join";
+  const isActivated =
+    caseRow.status === "joined" || Boolean(caseRow.activatedAt);
   const joiningNotReached = isPendingJoin && !isJoiningDateReached(caseRow.joiningDate);
   const selectedManagementGroup =
     managementGroups.find((group) => group.id === managementGroupId) ?? undefined;
   const assignmentEditable = !["joined", "cancelled"].includes(caseRow.status);
+  /** Hide once the employee has been activated (Joined). */
+  const showActivate =
+    !isActivated && (canApprove || canComplete || isPendingJoin);
 
-  async function runComplete() {
+  async function runActivateEmployee() {
     if (actionBusy || !form) return;
-    if (form.employeeIdMode === "manual" && !form.assignedEmployeeCode.trim()) {
+    if (
+      (canApprove || canComplete) &&
+      form.employeeIdMode === "manual" &&
+      !form.assignedEmployeeCode.trim()
+    ) {
       toast("Enter an employee ID or switch to auto-generate.", "error");
       return;
     }
-    setActionBusy("complete");
+    setActionBusy(true);
     try {
-      await onComplete(
-        caseRow.id,
-        selectedManagementGroup,
-        form.employeeIdMode === "manual" ? form.assignedEmployeeCode.trim().toUpperCase() : undefined,
-      );
+      if (canApprove) {
+        await onApprove(caseRow.id);
+      }
+      if (canApprove || canComplete) {
+        await onComplete(
+          caseRow.id,
+          selectedManagementGroup,
+          form.employeeIdMode === "manual"
+            ? form.assignedEmployeeCode.trim().toUpperCase()
+            : undefined,
+        );
+        return;
+      }
+      if (isPendingJoin) {
+        await onActivate(caseRow.id, selectedManagementGroup);
+      }
     } finally {
-      setActionBusy(null);
-    }
-  }
-
-  async function runActivate() {
-    if (actionBusy) return;
-    setActionBusy("activate");
-    try {
-      await onActivate(caseRow.id, selectedManagementGroup);
-    } finally {
-      setActionBusy(null);
+      setActionBusy(false);
     }
   }
 
@@ -280,82 +434,32 @@ export function CaseDetailDrawer({
       title={caseRow.candidateName}
       description={`${caseRow.caseCode} · ${resolveOnboardingDisplayStatus(caseRow.status, caseRow.joiningDate)} · ${caseRow.progressPct}%`}
       footer={
-        <>
+        showActivate ? (
           <Button
             type="button"
-            variant="outline"
             className="cursor-pointer"
             disabled={Boolean(actionBusy)}
-            onClick={onClose}
+            title={
+              joiningNotReached
+                ? `Joining date ${caseRow.joiningDate} - will stay on Pending Join until then`
+                : "Activate employee for Workforce"
+            }
+            onClick={() => void runActivateEmployee()}
           >
-            Close
+            {actionBusy ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <UserCheck className="size-3.5" />
+            )}
+            {actionBusy ? "Opening…" : "Activate employee"}
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="cursor-pointer"
-            disabled={Boolean(actionBusy)}
-            onClick={() => onInvite(caseRow)}
-          >
-            Invitation
-          </Button>
-          {canApprove ? (
-            <Button
-              type="button"
-              variant="outline"
-              className="cursor-pointer"
-              disabled={Boolean(actionBusy)}
-              onClick={() => onApprove(caseRow.id)}
-            >
-              Approve submission
-            </Button>
-          ) : null}
-          {canComplete ? (
-            <Button
-              type="button"
-              className="cursor-pointer"
-              disabled={Boolean(actionBusy)}
-              onClick={() => void runComplete()}
-            >
-              {actionBusy === "complete" ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <UserCheck className="size-3.5" />
-              )}
-              {actionBusy === "complete" ? "Opening…" : "Complete onboarding"}
-            </Button>
-          ) : null}
-          {isPendingJoin ? (
-            <Button
-              type="button"
-              className="cursor-pointer"
-              disabled={Boolean(actionBusy)}
-              title={
-                joiningNotReached
-                  ? `Joining date ${caseRow.joiningDate} - will stay on Pending Join until then`
-                  : "Activate employee for Workforce"
-              }
-              onClick={() => void runActivate()}
-            >
-              {actionBusy === "activate" ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <UserCheck className="size-3.5" />
-              )}
-              {actionBusy === "activate" ? "Opening employee…" : "Activate employee"}
-            </Button>
-          ) : null}
-        </>
+        ) : null
       }
     >
       {actionBusy ? (
         <div className="mb-3 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-foreground">
           <Loader2 className="size-3.5 shrink-0 animate-spin text-primary" />
-          <span>
-            {actionBusy === "activate"
-              ? "Activating employee and opening details…"
-              : "Completing onboarding and opening employee details…"}
-          </span>
+          <span>Activating employee and opening details…</span>
         </div>
       ) : null}
       <HrUnderlineTabs
@@ -396,13 +500,6 @@ export function CaseDetailDrawer({
             )}
           </div>
 
-          {assignmentEditable ? (
-            <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
-              After verifying documents, assign department, designation, reporting manager,
-              employment type, and duration here. Save, then Approve submission.
-            </p>
-          ) : null}
-
           <div className="grid gap-3 sm:grid-cols-2">
             {assignmentEditable ? (
               <>
@@ -413,7 +510,7 @@ export function CaseDetailDrawer({
                     onChange={(e) => patchForm({ joiningDate: e.target.value })}
                   />
                 </SetupField>
-                <SetupField label="Legal entity" hint="HR Setup → Legal Entities">
+                <SetupField label="Legal entity">
                   <SetupSelect
                     value={form.entityId}
                     onChange={(e) => {
@@ -425,7 +522,7 @@ export function CaseDetailDrawer({
                     <option value="">Select entity…</option>
                     {entities.map((e) => (
                       <option key={e.value} value={e.value}>
-                        {e.label}
+                        {e.code ? `${e.label} (${e.code})` : e.label}
                       </option>
                     ))}
                   </SetupSelect>
@@ -451,11 +548,7 @@ export function CaseDetailDrawer({
                   </SetupSelect>
                 </SetupField>
                 {employmentDurationKind(form.employmentType) === "probation" ? (
-                  <SetupField
-                    label="Probation period (days)"
-                    required
-                    hint="Applied when the employee is activated"
-                  >
+                  <SetupField label="Probation period (days)" required>
                     <SetupInput
                       type="number"
                       min={1}
@@ -467,11 +560,7 @@ export function CaseDetailDrawer({
                   </SetupField>
                 ) : null}
                 {employmentDurationKind(form.employmentType) === "training" ? (
-                  <SetupField
-                    label="Training duration (days)"
-                    required
-                    hint="Intern / trainee duration"
-                  >
+                  <SetupField label="Training duration (days)" required>
                     <SetupInput
                       type="number"
                       min={1}
@@ -500,7 +589,6 @@ export function CaseDetailDrawer({
                 />
                 <MasterSelect
                   label="Reporting manager"
-                  hint="Employees marked as reporting managers"
                   value={
                     masters.managers.find((m) => m.label.startsWith(form.reportingManager))?.id ||
                     ""
@@ -515,7 +603,6 @@ export function CaseDetailDrawer({
                 />
                 <MasterSelect
                   label="Branch"
-                  hint="Org Setup → Branches (company branches e.g. Sultanpur)"
                   value={
                     form.branchId ||
                     masters.branches.find((b) => b.label === form.branch)?.id ||
@@ -529,9 +616,7 @@ export function CaseDetailDrawer({
                     })
                   }
                   placeholder={
-                    masters.branches.length
-                      ? "Select company branch…"
-                      : "No branches - add in Org Setup → Branches"
+                    masters.branches.length ? "Select company branch…" : "No branches available"
                   }
                 />
               </>
@@ -588,11 +673,7 @@ export function CaseDetailDrawer({
           ) : null}
 
           {assignmentEditable || canComplete || isPendingJoin ? (
-            <SetupField
-              label="Employment group"
-              hint="Optional. Auto attendance group marks present, weekly off, and holidays through today."
-              labelClassName="normal-case"
-            >
+            <SetupField label="Employment group" labelClassName="normal-case">
               <SetupSelect
                 value={managementGroupId}
                 onChange={(event) => setManagementGroupId(event.target.value)}
@@ -608,73 +689,53 @@ export function CaseDetailDrawer({
               </SetupSelect>
             </SetupField>
           ) : null}
-          {caseRow.status !== "joined" ? (
-            <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
-              {canApprove
-                ? "Verify all documents, save assignment on Overview, then approve the submission."
-                : isPendingJoin
-                  ? joiningNotReached
-                    ? `Employee profile created (${caseRow.employeeId}). Activation is available on or after ${caseRow.joiningDate}. They appear under Pending Join in Employee Management until then.`
-                    : `Employee profile ready (${caseRow.employeeId}). Click Activate employee to move them to Probation in Workforce.`
-                  : canComplete
-                    ? "Complete onboarding to create the employee profile and open their details. If joining date is in the future, they are added to the list and activate on that date."
-                    : "After verification and assignment, complete onboarding to create the employee record."}{" "}
-              Employment group is optional; you can still assign shifts, leave policy, and other
-              details from Workforce once the employee is active.
-            </p>
-          ) : null}
-          {isPendingJoin ? (
-            <div
-              className={cn(
-                "rounded-lg border px-3 py-3 text-xs",
-                canActivate
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-                  : "border-amber-200 bg-amber-50 text-amber-950",
-              )}
-            >
-              <p className="font-medium">
-                {canActivate ? "Ready to activate" : "Waiting for joining date"}
-              </p>
-              <p className="mt-1 text-[11px] opacity-90">
-                {canActivate
-                  ? "Use Activate employee below to move this hire into Workforce (Probation)."
-                  : `If you activate before ${caseRow.joiningDate}, they stay on the employee list and become active on the joining date.`}
-              </p>
-              <Button
-                type="button"
-                size="sm"
-                className="mt-2 cursor-pointer"
-                disabled={Boolean(actionBusy)}
-                title={
-                  joiningNotReached
-                    ? `Added to list - active on ${caseRow.joiningDate}`
-                    : "Activate employee for Workforce"
-                }
-                onClick={() => void runActivate()}
-              >
-                {actionBusy === "activate" ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <UserCheck className="size-3.5" />
-                )}
-                {actionBusy === "activate" ? "Opening employee…" : "Activate employee"}
-              </Button>
-            </div>
-          ) : null}
           <div className="h-2 overflow-hidden rounded-full bg-muted">
             <div
               className="h-full rounded-full bg-emerald-500 transition-all duration-300"
               style={{ width: `${caseRow.progressPct}%` }}
             />
           </div>
-          {caseRow.invitation?.token ? (
-            <div className="space-y-1 break-all font-mono text-[10px] text-muted-foreground">
-              <p>Login: {getPortalLoginUrl()}</p>
-              {caseRow.invitation.loginEmail || caseRow.candidateEmail ? (
-                <p>Email: {caseRow.invitation.loginEmail || caseRow.candidateEmail}</p>
-              ) : null}
-              {caseRow.invitation.portalPassword ? (
-                <p>Password: {caseRow.invitation.portalPassword}</p>
+          {onResendInvitation ? (
+            <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5">
+              <p className="text-[11px] text-muted-foreground">
+                Portal login is emailed to the candidate only. Resend to deliver a fresh
+                link and password for completing onboarding details.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="mt-2 cursor-pointer"
+                disabled={resendingInvite}
+                onClick={() => {
+                  void (async () => {
+                    setResendingInvite(true);
+                    try {
+                      await onResendInvitation(caseRow.id);
+                    } finally {
+                      setResendingInvite(false);
+                    }
+                  })();
+                }}
+              >
+                {resendingInvite ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Mail className="size-3.5" />
+                )}
+                {resendingInvite
+                  ? "Sending…"
+                  : caseRow.invitation?.sentAt
+                    ? "Resend invitation"
+                    : "Send invitation"}
+              </Button>
+              {caseRow.invitation?.sentAt ? (
+                <p className="mt-1.5 text-[10px] text-muted-foreground">
+                  Last sent {new Date(caseRow.invitation.sentAt).toLocaleString()}
+                  {caseRow.invitation.resendCount
+                    ? ` · Resends: ${caseRow.invitation.resendCount}`
+                    : ""}
+                </p>
               ) : null}
             </div>
           ) : null}
@@ -729,16 +790,71 @@ export function CaseDetailDrawer({
           <p className="text-[11px] text-muted-foreground">
             Click the file name or View to open a preview (PDF, images, Word, Excel, text).
           </p>
-          {caseRow.portal.documents.length === 0 ? (
+          {previewLoading ? (
+            <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <Loader2 className="size-3 animate-spin" />
+              Loading file for preview…
+            </p>
+          ) : null}
+          {(hydratedCase ?? caseRow).portal.documents.length === 0 ? (
             <p className="text-xs text-muted-foreground">No documents uploaded yet.</p>
           ) : (
-            caseRow.portal.documents.map((d) => (
+            (hydratedCase ?? caseRow).portal.documents.map((d) => (
               <OnboardingDocumentRow
                 key={d.id}
                 doc={d}
-                onView={setPreviewDoc}
-                onVerify={() => onVerifyDoc(caseRow.id, d.id, "verified")}
-                onReject={() => onVerifyDoc(caseRow.id, d.id, "rejected")}
+                subtitle={
+                  d.source === "bg_check"
+                    ? `${d.kind.replace(/_/g, " ")} · BG check`
+                    : undefined
+                }
+                acting={verifyingDocId === d.id}
+                onView={(doc) => {
+                  void openDocPreview(doc);
+                }}
+                onVerify={
+                  d.source === "bg_check"
+                    ? undefined
+                    : () => {
+                        const base = hydratedCase ?? caseRow;
+                        const previousDocs = base.portal.documents;
+                        setHydratedCase({
+                          ...base,
+                          portal: {
+                            ...base.portal,
+                            documents: previousDocs.map((doc) =>
+                              doc.id === d.id ? { ...doc, verifyStatus: "verified" } : doc,
+                            ),
+                          },
+                        });
+                        setVerifyingDocId(d.id);
+                        void Promise.resolve(onVerifyDoc(caseRow.id, d.id, "verified"))
+                          .catch(() => {
+                            setHydratedCase((current) => {
+                              const source = current ?? base;
+                              return {
+                                ...source,
+                                portal: { ...source.portal, documents: previousDocs },
+                              };
+                            });
+                          })
+                          .finally(() => {
+                            setVerifyingDocId((current) => (current === d.id ? null : current));
+                          });
+                      }
+                }
+                onReject={
+                  d.source === "bg_check"
+                    ? undefined
+                    : () => {
+                        setVerifyingDocId(d.id);
+                        void Promise.resolve(onVerifyDoc(caseRow.id, d.id, "rejected")).finally(
+                          () => {
+                            setVerifyingDocId((current) => (current === d.id ? null : current));
+                          },
+                        );
+                      }
+                }
               />
             ))
           )}

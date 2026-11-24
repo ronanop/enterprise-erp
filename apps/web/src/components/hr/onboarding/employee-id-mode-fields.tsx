@@ -21,14 +21,7 @@ export function EmployeeIdModeFields({
   onManualCodeChange: (value: string) => void;
 }) {
   return (
-    <SetupField
-      label="Employee ID"
-      hint={
-        mode === "auto"
-          ? "A new ID is generated when onboarding is completed."
-          : "Enter the employee ID that should be assigned on completion."
-      }
-    >
+    <SetupField label="Employee ID">
       <div className="flex flex-wrap gap-3 text-sm">
         <label className={cn("inline-flex cursor-pointer items-center gap-1.5", disabled && "cursor-not-allowed opacity-60")}>
           <input
@@ -56,7 +49,7 @@ export function EmployeeIdModeFields({
       {mode === "manual" ? (
         <SetupInput
           className="mt-1.5 font-mono"
-          placeholder="e.g. EMP-000120"
+          placeholder="e.g. CDPL000001"
           value={manualCode}
           disabled={disabled}
           onChange={(e) => onManualCodeChange(e.target.value.toUpperCase())}

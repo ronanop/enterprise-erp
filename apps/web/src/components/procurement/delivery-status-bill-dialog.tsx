@@ -15,14 +15,22 @@ import { fileToBase64 } from "@/services/sales-crm-service";
 import {
   challanDeliveredQuantity,
   deriveBillStatusFromQuantities,
-  formatDeliveryBillStatusLabel,
   resolveDeliveryBillStatus,
   type ActiveDeliveryBillStatus,
 } from "@/utils/delivery-challan-bill";
 import {
+  matchChallanReceiptBatches,
+  resolveChallanReceiptBatches,
+} from "@/utils/delivery-challan-grn";
+import {
   getDeliveryChallan,
   type DeliveryChallanRecord,
 } from "@/utils/delivery-challan-storage";
+import {
+  getInvoiceGenerationTaskForBatch,
+  getPurchaseOrder,
+  listOrderReceiptBatches,
+} from "@/services/procurement-service";
 import {
   getDeliveryStatus,
   openStoredDeliveryFile,
@@ -81,11 +89,55 @@ export function DeliveryStatusBillDialog({
       status.billedQuantity?.trim() ||
         (bill === "fully_billed" || !status.billedQuantity ? String(total || "") : status.billedQuantity),
     );
-    setInvoiceNumber(status.billInvoiceNumber || status.cacheInvoiceNumber || "");
-    setInvoiceDate(status.billInvoiceDate || new Date().toISOString().slice(0, 10));
+    const seededInvoice =
+      status.billInvoiceNumber ||
+      status.cacheInvoiceNumber ||
+      row.invoiceNumber ||
+      "";
+    setInvoiceNumber(seededInvoice);
+    setInvoiceDate(
+      status.billInvoiceDate ||
+        row.invoiceDate ||
+        new Date().toISOString().slice(0, 10),
+    );
     setDocument(status.billDocument || status.cacheInvoiceDocument || null);
     setRemarks(status.billRemarks || "");
     setError(null);
+
+    const orderId = row.orderId;
+    if (!orderId || seededInvoice.trim()) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [order, batches] = await Promise.all([
+          getPurchaseOrder(orderId),
+          listOrderReceiptBatches(orderId).catch(() => []),
+        ]);
+        if (cancelled) return;
+        const matched = matchChallanReceiptBatches(
+          resolveChallanReceiptBatches(batches, order),
+          row,
+        );
+        const primary = matched.find((b) => Boolean(b.id)) || matched[0] || null;
+        if (!primary?.id) return;
+        let fromAccounts = "";
+        try {
+          const task = await getInvoiceGenerationTaskForBatch(String(primary.id));
+          if (task?.invoice_number) fromAccounts = String(task.invoice_number).trim();
+        } catch {
+          /* optional */
+        }
+        if (!fromAccounts && primary.vendor_invoice_number) {
+          fromAccounts = String(primary.vendor_invoice_number).trim();
+        }
+        if (fromAccounts && !cancelled) setInvoiceNumber(fromAccounts);
+      } catch {
+        /* keep seeded */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [open, challanId]);
 
   useEffect(() => {
@@ -166,15 +218,6 @@ export function DeliveryStatusBillDialog({
 
   if (!open) return null;
 
-  const currentBill = challan
-    ? formatDeliveryBillStatusLabel(
-        resolveDeliveryBillStatus(
-          resolveDeliveryStatusForChallan(challan),
-          challanDeliveredQuantity(challan),
-        ),
-      )
-    : "-";
-
   return (
     <ConfirmDialog
       open={open}
@@ -195,34 +238,14 @@ export function DeliveryStatusBillDialog({
           </div>
         ) : null}
 
-        <div className="grid gap-2 rounded-md border border-border bg-muted/20 p-3 sm:grid-cols-2">
-          <div>
-            <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Challan
-            </div>
-            <div className="font-medium tabular-nums">{challan?.challanNumber || "-"}</div>
-          </div>
-          <div>
-            <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Current bill status
-            </div>
-            <div className="font-medium">{currentBill}</div>
-          </div>
-          <div>
-            <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              DC quantity
-            </div>
-            <div className="font-medium tabular-nums">{challanQty || "-"}</div>
-          </div>
-          <div>
-            <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              PO
-            </div>
-            <div className="font-medium tabular-nums">
-              {challan?.companyPoNumber || challan?.purchaseOrderNumber || "-"}
-            </div>
-          </div>
-        </div>
+        <FinanceField label="Invoice number *">
+          <Input
+            value={invoiceNumber}
+            onChange={(e) => setInvoiceNumber(e.target.value)}
+            className="h-9"
+            placeholder="Customer / Cache invoice no."
+          />
+        </FinanceField>
 
         <FinanceField label="Bill coverage *">
           <FinanceSelect
@@ -255,15 +278,6 @@ export function DeliveryStatusBillDialog({
             />
           </FinanceField>
         </div>
-
-        <FinanceField label="Invoice number *">
-          <Input
-            value={invoiceNumber}
-            onChange={(e) => setInvoiceNumber(e.target.value)}
-            className="h-9"
-            placeholder="Customer / Cache invoice no."
-          />
-        </FinanceField>
 
         <FinanceField label="Invoice document">
           <div className="flex flex-wrap items-center gap-2">

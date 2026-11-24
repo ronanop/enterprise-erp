@@ -4,18 +4,21 @@ import { useCallback, useEffect, useState } from "react";
 
 import { parseAuthMe } from "@/lib/auth-user";
 import { isAuthenticated } from "@/lib/auth";
+import { isErpAdmin } from "@/lib/module-access";
 import { authService } from "@/services/api-client";
-import { HR_SUPERADMIN_PERMISSION, type UserProfile } from "@/types/api";
+import type { UserProfile } from "@/types/api";
 
 export function useUserPermissions() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [hrModuleAdmin, setHrModuleAdmin] = useState(false);
+  const [assetsModuleAdmin, setAssetsModuleAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!isAuthenticated()) {
       setUser(null);
       setHrModuleAdmin(false);
+      setAssetsModuleAdmin(false);
       setLoading(false);
       return;
     }
@@ -38,11 +41,13 @@ export function useUserPermissions() {
               : null,
           );
           setHrModuleAdmin(parsed.hrModuleAdmin);
+          setAssetsModuleAdmin(parsed.assetsModuleAdmin);
         }
       } catch {
         if (!cancelled) {
           setUser(null);
           setHrModuleAdmin(false);
+          setAssetsModuleAdmin(false);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -54,22 +59,34 @@ export function useUserPermissions() {
   }, []);
 
   const canExact = useCallback((permission: string) => {
+    if (isErpAdmin(user?.user_type)) return true;
     const perms = user?.permissions ?? [];
     return perms.includes(permission) || perms.includes("*");
   }, [user]);
 
   const can = useCallback(
     (permission: string) => {
+      // Match API bypass for platform/tenant admins (require_*_permission).
+      if (isErpAdmin(user?.user_type)) return true;
+      if (assetsModuleAdmin && permission.startsWith("asset.")) return true;
       const perms = user?.permissions;
       if (!perms || perms.length === 0) {
         return hrModuleAdmin;
       }
       return perms.includes(permission) || perms.includes("*");
     },
-    [user, hrModuleAdmin],
+    [user, hrModuleAdmin, assetsModuleAdmin],
   );
 
   const isHrmsSuperAdmin = hrModuleAdmin;
 
-  return { user, loading, can, canExact, isHrmsSuperAdmin, hrModuleAdmin };
+  return {
+    user,
+    loading,
+    can,
+    canExact,
+    isHrmsSuperAdmin,
+    hrModuleAdmin,
+    assetsModuleAdmin,
+  };
 }

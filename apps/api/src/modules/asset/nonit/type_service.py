@@ -57,7 +57,9 @@ class NonItAssetTypeService:
             raise AppException(f"Invalid category: {category}")
         return category
 
-    def ensure_defaults(self, ctx: TenantContext, company_id: UUID) -> None:
+    def ensure_defaults(self, ctx: TenantContext, company_id: UUID | None) -> None:
+        if company_id is None:
+            return
         existing = self._repo.list_rows(ctx, company_id)
         if existing:
             return
@@ -72,6 +74,18 @@ class NonItAssetTypeService:
                 active=True,
             )
 
+    def _company_for_catalog(
+        self, ctx: TenantContext, company_id: UUID | None
+    ) -> UUID:
+        cid = self._scope.resolve_list_company_id(ctx, company_id)
+        if cid is not None:
+            return cid
+        if ctx.company_id is not None:
+            return ctx.company_id
+        if ctx.scoped_company_ids:
+            return ctx.scoped_company_ids[0]
+        return self._scope.resolve_company_id(ctx, company_id)
+
     def list(
         self,
         ctx: TenantContext,
@@ -82,7 +96,7 @@ class NonItAssetTypeService:
         category: str | None = None,
     ) -> list[dict]:
         self._ensure_read(ctx)
-        cid = self._scope.resolve_list_company_id(ctx, company_id)
+        cid = self._company_for_catalog(ctx, company_id)
         self.ensure_defaults(ctx, cid)
         cat = self._normalize_category(category) if category else None
         rows = self._repo.list_rows(ctx, cid, active=active, search=search, category=cat)

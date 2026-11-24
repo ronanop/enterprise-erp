@@ -88,25 +88,41 @@ class SheetTrackerService:
         now = _utcnow()
 
         if tracker_id is None:
+            branch_id = self._branch(ctx, cid)
             title = (name or "").strip() or Path(safe_name).stem.replace("_", " ").strip() or "Tracker"
+            filtered_rows, filtered_old_po = self._filter_consumed_po_rows(
+                ctx,
+                company_id=cid,
+                tracker_id=None,
+                columns=list(incoming["columns"]),
+                rows=list(incoming["rows"]),
+            )
             row = self._repo.create(
                 ctx,
                 company_id=cid,
-                branch_id=self._branch(ctx, cid),
+                branch_id=branch_id,
                 name=title[:180],
                 last_file_name=safe_name,
                 column_count=len(incoming["columns"]),
-                row_count=len(incoming["rows"]),
+                row_count=len(filtered_rows),
                 columns_json=incoming["columns"],
-                rows_json=incoming["rows"],
+                rows_json=filtered_rows,
                 last_merge_json={
                     "added_columns": [c["label"] for c in incoming["columns"]],
-                    "added_rows": len(incoming["rows"]),
+                    "added_rows": len(filtered_rows),
                     "updated_rows": 0,
+                    "filtered_old_po": filtered_old_po,
                     "file_name": safe_name,
                 },
                 last_upload_at=now,
             )
+            sync_stats = self._sync_projects_po_queue(ctx, row)
+            if sync_stats:
+                row.last_merge_json = {
+                    **(row.last_merge_json or {}),
+                    "po_queue_sync": sync_stats,
+                }
+                self._repo.save(ctx, row)
             self._audit.log_entity_change(
                 tenant_id=ctx.tenant_id,
                 entity_name="proc_sheet_tracker",
@@ -118,17 +134,27 @@ class SheetTrackerService:
 
         row = self.get(ctx, tracker_id)
         merged = merge_tracker_table(list(row.columns_json or []), list(row.rows_json or []), incoming)
+        filtered_rows, filtered_old_po = self._filter_consumed_po_rows(
+            ctx,
+            company_id=cid,
+            tracker_id=row.id,
+            columns=list(merged["columns"]),
+            rows=list(merged["rows"]),
+        )
         row.columns_json = merged["columns"]
-        row.rows_json = merged["rows"]
+        row.rows_json = filtered_rows
         row.column_count = len(merged["columns"])
-        row.row_count = len(merged["rows"])
+        row.row_count = len(filtered_rows)
         row.last_file_name = safe_name
         row.last_upload_at = now
+        sync_stats = self._sync_projects_po_queue(ctx, row)
         row.last_merge_json = {
             "added_columns": merged["added_columns"],
             "added_rows": merged["added_rows"],
             "updated_rows": merged["updated_rows"],
+            "filtered_old_po": filtered_old_po,
             "file_name": safe_name,
+            "po_queue_sync": sync_stats,
         }
         if name and name.strip():
             row.name = name.strip()[:180]
@@ -141,3 +167,37 @@ class SheetTrackerService:
             performed_by=ctx.user_id,
         )
         return row
+
+    def _filter_consumed_po_rows(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id,
+        tracker_id,
+        columns: list,
+        rows: list,
+    ) -> tuple[list, int]:
+        from modules.project.service.project_po_queue_service import ProjectPoQueueService
+
+        return ProjectPoQueueService(self._db).filter_tracker_rows_excluding_consumed_pos(
+            ctx,
+            company_id=company_id,
+            tracker_id=tracker_id,
+            columns=columns,
+            rows=rows,
+        )
+
+    def _sync_projects_po_queue(self, ctx: TenantContext, row) -> dict[str, int]:
+        """Push Project/Circle/Site/Cloud/Type/PO lines into Projects PO Queue."""
+        from modules.project.service.project_po_queue_service import ProjectPoQueueService
+
+        return ProjectPoQueueService(self._db).sync_from_sheet_tracker(
+            ctx,
+            tracker_id=row.id,
+            company_id=row.company_id,
+            branch_id=row.branch_id,
+            columns=list(row.columns_json or []),
+            rows=list(row.rows_json or []),
+            tracker_name=row.name,
+            file_name=row.last_file_name,
+        )

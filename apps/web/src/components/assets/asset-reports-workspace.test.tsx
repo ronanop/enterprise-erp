@@ -7,6 +7,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AssetReportsWorkspace } from "@/components/assets/asset-reports-workspace";
 
 const dashboard = vi.fn();
+const push = vi.fn();
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push, replace: vi.fn(), prefetch: vi.fn() }),
+}));
 
 vi.mock("@/lib/auth", () => ({
   isAuthenticated: () => true,
@@ -19,6 +24,7 @@ vi.mock("@/services/assets-service", () => ({
 }));
 
 beforeEach(() => {
+  push.mockReset();
   dashboard.mockResolvedValue({
     generated_at: "2026-09-22T10:00:00Z",
     horizon_days: 30,
@@ -131,12 +137,46 @@ describe("AssetReportsWorkspace", () => {
     });
     expect(screen.getByText("Documents")).toBeInTheDocument();
     expect(screen.getByText("Components")).toBeInTheDocument();
+    expect(screen.queryByText("Lifecycle open")).not.toBeInTheDocument();
     expect(screen.getByText("Asset status mix")).toBeInTheDocument();
     expect(screen.getByText("Documents by type")).toBeInTheDocument();
     expect(screen.getByText("Components by type")).toBeInTheDocument();
     expect(screen.getByText("Lifecycle funnel")).toBeInTheDocument();
     expect(screen.getByText("Registration trend")).toBeInTheDocument();
     expect(dashboard).toHaveBeenCalled();
+  });
+
+  it("opens linked workspaces from report KPI cards", async () => {
+    const user = userEvent.setup();
+    render(<AssetReportsWorkspace />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Open Documents" })).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Open Documents" }));
+    expect(push).toHaveBeenCalledWith("/assets/asset-documents");
+    await user.click(screen.getByRole("button", { name: "Open Components" }));
+    expect(push).toHaveBeenCalledWith("/assets/asset-components");
+    expect(screen.queryByRole("button", { name: "Open Assignments" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/coverage/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/active$/i)).not.toBeInTheDocument();
+  });
+
+  it("renders a compact fleet mix chart when embedded with KPI props", async () => {
+    render(
+      <AssetReportsWorkspace
+        embedded
+        fleetKpis={{ totalAssets: 12, inStock: 8, assigned: 4 }}
+      />,
+    );
+    await waitFor(() => expect(dashboard).toHaveBeenCalled());
+    expect(screen.getByText("Fleet mix")).toBeInTheDocument();
+    expect(screen.getByText("In Stock")).toBeInTheDocument();
+    expect(screen.getByText("Assigned")).toBeInTheDocument();
+    expect(screen.getByText("Total Assets")).toBeInTheDocument();
+    expect(screen.queryByText("Assignment usage")).not.toBeInTheDocument();
+    expect(screen.queryByText("Operational Status")).not.toBeInTheDocument();
+    expect(screen.queryByText("Documents & Components")).not.toBeInTheDocument();
+    expect(screen.queryByText("Asset status mix")).not.toBeInTheDocument();
+    expect(screen.queryByText("Documents by type")).not.toBeInTheDocument();
+    expect(screen.queryByText("Lifecycle open")).not.toBeInTheDocument();
   });
 
   it("refreshes analytics on Refresh", async () => {

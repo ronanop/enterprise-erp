@@ -299,6 +299,8 @@ export type ProjectPoQueueItem = {
   customer_total: number;
   status: string;
   ovf_id: string | null;
+  /** product | vendor_service | internal_service */
+  order_kind?: string | null;
   branch_id: string;
   company_id: string;
   created_at: string | null;
@@ -306,6 +308,8 @@ export type ProjectPoQueueItem = {
   project_name?: string | null;
   circle_name?: string | null;
   site_name?: string | null;
+  cloud_name?: string | null;
+  line_type?: string | null;
   rack_quantity?: string | null;
   server_quantity?: string | null;
   server_type?: string | null;
@@ -320,6 +324,8 @@ export type ProjectPoQueueHandoff = {
   project_name: string | null;
   circle_name: string | null;
   site_name: string | null;
+  cloud_name?: string | null;
+  line_type?: string | null;
   contact_person: string | null;
   contact_number: string | null;
   rack_quantity: string | null;
@@ -423,6 +429,21 @@ export async function getProjectPoPrefillByHandoff(
   );
 }
 
+/** One-click create: one project for the cloud, no intake form. */
+export async function createCloudProjectFromHandoff(
+  handoffId: string,
+  options?: { rfai_number?: string | null },
+): Promise<Project> {
+  return unwrap(
+    await apiClient<Project>(`${PROJECT_PO_QUEUE_API}/handoffs/${handoffId}/create-cloud-project`, {
+      method: "POST",
+      body: {
+        rfai_number: options?.rfai_number?.trim() || null,
+      },
+    }),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Site Installation workflow
 // ---------------------------------------------------------------------------
@@ -435,6 +456,16 @@ export type MaterialLine = {
   date?: string | null;
 };
 
+export type CloudPoLine = {
+  project_name?: string | null;
+  circle_name?: string | null;
+  site_name?: string | null;
+  line_type?: string | null;
+  quantity?: number | null;
+  customer_po_number?: string | null;
+  document_date?: string | null;
+};
+
 export type SiteInstallation = AuditFields & {
   branch_id: string | null;
   project_id: string;
@@ -444,6 +475,7 @@ export type SiteInstallation = AuditFields & {
   requestor_name: string | null;
   circle: string | null;
   cloud_name: string | null;
+  cloud_po_lines?: CloudPoLine[];
   site_name: string | null;
   power_requirements: string | null;
   rfai_request_done: boolean;

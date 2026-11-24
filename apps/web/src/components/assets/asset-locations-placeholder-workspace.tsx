@@ -14,10 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 export function AssetLocationsPlaceholderWorkspace() {
   return (
     <AssetsPremiumPage testId="asset-locations-placeholder">
-      <PageHeader
-        title="Locations"
-        description="Asset Location Master — city and building sites used by registration, inventory, transfers, and reports."
-      />
+      <PageHeader title="Locations" />
 
       <Card className={ASSETS_SURFACE_CARD}>
         <CardHeader className="flex flex-row items-start gap-3 space-y-0 border-b border-border/50 pb-4 pt-5">
@@ -46,7 +43,7 @@ export function AssetLocationsPlaceholderWorkspace() {
             {[
               {
                 icon: Building2,
-                title: "Buildings & sites",
+                title: "Address & sites",
                 hint: "Campus, tower, and annex masters",
               },
               {

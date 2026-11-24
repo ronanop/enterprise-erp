@@ -106,6 +106,7 @@ KNOWN_LINE_MARKERS = (
     "bandwidth",
     "number of port",
     "problem summary",
+    "present type",
 )
 
 
@@ -121,10 +122,17 @@ def parse_service_email_body(body: str, *, subject: str | None = None) -> dict[s
     if sr:
         fields["reference_sr_number"] = sr[:100]
 
+    present_type = _label_value(text, "Present Type", "Present type", "Type")
+    if present_type:
+        fields["present_type"] = present_type[:100]
+
     ckt = _label_value(text, "CKT ID", "Circuit ID", "Circuit Id")
     if ckt:
         fields["ckt_id"] = ckt[:100]
         fields["lsi"] = ckt[:100]
+    else:
+        fields["ckt_id"] = "NA"
+        fields["lsi"] = "NA"
 
     company = _label_value(text, "Company Name", "Company")
     if company:
@@ -137,7 +145,7 @@ def parse_service_email_body(body: str, *, subject: str | None = None) -> dict[s
 
     noc_phone = _label_value(text, "NOC Contact Number", "NOC Number")
     if not noc_phone and noc_name and re.search(r"\d", noc_name):
-        # Sometimes name+number on one line mishandled - prefer dedicated number line
+        # Sometimes name+number on one line mishandled — prefer dedicated number line
         pass
     if noc_phone:
         fields["mobile"] = noc_phone[:50]
@@ -145,6 +153,8 @@ def parse_service_email_body(body: str, *, subject: str | None = None) -> dict[s
     client = _label_value(text, "Client Name", "End Customer", "Customer Name")
     if client:
         fields["end_customer_name"] = client[:255]
+    else:
+        fields.setdefault("end_customer_name", "NA")
 
     fields.update({k: v for k, v in _extract_address_block(text).items() if v})
 
@@ -243,7 +253,7 @@ def parse_service_email_body(body: str, *, subject: str | None = None) -> dict[s
     if fields.get("reference_sr_number") and fields.get("ckt_id"):
         fields["subject"] = (
             f"SR {fields['reference_sr_number']} / CKT {fields['ckt_id']}"
-            + (f" - {fields['end_customer_name']}" if fields.get("end_customer_name") else "")
+            + (f" — {fields['end_customer_name']}" if fields.get("end_customer_name") else "")
         )[:255]
     elif problem:
         fields["subject"] = problem[:255]
@@ -263,7 +273,7 @@ def parse_service_email_body(body: str, *, subject: str | None = None) -> dict[s
             extras.append(stripped)
             continue
         if re.match(r"^\d+\.", stripped):
-            # numbered but not captured - keep
+            # numbered but not captured — keep
             if not any(
                 fields.get(k) and stripped[:40].lower() in str(fields.get(k)).lower()
                 for k in (
@@ -289,4 +299,14 @@ def parse_service_email_body(body: str, *, subject: str | None = None) -> dict[s
     if not fields.get("issue_description"):
         fields["issue_description"] = text[:8000]
 
-    return {k: v for k, v in fields.items() if v is not None and v != ""}
+    for key in ("serial_number", "asset_name", "reference_sr_number", "end_customer_name", "ckt_id"):
+        if key not in fields or not fields.get(key):
+            fields[key] = "NA"
+
+    meta = {
+        "present_type": fields.get("present_type"),
+        "na_fields": [k for k, v in fields.items() if v == "NA"],
+    }
+    out = {k: v for k, v in fields.items() if v is not None and v != "" and not k.startswith("_")}
+    out["__extraction_meta__"] = meta
+    return out

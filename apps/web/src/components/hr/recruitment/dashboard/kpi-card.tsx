@@ -22,8 +22,8 @@ type KpiTone = {
 const KPI_TONES: Record<KpiKey, KpiTone> = {
   openPositions: {
     icon: Briefcase,
-    iconBg: "bg-[#F4EDFB]",
-    iconColor: "text-[#9B5BB8]",
+    iconBg: "bg-primary/10",
+    iconColor: "text-primary",
   },
   shortlisted: {
     icon: Users,

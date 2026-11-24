@@ -6,10 +6,11 @@ HR_SIDEBAR_NAV_KEYS: tuple[str, ...] = (
     "dashboard",
     "recruitment",
     "onboarding",
+    # Workforce collapsible group (sidebar children)
     "employees",
     "attendance",
-    "biometric-devices",
     "performance",
+    "org-chart",
     "training",
     "payroll-salary-structure",
     "payroll-assign-salary",
@@ -28,6 +29,7 @@ HR_SIDEBAR_NAV_KEYS: tuple[str, ...] = (
     "it-stocks",
     "it-travel",
     "it-requisition",
+    "biometric-devices",
     "offboarding",
 )
 

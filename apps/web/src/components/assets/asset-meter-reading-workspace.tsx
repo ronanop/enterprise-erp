@@ -29,6 +29,7 @@ import {
   meterReadingService,
 } from "@/services/assets-service";
 import { ApiClientError, resourceService } from "@/services/api-client";
+import { formatDropdownLabel } from "@/components/assets/shared/format-dropdown-label";
 
 type AssetRow = {
   id: string;
@@ -281,7 +282,7 @@ export function AssetMeterReadingWorkspace() {
                       value={status || "__all"}
                       className="cursor-pointer"
                     >
-                      {status || "All statuses"}
+                      {status ? formatDropdownLabel(status) : "All statuses"}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -302,7 +303,7 @@ export function AssetMeterReadingWorkspace() {
                   </SelectItem>
                   {METER_TYPES.map((type) => (
                     <SelectItem key={type} value={type} className="cursor-pointer">
-                      {type}
+                      {formatDropdownLabel(type)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -473,7 +474,7 @@ export function AssetMeterReadingWorkspace() {
                     <SelectContent>
                       {METER_TYPES.map((type) => (
                         <SelectItem key={type} value={type} className="cursor-pointer">
-                          {type}
+                          {formatDropdownLabel(type)}
                         </SelectItem>
                       ))}
                     </SelectContent>

@@ -25,6 +25,8 @@ type OwnerOption = { id: string; label: string; name: string; email: string };
 const CRM_FLOW_STEP_ORDER = [
   "boq_attachment",
   "sow_attachment",
+  "boq_approval",
+  "sow_approval",
   "cloud_discount",
   "quote_send_for_approval",
   "po_finance",
@@ -33,6 +35,7 @@ const CRM_FLOW_STEP_ORDER = [
   "service_scope",
   "ovf_provide_freight",
   "ovf_provide_supporting_items",
+  "ovf_price_supporting_items",
   "ovf_provide_service_visits",
   "ovf_send_for_approval",
 ] as const;

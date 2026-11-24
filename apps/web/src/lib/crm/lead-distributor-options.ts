@@ -1,37 +1,7 @@
-const RAW_LEAD_DISTRIBUTOR_OPTIONS = [
-  "IN STOCK",
-  "Redington",
-  "Ingram Micro",
-  "TD SYNNEX",
-  "Tech Data",
-  "Rashi Peripherals (RP Tech)",
-  "Savex Technologies",
-  "Supertron Electronics",
-  "Iris Global Services",
-  "Compuage Infocom",
-  "e-Mall",
-  "Exclusive Networks",
-  "Westcon-Comstor",
-  "Arrow Electronics",
-  "Avnet",
-  "Synnex",
-  "ScanSource",
-  "VAD Technologies",
-  "CMS IT Services",
-  "Beetel Teletech",
-  "Creative Newtech",
-  "Iris Global",
-  "Astrum",
-  "Nuvias",
-  "Crayon",
-  "Pax8",
-  "ALSO",
-  "Exertis",
-  "D&H Distributing",
-  "SYNNEX",
-] as const;
+import { listVendorOptions } from "@/services/procurement-service";
 
-export const LEAD_DISTRIBUTOR_OPTIONS: readonly string[] = [...new Set(RAW_LEAD_DISTRIBUTOR_OPTIONS)];
+/** @deprecated Prefer loadCrmDistributorOptions — kept for any stray imports. */
+export const LEAD_DISTRIBUTOR_OPTIONS: readonly string[] = ["IN STOCK"];
 
 export const LEAD_DISTRIBUTOR_SEPARATOR = ", ";
 
@@ -47,14 +17,49 @@ export function formatLeadDistributorNames(names: readonly string[]): string {
   return names.join(LEAD_DISTRIBUTOR_SEPARATOR);
 }
 
-/** Preset lead distributors plus any custom names saved on the lead (for single-select dropdowns). */
+function mergeDistributorNames(...groups: readonly (readonly string[])[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const group of groups) {
+    for (const raw of group) {
+      const name = raw.trim();
+      if (!name) continue;
+      const key = name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(name);
+    }
+  }
+  return out;
+}
+
+/**
+ * Distributor dropdown options: Procurement → Vendors only (+ IN STOCK).
+ * Names already on the lead/OVF are kept so edits do not drop unknown values.
+ */
 export function buildLeadDistributorDropdownOptions(
   leadDistributorField: string | null | undefined,
+  scmVendorNames: readonly string[] = [],
 ): string[] {
-  const presetLower = new Set(LEAD_DISTRIBUTOR_OPTIONS.map((name) => name.toLowerCase()));
-  const selectedOnLead = parseLeadDistributorNames(leadDistributorField);
-  const customFromLead = selectedOnLead.filter(
-    (name) => !presetLower.has(name.toLowerCase()),
+  return mergeDistributorNames(
+    ["IN STOCK"],
+    scmVendorNames,
+    parseLeadDistributorNames(leadDistributorField),
   );
-  return [...LEAD_DISTRIBUTOR_OPTIONS, ...customFromLead];
+}
+
+/** Load Procurement Vendors master list (same source as /procurement/vendors). */
+export async function loadCrmDistributorOptions(
+  leadDistributorField?: string | null,
+): Promise<string[]> {
+  const scmNames = await listVendorOptions()
+    .then((rows) =>
+      rows
+        .filter((vendor) => (vendor.status || "active").toLowerCase() !== "inactive")
+        .map((vendor) => vendor.label.trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
+    )
+    .catch(() => [] as string[]);
+  return buildLeadDistributorDropdownOptions(leadDistributorField, scmNames);
 }

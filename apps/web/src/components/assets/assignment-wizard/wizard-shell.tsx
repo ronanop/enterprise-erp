@@ -11,7 +11,6 @@ export type WizardShellProps = {
   title: string;
   stepTitle: string;
   stepDescription?: string;
-  branchLabel?: string;
   loading?: boolean;
   headerExtra?: ReactNode;
   children: ReactNode;
@@ -25,7 +24,6 @@ export function WizardShell({
   title,
   stepTitle,
   stepDescription,
-  branchLabel,
   loading,
   headerExtra,
   children,
@@ -39,11 +37,6 @@ export function WizardShell({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold tracking-tight text-foreground">{title}</h1>
-          {branchLabel ? (
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Branch: <span className="font-medium text-foreground">{branchLabel}</span>
-            </p>
-          ) : null}
         </div>
         {headerExtra}
       </div>
@@ -71,14 +64,14 @@ export function WizardShell({
           </aside>
         ) : null}
 
-        <Card className={cn(ASSETS_SURFACE_CARD, "min-h-[22rem] border-l-[3px] border-l-[#0369A1]")}>
+        <Card className={cn(ASSETS_SURFACE_CARD, "border-l-[3px] border-l-primary")}>
           <CardHeader className="space-y-1 border-b border-border/50 pb-4">
             <CardTitle className="text-base font-semibold tracking-tight">{stepTitle}</CardTitle>
             {stepDescription ? (
               <p className="text-xs leading-relaxed text-muted-foreground">{stepDescription}</p>
             ) : null}
           </CardHeader>
-          <CardContent className="flex min-h-[16rem] flex-col gap-5 pt-5">
+          <CardContent className="flex flex-col gap-5 pt-5">
             {loading ? (
               <div aria-busy="true" aria-label="Loading wizard step">
                 <TableRowsSkeleton rows={5} />

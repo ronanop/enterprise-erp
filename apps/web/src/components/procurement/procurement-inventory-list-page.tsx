@@ -97,7 +97,7 @@ export function ProcurementInventoryListPage() {
   }, []);
 
   useEffect(() => {
-    void load();
+    void load(true);
   }, [load]);
 
   const filtered = useMemo(() => {

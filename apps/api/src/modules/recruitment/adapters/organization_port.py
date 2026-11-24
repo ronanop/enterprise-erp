@@ -18,3 +18,14 @@ class RecruitmentOrganizationAdapter:
         if department is None:
             raise NotFoundException("Department not found")
         return department
+
+    def list_departments(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID | None = None,
+        branch_id: UUID | None = None,
+    ):
+        return self._departments.list_departments(
+            ctx, company_id=company_id, branch_id=branch_id
+        )

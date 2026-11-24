@@ -5,6 +5,13 @@ const AMOUNT_HINT =
 
 const NON_AMOUNT_HINT = /(percent|_pct$|probability|rate|qty|quantity|count|days|revision)/i;
 
+const STAGE_COLUMN_RE = /(^|_)(stage|blueprint_state|quote_stage|current_stage)(_|$)/i;
+
+/** True when a report column should render as an orange/green stage badge. */
+export function isReportStageColumn(key: string): boolean {
+  return STAGE_COLUMN_RE.test(key.trim());
+}
+
 /** True when a report column key should render as currency. */
 export function isReportAmountColumn(key: string): boolean {
   const k = key.trim().toLowerCase();

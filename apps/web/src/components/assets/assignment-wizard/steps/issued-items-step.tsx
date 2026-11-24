@@ -95,10 +95,6 @@ export function IssuedItemsStep({
 
   return (
     <div className="grid max-w-lg gap-3">
-      <p className="text-sm text-muted-foreground">
-        Select accessories you are issuing with this assignment. Optionally attach a registered
-        eligible asset as a component.
-      </p>
       {state.assetId ? (
         <Button
           type="button"
@@ -115,7 +111,7 @@ export function IssuedItemsStep({
           <Input
             value={attachQ}
             onChange={(e) => setAttachQ(e.target.value)}
-            placeholder="Search eligible Ready to Move assets…"
+            placeholder="Search eligible In Stock assets…"
             className="h-9"
           />
           {attachError ? <p className="text-xs text-destructive">{attachError}</p> : null}
@@ -157,12 +153,7 @@ export function IssuedItemsStep({
         </div>
       ) : null}
       {items.length === 0 ? (
-        <EmptyState
-          variant="no-results"
-          title="No registered accessories"
-          description="Register components on the asset record first, or attach an eligible asset above."
-          compact
-        />
+        <EmptyState variant="no-results" title="No registered accessories" compact />
       ) : (
         <ul className="m-0 list-none space-y-2 p-0">
           {items.map((item) => {

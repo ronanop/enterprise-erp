@@ -26,6 +26,11 @@ describe("markInventoryStale / consumeInventoryStale", () => {
     expect(consumeInventoryStale()?.reason).toBe("return");
   });
 
+  it("marks import stale", () => {
+    markInventoryStale({ reason: "import" });
+    expect(consumeInventoryStale()?.reason).toBe("import");
+  });
+
   it("consume clears the flag", () => {
     markInventoryStale({ reason: "issue" });
     consumeInventoryStale();

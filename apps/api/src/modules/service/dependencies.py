@@ -6,7 +6,11 @@ from typing import Annotated
 from fastapi import Query
 
 from database.session import get_db
-from modules.foundation.dependencies import get_tenant_context, require_permission
+from modules.foundation.dependencies import (
+    get_tenant_context,
+    require_any_permission,
+    require_permission,
+)
 from modules.foundation.domain.value_objects import TenantContext
 
 __all__ = [
@@ -14,6 +18,7 @@ __all__ = [
     "get_pagination",
     "get_tenant_context",
     "require_permission",
+    "require_any_permission",
     "TenantContext",
     "get_db",
     "paginate",

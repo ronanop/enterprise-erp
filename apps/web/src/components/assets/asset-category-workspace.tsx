@@ -41,6 +41,7 @@ import {
   assetCategoryService,
 } from "@/services/assets-service";
 import { ApiClientError } from "@/services/api-client";
+import { formatDropdownLabel } from "@/components/assets/shared/format-dropdown-label";
 
 const STATUS_OPTIONS = ["", "active", "inactive"] as const;
 const DEPR_METHODS = ["", "straight_line", "wdv", "units_of_production"] as const;
@@ -276,7 +277,7 @@ export function AssetCategoryWorkspace() {
                   </SelectItem>
                   {STATUS_OPTIONS.filter(Boolean).map((s) => (
                     <SelectItem key={s} value={s} className="cursor-pointer">
-                      {s}
+                      {formatDropdownLabel(s)}
                     </SelectItem>
                   ))}
                 </SelectContent>

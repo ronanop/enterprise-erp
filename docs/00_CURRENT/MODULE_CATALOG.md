@@ -106,6 +106,29 @@ Service action
   └─ Celery drain → adapters → projections
 ```
 
+### 3.7 Service sourcing → SCM → Projects
+
+When a lead has **Services** selected, the **Service Sourcing Channel**
+(`Outsourced` | `Cache Service`, stored in lead `deal_type` JSON) copies to
+`crm_opportunity.service_sourcing_channel` on convert.
+
+On CRM customer-PO **Management approve** (`approve_po` → `ovf_ready`):
+
+```text
+Opportunity (has_services + accepted quote service lines)
+  ├─ Outsourced      → proc_order_header order_kind=vendor_service
+  │                      → SCM Accept PO → Management issue
+  │                      → vendor fulfillment (awaiting_vendor_send)
+  └─ Cache Service   → proc_order_header order_kind=internal_service
+                         (vendor = setting scm.internal_service_vendor_id)
+                         → SCM Accept PO → Management issue
+                         → auto-share to Projects PO Queue
+                         → PM Create Project (manual)
+```
+
+Product/hardware OVF → vendor product PO is unchanged and can run in parallel.
+Service POs use `source_document_type=opportunity_service`.
+
 ## 4. Cross-module rules (enforced)
 
 1. **No foreign ORM** outside `adapters/` / `ports/` (CI gate).  

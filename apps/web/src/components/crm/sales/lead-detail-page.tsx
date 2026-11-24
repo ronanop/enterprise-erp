@@ -57,10 +57,10 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
       // Blueprint GET may auto-convert once BOQ/SOW are attached — run it first, then
       // reload the lead so we can open the opportunity Transitions (OEM next, …).
       const bp = await getLeadBlueprint(leadId);
-      const [leadRow, employeeOptions, leadSourceOptions, marketingEventOptions] = await Promise.all([
-        getSalesLead(leadId),
+      const leadRow = await getSalesLead(leadId);
+      const [employeeOptions, leadSourceOptions, marketingEventOptions] = await Promise.all([
         listCrmMemberOptions().catch(() => [] as Option[]),
-        listLeadSourceOptions().catch(() => [] as Option[]),
+        listLeadSourceOptions(leadRow.company_id).catch(() => [] as Option[]),
         listMarketingEventOptions().catch(() => [] as Option[]),
       ]);
 

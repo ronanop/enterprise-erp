@@ -1,6 +1,7 @@
 """Phase 5D — RETIRED → PENDING_DISPOSAL (Start Disposal) governance.
 
-Retirement itself remains assignment-return (outdated) → ops retire.
+Retirement/outdated return now posts Disposal (DISPOSED); this service remains
+for legacy RETIRED → PENDING_DISPOSAL bridges only.
 This service only bridges retired assets into the existing disposal queue.
 """
 

@@ -277,6 +277,7 @@ class OrderLineResponse(BaseModel):
     product_id: UUID
     product_code: str | None = None
     product_name: str | None = None
+    description: str | None = None
     quantity: float
     quantity_received: float
     last_receipt_qty: float = 0
@@ -329,9 +330,11 @@ class OrderResponse(BaseModel):
     received_amount: float = 0
     status: str
     workflow_status: str | None = None
+    scm_approval_stage: Literal["accept_po", "management"] | None = None
     source_module: str | None = None
     source_document_type: str | None = None
     source_document_id: UUID | None = None
+    order_kind: str = "product"
     company_po_number: str | None = None
     entity_code: str | None = None
     baseline_amount: float = 0
@@ -341,6 +344,16 @@ class OrderResponse(BaseModel):
     etd_confirmed_at: datetime | None = None
     customer_ack_sent_at: datetime | None = None
     etd_reminder_last_sent_at: datetime | None = None
+    fulfillment_stage: str | None = None
+    vendor_response_status: str | None = None
+    vendor_response_remark: str | None = None
+    vendor_responded_at: datetime | None = None
+    customer_promised_delivery_date: date | None = None
+    po_sent_to_vendor_at: datetime | None = None
+    customer_order_processed_sent_at: datetime | None = None
+    customer_dispatch_shared_at: datetime | None = None
+    customer_pod_uploaded_at: datetime | None = None
+    customer_delivery_meta: dict | None = None
     customer_name: str | None = None
     ovf_no: str | None = None
     approved_by_name: str | None = None
@@ -402,6 +415,9 @@ class ScmLinkedPurchaseOrder(BaseModel):
     document_number: str | None = None
     company_po_number: str | None = None
     status: str | None = None
+    fulfillment_stage: str | None = None
+    # Sum of active PO line quantities (partial Create PO coverage).
+    total_qty: float = 0
 
 
 class ScmPoGroup(BaseModel):
@@ -412,6 +428,8 @@ class ScmPoGroup(BaseModel):
     document_number: str | None = None
     company_po_number: str | None = None
     status: str | None = None
+    required_qty: float = 0
+    ordered_qty: float = 0
 
 
 class ScmQueueItemResponse(BaseModel):
@@ -448,7 +466,10 @@ class ScmQueueItemResponse(BaseModel):
     scm_on_hold_at: datetime | None = None
     can_create_po: bool = True
     open_distributor_names: list[str] = Field(default_factory=list)
+    po_groups: list[ScmPoGroup] = Field(default_factory=list)
     purchase_orders: list[ScmLinkedPurchaseOrder] = Field(default_factory=list)
+    # Non-stock vendor demand qty that needs Create PO coverage.
+    required_po_qty: float = 0
     stock_fulfillment_status: str = "none"
     remaining_demand_qty: float = 0
     stock_availability: list[ScmStockAvailability] = Field(default_factory=list)
@@ -493,6 +514,31 @@ class ScmOvfHoldHistoryEntry(BaseModel):
 
 class ScmOvfHoldRequest(BaseModel):
     remark: str = Field(..., min_length=1, max_length=2000)
+
+
+class ScmHoldApprovalResponse(BaseModel):
+    id: UUID
+    ovf_id: UUID
+    ovf_no: str
+    customer_name: str | None = None
+    owner_name: str | None = None
+    status: str
+    remark: str | None = None
+    requested_at: datetime | None = None
+    requested_by_name: str | None = None
+
+
+class ScmChargeApprovalResponse(BaseModel):
+    id: UUID
+    ovf_id: UUID
+    ovf_no: str
+    customer_name: str | None = None
+    owner_name: str | None = None
+    status: str
+    freight: float = 0
+    finance_cost_pct: float = 0
+    requested_at: datetime | None = None
+    requested_by_name: str | None = None
 
 
 class ScmOvfStockAllocationRow(BaseModel):
@@ -556,6 +602,7 @@ class ScmOvfPreviewResponse(BaseModel):
     po_date: date | None = None
     delivery_period: str | None = None
     customer_name: str | None = None
+    customer_account_number: str | None = None
     quote_name: str | None = None
     account_name: str | None = None
     owner_name: str | None = None
@@ -598,6 +645,7 @@ class ScmOvfPreviewResponse(BaseModel):
     open_distributor_names: list[str] = Field(default_factory=list)
     po_groups: list[ScmPoGroup] = Field(default_factory=list)
     purchase_orders: list[ScmLinkedPurchaseOrder] = Field(default_factory=list)
+    required_po_qty: float = 0
     scm_on_hold: bool = False
     scm_on_hold_at: datetime | None = None
     scm_hold_blocked: bool = False
@@ -605,6 +653,13 @@ class ScmOvfPreviewResponse(BaseModel):
     scm_last_hold_released_at: datetime | None = None
     scm_hold_history: list[ScmOvfHoldHistoryEntry] = Field(default_factory=list)
     scm_on_hold_remark: str | None = None
+    scm_hold_request_status: str | None = None
+    scm_hold_request_remark: str | None = None
+    scm_hold_requested_at: datetime | None = None
+    scm_charge_request_status: str | None = None
+    scm_charge_request_freight: float | None = None
+    scm_charge_request_finance_pct: float | None = None
+    scm_charge_requested_at: datetime | None = None
     purchase_order_status: str | None = None
     stock_fulfillment_status: str = "none"
     remaining_demand_qty: float = 0
@@ -621,6 +676,7 @@ class ScmCreatePoFromOvfLineRequest(BaseModel):
     unit_price: float = Field(gt=0)
     rate_currency: str = Field(default="INR", max_length=3)
     tax_rate: float = Field(default=0, ge=0)
+    description: str | None = Field(default=None, max_length=4000)
 
 
 class ScmCreatePoFromOvfRequest(BaseModel):
@@ -638,6 +694,8 @@ class ScmCreatePoFromOvfRequest(BaseModel):
     distributor_name: str | None = Field(default=None, max_length=255)
     # When set, these lines are purchased instead of raw OVF vendor_lines (qty/rate edits, removals).
     lines: list[ScmCreatePoFromOvfLineRequest] | None = None
+    # Partial qty / remainder PO from item plan: always create a new draft (do not reuse).
+    force_new: bool = False
 
 
 class ScmInventoryPoLineRequest(BaseModel):
@@ -696,8 +754,23 @@ class ScmNegotiationResponse(BaseModel):
     can_issue: bool
 
 
+class ScmFinalizeApprovalRequest(BaseModel):
+    """Optional PO print PDF for Accept PO / Management approval emails."""
+
+    po_pdf_base64: str | None = None
+    po_pdf_filename: str | None = None
+    remarks: str | None = None
+
+
+class ScmFinalizeRequest(BaseModel):
+    """Optional final (non-draft) PO PDF attached to the vendor issue email."""
+
+    po_pdf_base64: str | None = None
+    po_pdf_filename: str | None = None
+
+
 class ScmFinalizeApprovalResponse(BaseModel):
-    """Shared admin Approval inbox row for SCM finalize requests."""
+    """Shared Approval inbox row for SCM Accept PO / Management finalize requests."""
 
     id: UUID
     kind: Literal["finalize"] = "finalize"
@@ -714,6 +787,86 @@ class ScmFinalizeApprovalResponse(BaseModel):
     decided_at: datetime | None = None
     order_status: str
     workflow_status: str | None = None
+    scm_approval_stage: Literal["accept_po", "management"] | None = None
+    stage_label: str | None = None
+    requested_by_id: UUID | None = None
+    requested_by_name: str | None = None
+
+
+class ProcApprovalStepOwnerUser(BaseModel):
+    user_id: UUID
+    display_name: str
+    email: str
+
+
+class ProcApprovalStepOwnersGroup(BaseModel):
+    step_key: str
+    label: str
+    team_role: str
+    owners: list[ProcApprovalStepOwnerUser]
+
+
+class ProcApprovalStepOwnersReplaceRequest(BaseModel):
+    user_ids: list[UUID] = Field(default_factory=list)
+
+
+class ProcApprovalCapabilitiesResponse(BaseModel):
+    is_module_admin: bool
+    steps: list[str] = Field(default_factory=list)
+    can_decide_approvals: bool
+
+
+class ProcInvoiceGenerationTaskCreateRequest(BaseModel):
+    order_id: UUID
+    receipt_batch_id: UUID
+    items_summary: str = ""
+    vendor_name: str = ""
+    customer_name: str = ""
+    # Optional overrides for stock/partial billing (selected units, not whole GRN).
+    grn_number: str = ""
+    billing_quantity: float | None = Field(default=None, ge=0)
+    billing_amount: float | None = Field(default=None, ge=0)
+
+
+class ProcInvoiceGenerationTaskSubmitRequest(BaseModel):
+    invoice_number: str = Field(min_length=1, max_length=80)
+    invoice_date: date
+    # Optional — server prefers SCM billing totals when present.
+    invoice_quantity: float | None = Field(default=None, ge=0)
+    invoice_amount: float | None = Field(default=None, ge=0)
+    file_name: str | None = Field(default=None, max_length=255)
+    content_base64: str | None = None
+    content_type: str | None = Field(default=None, max_length=120)
+
+
+class ProcInvoiceGenerationTaskResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    task_code: str
+    title: str
+    status: str
+    order_header_id: UUID
+    receipt_batch_id: UUID
+    grn_number: str = ""
+    purchase_order_number: str = ""
+    vendor_name: str = ""
+    customer_name: str = ""
+    items_summary: str = ""
+    assigned_user_id: UUID
+    company_id: UUID | None = None
+    branch_id: UUID | None = None
+    requested_by_id: UUID | None = None
+    requested_by_name: str | None = None
+    invoice_number: str | None = None
+    invoice_date: date | None = None
+    invoice_quantity: float | None = None
+    invoice_amount: float | None = None
+    # SCM billing GRN totals (auto-fetched for the Accounts form).
+    suggested_quantity: float | None = None
+    suggested_amount: float | None = None
+    completed_at: datetime | None = None
+    created_at: datetime | None = None
 
 
 class OrderTrackingRequest(BaseModel):
@@ -749,6 +902,33 @@ class ScmEtdUpdateRequest(BaseModel):
     notify_customer: bool = True
 
 
+class ScmDeliveryContactResponse(BaseModel):
+    """Customer email for Delivery Tracking (CRM default, editable on send)."""
+
+    order_id: UUID
+    email: str | None = None
+    crm_email: str | None = None
+    customer_name: str | None = None
+    customer_ack_sent_at: datetime | None = None
+
+
+class ScmDummyDeliverySendRequest(BaseModel):
+    """Send order acknowledgement to the customer over SMTP."""
+
+    email: str | None = Field(default=None, max_length=255)
+    # Persist ETD in the same request so Send saves date + emails once.
+    expected_delivery_date: date | None = None
+
+
+class ScmDummyDeliverySendResponse(BaseModel):
+    order_id: UUID
+    email: str
+    customer_ack_sent_at: datetime
+    dummy: bool = False
+    etd: str | None = None
+    message: str
+
+
 class ScmDeliveryMilestoneRequest(BaseModel):
     milestone: str = Field(max_length=40)
     awb_number: str | None = Field(default=None, max_length=100)
@@ -765,6 +945,126 @@ class ScmDeliveryMilestoneResponse(BaseModel):
     awb_number: str | None = None
     expected_delivery_date: date | None = None
     actual_delivery_date: date | None = None
+
+
+class ScmFulfillmentLineState(BaseModel):
+    order_line_id: UUID
+    line_number: int | None = None
+    product_name: str | None = None
+    product_code: str | None = None
+    ordered_qty: float = 0
+    dispatched_qty: float = 0
+    remaining_to_dispatch: float = 0
+    received_qty: float = 0
+    grn_cap_qty: float = 0
+
+
+class ScmVendorDispatchLineResponse(BaseModel):
+    id: UUID
+    order_line_id: UUID
+    dispatch_qty: float
+    grn_received_qty: float = 0
+    grn_remaining_qty: float = 0
+
+
+class ScmVendorDispatchResponse(BaseModel):
+    id: UUID
+    order_header_id: UUID
+    sequence: int
+    dc_number: str | None = None
+    invoice_number: str | None = None
+    lr_awb_number: str | None = None
+    dispatch_date: date | None = None
+    eway_notes: str | None = None
+    transport_notes: str | None = None
+    attachment_refs: dict | list | None = None
+    status: str
+    grn_status: str = "pending"  # pending | partial | done
+    grn_received_qty: float = 0
+    grn_dispatch_qty: float = 0
+    grn_numbers: list[str] = Field(default_factory=list)
+    created_at: datetime | None = None
+    lines: list[ScmVendorDispatchLineResponse] = Field(default_factory=list)
+
+
+class ScmFulfillmentStateResponse(BaseModel):
+    order_id: UUID
+    fulfillment_stage: str | None = None
+    vendor_response_status: str = "pending"
+    vendor_response_remark: str | None = None
+    vendor_responded_at: datetime | None = None
+    expected_delivery_date: date | None = None
+    customer_promised_delivery_date: date | None = None
+    po_sent_to_vendor_at: datetime | None = None
+    customer_order_processed_sent_at: datetime | None = None
+    customer_dispatch_shared_at: datetime | None = None
+    customer_pod_uploaded_at: datetime | None = None
+    customer_delivery_meta: dict = Field(default_factory=dict)
+    grn_unlocked: bool = False
+    vendor_email: str | None = None
+    vendor_name: str | None = None
+    customer_email: str | None = None
+    customer_name: str | None = None
+    lines: list[ScmFulfillmentLineState] = Field(default_factory=list)
+    dispatches: list[ScmVendorDispatchResponse] = Field(default_factory=list)
+
+
+class ScmFulfillmentSendToVendorRequest(BaseModel):
+    email: str | None = Field(default=None, max_length=255)
+    po_pdf_base64: str | None = None
+    po_pdf_filename: str | None = Field(default=None, max_length=255)
+
+
+class ScmFulfillmentVendorResponseRequest(BaseModel):
+    status: Literal["accepted", "rejected"]
+    remark: str | None = Field(default=None, max_length=2000)
+    # Set/override vendor EDD when accepting (manual entry on fulfillment panel).
+    expected_delivery_date: date | None = None
+
+
+class ScmFulfillmentCustomerMailRequest(BaseModel):
+    email: str | None = Field(default=None, max_length=255)
+
+
+class ScmVendorDispatchLineCreate(BaseModel):
+    order_line_id: UUID
+    dispatch_qty: float = Field(gt=0)
+
+
+class ScmVendorDispatchCreateRequest(BaseModel):
+    dc_number: str | None = Field(default=None, max_length=80)
+    invoice_number: str | None = Field(default=None, max_length=80)
+    lr_awb_number: str | None = Field(default=None, max_length=100)
+    dispatch_date: date | None = None
+    eway_notes: str | None = None
+    transport_notes: str | None = None
+    attachment_refs: dict | list | None = None
+    lines: list[ScmVendorDispatchLineCreate] = Field(min_length=1)
+
+
+class ScmCustomerDeliveryUpsertRequest(BaseModel):
+    delivery_address: str | None = None
+    contact_name: str | None = Field(default=None, max_length=255)
+    contact_phone: str | None = Field(default=None, max_length=40)
+    delivery_date: date | None = None
+    delivery_time: str | None = Field(default=None, max_length=40)
+    instructions: str | None = None
+    doc_tax_invoice: bool | None = None
+    doc_delivery_challan: bool | None = None
+    doc_eway: bool | None = None
+    doc_packing_list: bool | None = None
+    transporter_name: str | None = Field(default=None, max_length=255)
+    lr_awb: str | None = Field(default=None, max_length=100)
+    invoice_number: str | None = Field(default=None, max_length=80)
+    dc_number: str | None = Field(default=None, max_length=80)
+    customer_edd: date | None = None
+    mark_ready: bool = False
+
+
+class ScmCustomerPodUploadRequest(BaseModel):
+    pod_file_name: str | None = Field(default=None, max_length=255)
+    pod_content_base64: str | None = None
+    note: str | None = Field(default=None, max_length=2000)
 
 
 class InventoryUnitRow(BaseModel):
@@ -1152,6 +1452,8 @@ class ScmLineReceiptUpdateRequest(BaseModel):
     billing: bool = True
     billing_quantity: float | None = None
     delivery_challan_quantity: float | None = None
+    # When set, this receipt belongs to a specific vendor dispatch wave.
+    vendor_dispatch_id: UUID | None = None
 
     @field_validator("serial_numbers", mode="before")
     @classmethod
@@ -1309,6 +1611,13 @@ class ScmInventorySerialUpdate(BaseModel):
         return assert_safe_plain_text(value, field="serial_number")
 
 
+class ScmInventoryConsumeUnitsRequest(BaseModel):
+    """Soft-delete on-hand GRN stock units after billing / delivery challan selection."""
+
+    stock_unit_ids: list[UUID] = Field(..., min_length=1)
+    company_id: UUID | None = None
+
+
 class ScmInventoryDescriptionUpdate(BaseModel):
     description: str = Field(..., max_length=50)
 
@@ -1352,6 +1661,8 @@ class ScmReceiptBatchResponse(BaseModel):
     receipt_at: datetime | None = None
     created_by: UUID | None = None
     created_by_name: str | None = None
+    vendor_dispatch_id: UUID | None = None
+    vendor_dispatch_sequence: int | None = None
     vendor_invoice_number: str | None = None
     vendor_invoice_date: date | None = None
     vendor_invoice_quantity: float | None = None

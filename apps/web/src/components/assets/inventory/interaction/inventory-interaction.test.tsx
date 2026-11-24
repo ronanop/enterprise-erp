@@ -72,10 +72,14 @@ afterEach(() => {
 const testAsset = { id: "asset-1", assetTag: "AST-1" };
 
 describe("InventoryActionMenu", () => {
-  it("renders View when viewDetails permitted", () => {
-    render(<InventoryActionMenu asset={testAsset} onView={vi.fn()} />);
-    expect(screen.getByRole("button", { name: /View/ })).toBeInTheDocument();
-    expect(screen.getByTestId("inventory-action-view")).toBeInTheDocument();
+  it("does not render View Details or QR Code in the overflow menu", async () => {
+    const user = userEvent.setup();
+    render(<InventoryActionMenu asset={testAsset} onMenuAction={vi.fn()} />);
+    expect(screen.queryByTestId("inventory-action-view")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^View$/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    expect(screen.queryByRole("menuitem", { name: "View Details" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "QR Code" })).not.toBeInTheDocument();
   });
 
   it("does not render a direct Edit button when edit is permitted", () => {
@@ -85,25 +89,12 @@ describe("InventoryActionMenu", () => {
     expect(screen.getByRole("button", { name: "More actions" })).toBeInTheDocument();
   });
 
-  it("hides View when viewDetails false", () => {
-    render(<InventoryActionMenu asset={testAsset} permissions={{ viewDetails: false }} />);
-    expect(screen.queryByRole("button", { name: /View/ })).not.toBeInTheDocument();
-  });
-
   it("hides Edit menu item when edit false", async () => {
     const user = userEvent.setup();
     render(<InventoryActionMenu asset={testAsset} permissions={{ edit: false }} />);
     expect(screen.queryByTestId("inventory-action-edit")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "More actions" }));
     expect(screen.queryByRole("menuitem", { name: "Edit" })).not.toBeInTheDocument();
-  });
-
-  it("calls onView when View clicked", async () => {
-    const user = userEvent.setup();
-    const onView = vi.fn();
-    render(<InventoryActionMenu asset={testAsset} onView={onView} />);
-    await user.click(screen.getByRole("button", { name: /View/ }));
-    expect(onView).toHaveBeenCalledWith(testAsset);
   });
 
   it("fires onMenuAction edit from the overflow menu", async () => {
@@ -115,7 +106,7 @@ describe("InventoryActionMenu", () => {
     expect(onMenuAction).toHaveBeenCalledWith("edit", testAsset);
   });
 
-  it("opens more menu with Edit first; Delete is last with separator", async () => {
+  it("opens more menu with Edit first; Delete and User Transfer are absent", async () => {
     const user = userEvent.setup();
     render(<InventoryActionMenu asset={testAsset} onMenuAction={vi.fn()} />);
     expect(screen.queryByTestId("inventory-action-edit")).not.toBeInTheDocument();
@@ -127,26 +118,16 @@ describe("InventoryActionMenu", () => {
     expect(screen.getByRole("menuitem", { name: "Edit" })).toBeInTheDocument();
 
     const items = screen.getAllByRole("menuitem").map((el) => el.textContent);
-    expect(items).toEqual([
-      "Edit",
-      "Assign Asset",
-      "Return Asset",
-      "Information Portal",
-      "QR Code",
-      "User Transfer",
-      "Maintenance",
-      "Start Disposal",
-      "Reinstate",
-      "Delete",
-    ]);
     expect(items[0]).toBe("Edit");
-    expect(items[items.length - 1]).toBe("Delete");
-    expect(screen.getByTestId("inventory-menu-delete-separator")).toBeInTheDocument();
+    expect(items[items.length - 1]).toBe("Dispose");
+    expect(screen.queryByTestId("inventory-menu-delete-separator")).not.toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Assign Asset" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Information Portal" })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "QR Code" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "View Details" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "QR Code" })).not.toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Maintenance" })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "Delete" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Delete" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "User Transfer" })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Discovery" })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "History" })).not.toBeInTheDocument();
   });
@@ -165,19 +146,18 @@ describe("InventoryActionMenu", () => {
     expect(screen.getByRole("menuitem", { name: "Edit" })).toBeInTheDocument();
   });
 
-  it("hides Edit and Delete menu items when permissions false", async () => {
+  it("hides Edit menu item when permissions false", async () => {
     const user = userEvent.setup();
     render(
       <InventoryActionMenu
         asset={testAsset}
-        permissions={{ edit: false, delete: false }}
+        permissions={{ edit: false }}
         onMenuAction={vi.fn()}
       />,
     );
     expect(screen.queryByTestId("inventory-action-edit")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "More actions" }));
     expect(screen.queryByRole("menuitem", { name: "Edit" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: "Delete" })).not.toBeInTheDocument();
   });
 
   it("hides assign when permission false", async () => {
@@ -194,37 +174,13 @@ describe("InventoryActionMenu", () => {
     expect(screen.queryByRole("menuitem", { name: "Assign Asset" })).not.toBeInTheDocument();
   });
 
-  it("fires onMenuAction for Transfer from the menu", async () => {
-    const user = userEvent.setup();
-    const onMenuAction = vi.fn();
-    render(
-      <InventoryActionMenu
-        asset={testAsset}
-        permissions={{ assign: false, transfer: true }}
-        onMenuAction={onMenuAction}
-      />,
-    );
-    await user.click(screen.getByRole("button", { name: "More actions" }));
-    await user.click(screen.getByRole("menuitem", { name: "User Transfer" }));
-    expect(onMenuAction).toHaveBeenCalledWith("transfer", testAsset);
-  });
-
-  it("fires onMenuAction delete from the 3-dot menu", async () => {
+  it("fires onMenuAction for Information Portal menu item", async () => {
     const user = userEvent.setup();
     const onMenuAction = vi.fn();
     render(<InventoryActionMenu asset={testAsset} onMenuAction={onMenuAction} />);
     await user.click(screen.getByRole("button", { name: "More actions" }));
-    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
-    expect(onMenuAction).toHaveBeenCalledWith("delete", testAsset);
-  });
-
-  it("fires onMenuAction for menu item", async () => {
-    const user = userEvent.setup();
-    const onMenuAction = vi.fn();
-    render(<InventoryActionMenu asset={testAsset} onMenuAction={onMenuAction} />);
-    await user.click(screen.getByRole("button", { name: "More actions" }));
-    await user.click(screen.getByRole("menuitem", { name: "QR Code" }));
-    expect(onMenuAction).toHaveBeenCalledWith("qr", testAsset);
+    await user.click(screen.getByRole("menuitem", { name: "Information Portal" }));
+    expect(onMenuAction).toHaveBeenCalledWith("portal", testAsset);
   });
 
   it("hides more button when all overflow permissions false", () => {
@@ -232,6 +188,7 @@ describe("InventoryActionMenu", () => {
       <InventoryActionMenu
         asset={testAsset}
         permissions={{
+          viewDetails: false,
           edit: false,
           delete: false,
           assign: false,
@@ -374,7 +331,7 @@ describe("SummarySection", () => {
         lifecycleStatus="active"
       />,
     );
-    expect(screen.getByText("Ready to Move")).toBeInTheDocument();
+    expect(screen.getByText("In Stock")).toBeInTheDocument();
     expect(screen.getByText("Operational Status")).toBeInTheDocument();
     expect(screen.getByText("Lifecycle Status")).toBeInTheDocument();
     expect(screen.getByText("Active")).toBeInTheDocument();

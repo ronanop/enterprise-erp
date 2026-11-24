@@ -40,6 +40,11 @@ class SiteLocationService:
         company_id: UUID | None = None,
         search: str | None = None,
     ) -> list[dict]:
+        """List site locations in the caller's org scope.
+
+        When ``company_id`` is omitted, return every company the user can access
+        (do not pin to session alone — Edit Asset / multi-entity users need that).
+        """
         ensure_site_read(ctx, self._db)
         cid = self._scope.resolve_list_company_id(ctx, company_id)
         return [self._loc_dict(r) for r in self._locs.list_rows(ctx, cid, search=search)]
@@ -142,7 +147,12 @@ class SiteLocationService:
         search: str | None = None,
     ) -> list[dict]:
         ensure_site_read(ctx, self._db)
-        cid = self._scope.resolve_list_company_id(ctx, company_id)
+        # Parent location already scopes buildings — do not pin session company
+        # (hides addresses when editing an asset in another company).
+        if location_id is not None and company_id is None:
+            cid = None
+        else:
+            cid = self._scope.resolve_list_company_id(ctx, company_id)
         return [
             self._bldg_dict(r)
             for r in self._bldgs.list_rows(
@@ -214,6 +224,19 @@ class SiteLocationService:
             raise NotFoundException("Building not found")
         self._bldgs.soft_delete(ctx, row)
 
+    def resolve_location(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID,
+        location_id: UUID,
+    ) -> tuple:
+        """Return (location, label, org_location_id) for the asset company."""
+        loc = self._locs.get(ctx, location_id)
+        if loc is None or loc.company_id != company_id:
+            raise NotFoundException("Location not found")
+        return loc, loc.name, loc.org_location_id
+
     def resolve_pair(
         self,
         ctx: TenantContext,
@@ -223,13 +246,13 @@ class SiteLocationService:
         building_id: UUID,
     ) -> tuple:
         """Return (location, building, composed_label, org_location_id)."""
-        loc = self._locs.get(ctx, location_id)
-        if loc is None or loc.company_id != company_id:
-            raise NotFoundException("Location not found")
+        loc, _label, org_location_id = self.resolve_location(
+            ctx, company_id=company_id, location_id=location_id
+        )
         bldg = self._bldgs.get(ctx, building_id)
         if bldg is None or bldg.location_id != location_id or bldg.company_id != company_id:
             raise AppException("Building does not belong to the selected Location")
-        return loc, bldg, compose_site_label(loc.name, bldg.name), loc.org_location_id
+        return loc, bldg, compose_site_label(loc.name, bldg.name), org_location_id
 
     def _assert_no_other_head_office(
         self,

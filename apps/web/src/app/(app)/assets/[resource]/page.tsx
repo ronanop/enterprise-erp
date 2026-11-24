@@ -26,7 +26,6 @@ import { IncomingAssetsWorkspace } from "@/components/assets/incoming-assets-wor
 import { IncomingAssetsQcWorkspace } from "@/components/assets/incoming-assets-qc-workspace";
 import { AssetRegistrationQueueWorkspace } from "@/components/assets/asset-registration-queue-workspace";
 import { AssetSiteLocationsAdminPage } from "@/components/assets/asset-site-locations-admin-page";
-import { AssetOrgMasterWrapper } from "@/components/assets/asset-org-master-wrapper";
 import { AssetQrWorkspacePage } from "@/components/assets/asset-qr-workspace-page";
 import { AssetSettingsWorkspace } from "@/components/assets/asset-settings-workspace";
 import { AssetTypesWorkspace } from "@/components/assets/asset-types-workspace";
@@ -165,10 +164,6 @@ export default async function AssetsResourcePage({ params }: PageProps) {
 
   if (resourceKey === "locations") {
     return <AssetSiteLocationsAdminPage />;
-  }
-
-  if (resourceKey === "departments") {
-    return <AssetOrgMasterWrapper kind="departments" />;
   }
 
   return (

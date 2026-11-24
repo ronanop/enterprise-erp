@@ -13,7 +13,7 @@ export const OPERATIONAL_STATUS_VALUES = [
 export type OperationalStatusValue = (typeof OPERATIONAL_STATUS_VALUES)[number];
 
 export const OPERATIONAL_STATUS_LABELS: Record<OperationalStatusValue, string> = {
-  READY_TO_MOVE: "Ready to Move",
+  READY_TO_MOVE: "In Stock",
   ASSIGNED: "Assigned",
   IN_MAINTENANCE: "In Maintenance",
   RETIRED: "Retired",

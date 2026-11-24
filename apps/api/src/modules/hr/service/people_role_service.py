@@ -32,34 +32,44 @@ class PeopleRoleService:
         if ctx.company_id:
             stmt = stmt.where(MasterEmployee.company_id == ctx.company_id)
         rows = list(self._db.scalars(stmt.order_by(MasterEmployee.first_name, MasterEmployee.last_name)).all())
-        ids = [r.id for r in rows]
-        report_counts: dict[UUID, int] = {}
-        if ids:
-            count_rows = self._db.execute(
-                select(MasterEmployee.reporting_manager_id, func.count())
-                .where(
-                    MasterEmployee.tenant_id == ctx.tenant_id,
-                    MasterEmployee.is_deleted.is_(False),
-                    MasterEmployee.reporting_manager_id.in_(ids),
-                )
-                .group_by(MasterEmployee.reporting_manager_id)
-            ).all()
-            report_counts = {mgr_id: int(n) for mgr_id, n in count_rows if mgr_id}
-
         by_id = {r.id: r for r in rows}
+        # HQ leaders (e.g. CEO) may sit on another company_id but are still RMs of scoped staff.
         missing_mgr_ids = {
             r.reporting_manager_id
             for r in rows
             if r.reporting_manager_id and r.reporting_manager_id not in by_id
         }
+        extras: list[MasterEmployee] = []
         if missing_mgr_ids:
-            extras = self._db.scalars(
-                select(MasterEmployee).where(MasterEmployee.id.in_(missing_mgr_ids))
-            ).all()
+            extras = list(
+                self._db.scalars(
+                    select(MasterEmployee).where(
+                        MasterEmployee.id.in_(missing_mgr_ids),
+                        MasterEmployee.is_deleted.is_(False),
+                    )
+                ).all()
+            )
             for mgr in extras:
                 by_id[mgr.id] = mgr
 
-        user_ids = [r.user_id for r in rows if r.user_id]
+        count_ids = list({*by_id.keys()})
+        report_counts: dict[UUID, int] = {}
+        if count_ids:
+            count_rows = self._db.execute(
+                select(MasterEmployee.reporting_manager_id, func.count())
+                .where(
+                    MasterEmployee.tenant_id == ctx.tenant_id,
+                    MasterEmployee.is_deleted.is_(False),
+                    MasterEmployee.reporting_manager_id.in_(count_ids),
+                )
+                .group_by(MasterEmployee.reporting_manager_id)
+            ).all()
+            report_counts = {mgr_id: int(n) for mgr_id, n in count_rows if mgr_id}
+
+        list_people = list(rows) + [
+            m for m in extras if m.id not in {r.id for r in rows}
+        ]
+        user_ids = [r.user_id for r in list_people if r.user_id]
         roles_by_user: dict[UUID, list[str]] = {uid: [] for uid in user_ids}
         if user_ids:
             role_rows = self._db.execute(
@@ -74,7 +84,7 @@ class PeopleRoleService:
                 roles_by_user.setdefault(uid, []).append(code)
 
         out: list[dict] = []
-        for r in rows:
+        for r in list_people:
             mgr = by_id.get(r.reporting_manager_id) if r.reporting_manager_id else None
             mgr_name, mgr_code = self._manager_label(mgr)
             role_codes = roles_by_user.get(r.user_id, []) if r.user_id else []
@@ -95,6 +105,7 @@ class PeopleRoleService:
         employee_id: UUID,
         *,
         is_hiring_manager: bool | None = None,
+        is_manager: bool | None = None,
         is_recruiter: bool | None = None,
         is_hr: bool | None = None,
         reporting_manager_id: UUID | None = None,
@@ -103,6 +114,8 @@ class PeopleRoleService:
         row = self._get_employee(ctx, employee_id)
         if is_hiring_manager is not None:
             row.is_hiring_manager = is_hiring_manager
+        if is_manager is not None:
+            row.is_manager = is_manager
         if is_recruiter is not None:
             row.is_recruiter = is_recruiter
             self._sync_recruiter(ctx, row)
@@ -118,8 +131,9 @@ class PeopleRoleService:
             if mgr.company_id != row.company_id:
                 raise ConflictException("Reporting manager must be in the same company")
             row.reporting_manager_id = mgr.id
-            if not mgr.is_hiring_manager:
-                mgr.is_hiring_manager = True
+            # Assigning as reporting manager tags normal Manager (not Hiring manager).
+            if not getattr(mgr, "is_manager", False):
+                mgr.is_manager = True
 
         row.updated_at = utcnow()
         row.updated_by = ctx.user_id
@@ -133,6 +147,7 @@ class PeopleRoleService:
             performed_by=ctx.user_id,
             new_value={
                 "is_hiring_manager": row.is_hiring_manager,
+                "is_manager": bool(getattr(row, "is_manager", False)),
                 "is_recruiter": row.is_recruiter,
                 "is_hr": row.is_hr,
                 "reporting_manager_id": str(row.reporting_manager_id) if row.reporting_manager_id else None,
@@ -295,6 +310,7 @@ class PeopleRoleService:
             "reporting_manager_code": mgr_code,
             "reports_count": reports_count,
             "is_hiring_manager": bool(getattr(row, "is_hiring_manager", False)),
+            "is_manager": bool(getattr(row, "is_manager", False)),
             "is_recruiter": bool(getattr(row, "is_recruiter", False)),
             "is_hr": is_hr,
             "has_login": has_login,

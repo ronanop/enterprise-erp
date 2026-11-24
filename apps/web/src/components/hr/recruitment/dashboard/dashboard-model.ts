@@ -132,7 +132,7 @@ export function dashboardStageLabel(stage: PipelineStage): string {
     case "interview_round_2":
       return "Interview Round 2";
     case "hr_discussion":
-      return "HR Discussion";
+      return "Negotiation Round";
     case "background_check":
       return "Background Check";
     case "offer_sent":
@@ -149,11 +149,11 @@ export function dashboardStageLabel(stage: PipelineStage): string {
 export function interviewTitle(interview: AtsInterview): string {
   switch (interview.round) {
     case "round_1":
-      return interview.interviewType === "hr" ? "HR Discussion" : "Technical Interview";
+      return interview.interviewType === "hr" ? "Negotiation Round" : "Technical Interview";
     case "round_2":
       return "Manager Interview";
     case "hr":
-      return "HR Discussion";
+      return "Negotiation Round";
     default: {
       const _exhaustive: never = interview.round;
       return _exhaustive;
@@ -273,9 +273,10 @@ export function searchDirectory(dir: AtsDirectory, query: string): SearchHit[] {
 
 export function buildRecruitmentDashboardModel(
   dir: AtsDirectory,
-  opts: { trendRange: TrendRangeKey; now?: Date },
+  opts: { trendRange?: TrendRangeKey; now?: Date } = {},
 ): RecruitmentDashboardModel {
   const now = opts.now ?? new Date();
+  const trendRange = opts.trendRange ?? "last_6";
   const stats = computeAtsStats(dir);
 
   const kpis: DashboardKpi[] = [
@@ -362,7 +363,7 @@ export function buildRecruitmentDashboardModel(
       d.setHours(0, 0, 0, 0);
       return d.getTime() >= today.getTime();
     })
-    .slice(0, 3)
+    .slice(0, 8)
     .map((interview) => {
       const d = new Date(interview.date);
       const valid = Number.isFinite(d.getTime());
@@ -381,7 +382,7 @@ export function buildRecruitmentDashboardModel(
     pipeline,
     trend: monthlyTrend(
       dir.applications.map((a) => a.appliedAt),
-      opts.trendRange,
+      trendRange,
       now,
     ),
     recentJobs,

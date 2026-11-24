@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { getAccessTokenUserId, isAuthenticated } from "@/lib/auth";
 import { ApiClientError, resourceService } from "@/services/api-client";
+import { formatDropdownLabel } from "@/components/assets/shared/format-dropdown-label";
 
 type AssetRow = {
   id: string;
@@ -388,7 +389,7 @@ export function AssetRevaluationWorkspace() {
                   </SelectItem>
                   {STATUS_OPTIONS.filter(Boolean).map((status) => (
                     <SelectItem key={status} value={status} className="cursor-pointer">
-                      {status}
+                      {formatDropdownLabel(status)}
                     </SelectItem>
                   ))}
                 </SelectContent>

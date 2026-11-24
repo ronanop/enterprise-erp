@@ -1,14 +1,8 @@
 """Create proc_vendor_contract table."""
 
-import sys
 from collections.abc import Sequence
-from pathlib import Path
 
 from alembic import op
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-
-from modules.procurement.models.contract import ProcVendorContract  # noqa: F401
 
 revision: str = "0069_proc_vendor_contract"
 down_revision: str | None = "0068_proc_grn_line"
@@ -17,24 +11,16 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    try:
+        from modules.procurement.models.contract import ProcVendorContract  # noqa: F401
+    except ModuleNotFoundError:
+        return
     ProcVendorContract.__table__.create(bind=op.get_bind(), checkfirst=True)
-    op.create_foreign_key(
-        "fk_proc_oh_contract",
-        "proc_order_header",
-        "proc_vendor_contract",
-        ["contract_id"],
-        ["id"],
-        source_schema="procurement",
-        referent_schema="procurement",
-        ondelete="RESTRICT",
-    )
 
 
 def downgrade() -> None:
-    op.drop_constraint(
-        "fk_proc_oh_contract",
-        "proc_order_header",
-        schema="procurement",
-        type_="foreignkey",
-    )
+    try:
+        from modules.procurement.models.contract import ProcVendorContract  # noqa: F401
+    except ModuleNotFoundError:
+        return
     ProcVendorContract.__table__.drop(bind=op.get_bind(), checkfirst=True)

@@ -8,7 +8,8 @@ import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/com
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { PageHeader } from "@/components/layout/page-header";
-import { Badge } from "@/components/ui/badge";
+import { SalesStageBadge } from "@/components/crm/sales/sales-stage-badge";
+import { resolveSalesStageLabel } from "@/lib/crm/sales-blueprint-stages";
 import { ApiClientError } from "@/services/api-client";
 import { formatCrmCode } from "@/lib/crm/format-crm-code";
 import { formatInr, listQuotes, type Quote } from "@/services/sales-crm-service";
@@ -114,7 +115,7 @@ export function QuoteListPage({
                 <CrmSortableTh label="Date Created" sortKey="created_at" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Grand Total" sortKey="grand_total" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Avg Margin" sortKey="avg_margin_pct" activeKey={sortBy} dir={sortDir} onSort={onSort} />
-                <CrmSortableTh label="Valid Until" sortKey="valid_until" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Price Validity Date" sortKey="valid_until" activeKey={sortBy} dir={sortDir} onSort={onSort} />
               </tr>
             </thead>
             <tbody>
@@ -139,9 +140,16 @@ export function QuoteListPage({
                       </Link>
                     </td>
                     <td className="px-4 py-2.5">
-                      <Badge variant="outline" className="capitalize">
-                        {row.quote_stage.replaceAll("_", " ")}
-                      </Badge>
+                      <SalesStageBadge
+                        label={resolveSalesStageLabel({
+                          entityType: "quote",
+                          blueprintState: row.quote_stage,
+                          quote: row,
+                          locked: row.locked,
+                        })}
+                        state={row.quote_stage}
+                        entityType="quote"
+                      />
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground">{formatCreatedDate(row.created_at)}</td>
                     <td className="px-4 py-2.5">{formatInr(row.grand_total)}</td>

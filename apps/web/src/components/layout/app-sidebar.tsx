@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useMemo } from "react";
 import { ChevronLeft } from "lucide-react";
 
-import { navigation } from "@/config/navigation";
+import { FEEDBACK_FORM_URL, navigation } from "@/config/navigation";
 import { filterNavigationGroups, hasModuleAssignments } from "@/lib/module-access";
 import { SidebarAccountSection } from "@/components/layout/sidebar-account-section";
 import {
@@ -49,7 +49,8 @@ export function AppSidebar() {
             (item) =>
               item.href === "/" ||
               item.href === "/home" ||
-              item.href === "/my-jobs",
+              item.href === "/my-jobs" ||
+              item.href === FEEDBACK_FORM_URL,
           ),
         }))
         .filter((group) => group.items.length > 0);

@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Package } from "lucide-react";
 
@@ -21,11 +21,10 @@ type MatchMode = "exact" | "prefix";
 
 /**
  * Docked Asset Management sidebar.
- * Top: IT / Non-IT domain switcher. Active domain expands workspace + nested Users.
+ * Top: IT / Non-IT domain switcher. Active domain expands workspace tabs.
  */
 export function AssetsModuleSidebar() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const [isModuleAdmin, setIsModuleAdmin] = useState(false);
   const [domains, setDomains] = useState<string[]>([]);
   const [adminDomains, setAdminDomains] = useState<string[]>([]);
@@ -56,22 +55,20 @@ export function AssetsModuleSidebar() {
     };
   }, []);
 
-  const activeDomain: AssetDomainKey | null = useMemo(() => {
-    if (pathname.startsWith("/assets/users")) {
-      const q = (searchParams.get("domain") || "").toUpperCase();
-      if (q === "IT" || q === "NON_IT") return q;
-      return "IT";
-    }
-    return activeAssetDomainFromPath(pathname);
-  }, [pathname, searchParams]);
+  const activeDomain: AssetDomainKey | null = useMemo(
+    () => activeAssetDomainFromPath(pathname),
+    [pathname],
+  );
 
   const gatedNav = useMemo(() => {
     if (!accessLoaded) {
+      // Prefer path domain while access loads — never assume IT for Non-IT routes.
+      const pendingDomain = activeDomain ?? "NON_IT";
       return buildAssetSidebarNav({
         isModuleAdmin: false,
-        domains: ["IT"],
+        domains: [pendingDomain],
         adminDomains: [],
-        activeDomain: activeDomain ?? "IT",
+        activeDomain: pendingDomain,
       });
     }
     return buildAssetSidebarNav({
@@ -99,13 +96,6 @@ export function AssetsModuleSidebar() {
     if (item.href === "/assets/non-it" && item.title === "Non-IT Assets") {
       return activeDomain === "NON_IT";
     }
-    if (item.href.startsWith("/assets/users")) {
-      return (
-        pathname.startsWith("/assets/users") &&
-        (searchParams.get("domain") || "IT").toUpperCase() ===
-          (item.href.includes("NON_IT") ? "NON_IT" : "IT")
-      );
-    }
     return isAssetNavActive(
       pathname,
       item.href,
@@ -113,11 +103,21 @@ export function AssetsModuleSidebar() {
     );
   };
 
+  const subtitle = useMemo(() => {
+    if (!accessLoaded) return "Assets";
+    if (isModuleAdmin || (domains.includes("IT") && domains.includes("NON_IT"))) {
+      return "IT · Non-IT";
+    }
+    if (domains.includes("NON_IT")) return "Non-IT";
+    if (domains.includes("IT")) return "IT";
+    return "Assets";
+  }, [accessLoaded, isModuleAdmin, domains]);
+
   return (
     <ModuleSidebar
       moduleKey="assets"
       title="Asset Management"
-      subtitle="IT · Non-IT"
+      subtitle={subtitle}
       icon={Package}
       aria-label="Asset Management"
       testId="assets-module-sidebar"

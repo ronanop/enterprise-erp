@@ -93,8 +93,58 @@ class AssignmentComponentService:
                 ) from exc
             raise
 
+    def ensure_parent_accessories_issued(
+        self, ctx: TenantContext, assignment: AstAssetAssignment
+    ) -> list[dict]:
+        """Issue active parent-asset accessories (e.g. CHARGER) onto the assignment.
+
+        Inventory shows accessories on the asset; return custody uses
+        ``ast_assignment_component``. Excel import / activate often created the
+        charger after assignment activation, leaving return with an empty list.
+        """
+        accessories = self._components.list_by_asset(
+            ctx, assignment.asset_id, include_inactive=False
+        )
+        if not accessories:
+            return self.list_for_assignment(ctx, assignment)
+
+        existing = self._repo.list_issued_for_assignment(ctx, assignment.id)
+        existing_ids = {row.component_id for row in existing}
+        to_add: list[UUID] = []
+        for comp in accessories:
+            if comp.id in existing_ids:
+                continue
+            blocking = self._repo.find_blocking_for_component(
+                ctx,
+                component_id=comp.id,
+                exclude_assignment_id=assignment.id,
+            )
+            if blocking is not None:
+                continue
+            to_add.append(comp.id)
+
+        if to_add:
+            merged = list(existing_ids) + to_add
+            try:
+                self._repo.replace_draft_selection(
+                    ctx,
+                    assignment_id=assignment.id,
+                    company_id=assignment.company_id,
+                    component_ids=merged,
+                )
+            except IntegrityError as exc:
+                if _is_active_issue_unique_violation(exc):
+                    raise AssignmentValidationError(
+                        "One or more accessories are already issued on another assignment"
+                    ) from exc
+                raise
+            self._repo.mark_issued_at(ctx, assignment.id)
+
+        return self.list_for_assignment(ctx, assignment)
+
     def activate_issued(self, ctx: TenantContext, assignment: AstAssetAssignment) -> None:
         """Stamp issued_at and re-validate availability at activation time."""
+        self.ensure_parent_accessories_issued(ctx, assignment)
         rows = self._repo.list_issued_for_assignment(ctx, assignment.id)
         if not rows:
             return

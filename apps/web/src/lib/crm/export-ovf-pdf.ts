@@ -15,7 +15,10 @@ import {
   computeOvfMargins,
   formatChargeRowFileNames,
   normalizeDistributorName,
+  stripSupportingMarker,
+  sumLineTotals,
   type CustomerChargeRow,
+  type SupportingItemRow,
   type VendorChargeRow,
 } from "@/components/crm/sales/ovf-order-lines-section";
 import { downloadPdf, openPdfInNewTab } from "@/lib/crm/open-pdf-preview";
@@ -39,9 +42,21 @@ export type OvfExportInput = {
   shippingContact: string;
   customerRows: CustomerChargeRow[];
   vendorRows: VendorChargeRow[];
+  /** Ops supporting items (excluded from vendor PO rows). */
+  supportingRows?: SupportingItemRow[];
   createdBy?: string | null;
   modifiedBy?: string | null;
 };
+
+function sanitizeFilenamePart(value: string | null | undefined, max = 60): string {
+  const raw = (value ?? "")
+    .replace(/[\\/:*?"<>|]+/g, " ")
+    .replace(/[^\w\s.-]+/g, " ")
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_");
+  return raw.slice(0, max).replace(/^_+|_+$/g, "");
+}
 
 const PORTRAIT_W = 210;
 const LANDSCAPE_W = 297;
@@ -316,27 +331,49 @@ function chargeHeadStyles() {
   };
 }
 
-export function buildOvfExportFilename(ovf: Ovf, quoteName?: string | null): string {
-  const base = (quoteName || ovf.quote_name || ovf.ovf_no || "OVF")
-    .replace(/[\\/:*?"<>|]+/g, " ")
-    .trim()
-    .replace(/\s+/g, " ");
-  return `OVF_${base || ovf.ovf_no}.pdf`;
+export function buildOvfExportFilename(
+  ovf: Ovf,
+  quoteName?: string | null,
+  customerName?: string | null,
+): string {
+  const code = sanitizeFilenamePart(ovf.ovf_no, 80) || "OVF";
+  const label =
+    sanitizeFilenamePart(customerName || ovf.customer_name, 48) ||
+    sanitizeFilenamePart(quoteName || ovf.quote_name, 48);
+  return label ? `OVF_${code}_${label}.pdf` : `OVF_${code}.pdf`;
 }
 
 export async function buildOvfPdfDocument(input: OvfExportInput): Promise<jsPDF> {
   const { cache: cacheLogo, womenOwned: womenLogo } = await loadLetterheadLogos();
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
   const { ovf, quote, opportunity, customerRows, vendorRows } = input;
-  const { totalMarginAmount, totalMarginPct } = computeOvfMargins({
+  const supportingRows = input.supportingRows ?? [];
+  const supportingTotal = sumLineTotals(supportingRows);
+  const computed = computeOvfMargins({
     customerRows,
     vendorRows,
     freight: ovf.freight,
     financeCostPct: ovf.finance_cost_pct,
   });
+  // Prefer server-stored margin (already deducts additional charges / EPD).
+  const additionalCharges =
+    Number(ovf.additional_charges) > 0
+      ? Number(ovf.additional_charges)
+      : supportingTotal;
+  const fallbackMarginAmount = computed.totalMarginAmount - additionalCharges;
+  const totalMarginAmount =
+    ovf.total_margin_amount != null && Number.isFinite(Number(ovf.total_margin_amount))
+      ? Number(ovf.total_margin_amount)
+      : fallbackMarginAmount;
+  const totalMarginPct =
+    ovf.total_margin_pct != null && Number.isFinite(Number(ovf.total_margin_pct))
+      ? Number(ovf.total_margin_pct)
+      : computed.totalSaleValue
+        ? (fallbackMarginAmount / computed.totalSaleValue) * 100
+        : 0;
 
-  const saleTotal = customerRows.reduce((sum, row) => sum + (Number(row.total) || 0), 0);
-  const purchaseTotal = vendorRows.reduce((sum, row) => sum + (Number(row.total) || 0), 0);
+  const saleTotal = computed.totalSaleValue;
+  const purchaseTotal = computed.totalPurchaseValue;
 
   let y = MARGIN;
   if (cacheLogo) {
@@ -426,7 +463,7 @@ export async function buildOvfPdfDocument(input: OvfExportInput): Promise<jsPDF>
       ["Total Margin In Percentage.", `${formatMoney(totalMarginPct)}%`],
       ["Opportunity", opportunity?.opportunity_name || "-"],
       ["Approval Status", ovf.approval_status.replaceAll("_", " ")],
-      ["Additional Charges", formatMoney(ovf.additional_charges)],
+      ["Additional Charges", formatMoney(additionalCharges)],
     ],
     [
       ["Vendor Payments Terms", `${ovf.vendor_payment_days} days`],
@@ -580,18 +617,90 @@ export async function buildOvfPdfDocument(input: OvfExportInput): Promise<jsPDF>
     },
   });
 
+  if (supportingRows.length > 0) {
+    y = lastTableY(doc, y) + 4;
+    if (y > LANDSCAPE_H - 45) {
+      doc.addPage("a4", "l");
+      y = 14;
+    }
+    autoTable(doc, {
+      startY: y,
+      margin: { left: MARGIN, right: MARGIN, top: 12, bottom: 14 },
+      head: [
+        [
+          {
+            content: "Supporting Items",
+            colSpan: 6,
+            styles: {
+              fillColor: HEAD_FILL,
+              textColor: SECTION,
+              fontStyle: "bold",
+              fontSize: 10,
+              halign: "left",
+            },
+          },
+        ],
+        ["Product Name", "Description", "Distributor", "Qty", "Unit Price (Rs.)", "Total"],
+      ],
+      body: supportingRows.map((row) => [
+        pdfSafe(row.product_name || "-"),
+        pdfSafe(stripSupportingMarker(row.description) || "-"),
+        pdfSafe(normalizeDistributorName(row.distributor_name) || row.distributor_name || "-"),
+        formatQty(row.qty),
+        formatMoney(row.unit_price),
+        formatMoney(row.total, 0),
+      ]),
+      theme: "grid",
+      styles: chargeTableStyles(),
+      headStyles: chargeHeadStyles(),
+      alternateRowStyles: { fillColor: ROW_ALT },
+      columnStyles: {
+        0: { cellWidth: 55, halign: "left" },
+        1: { cellWidth: 70, halign: "left" },
+        2: { cellWidth: 50, halign: "left" },
+        3: { cellWidth: 22, halign: "right" },
+        4: { cellWidth: 36, halign: "right" },
+        5: { cellWidth: 36, halign: "right" },
+      },
+    });
+  }
+
   drawPageFooters(doc);
   return doc;
 }
 
 /** Download OVF as PDF. */
-export async function exportOvfPdf(input: OvfExportInput): Promise<void> {
+export async function exportOvfPdf(
+  input: OvfExportInput,
+  options?: { download?: boolean; asBase64?: boolean },
+): Promise<{ filename: string; base64?: string }> {
   const doc = await buildOvfPdfDocument(input);
-  downloadPdf(doc, buildOvfExportFilename(input.ovf, input.quoteName));
+  const filename = buildOvfExportFilename(input.ovf, input.quoteName, input.customerName);
+  if (options?.asBase64) {
+    const dataUri = doc.output("datauristring") as string;
+    const base64 = dataUri.includes(",") ? dataUri.split(",")[1] : dataUri;
+    return { filename, base64 };
+  }
+  if (options?.download === false) {
+    openPdfInNewTab(doc, filename);
+    return { filename };
+  }
+  downloadPdf(doc, filename);
+  return { filename };
+}
+
+/** Build OVF print PDF as base64 for email / API upload. */
+export async function buildOvfPdfBase64(
+  input: OvfExportInput,
+): Promise<{ filename: string; base64: string }> {
+  const result = await exportOvfPdf(input, { asBase64: true });
+  if (!result.base64) {
+    throw new Error("Failed to generate OVF PDF");
+  }
+  return { filename: result.filename, base64: result.base64 };
 }
 
 /** Open OVF PDF in a new tab (print preview - same file Export downloads). */
 export async function openOvfPrintPreview(input: OvfExportInput): Promise<void> {
-  const doc = await buildOvfPdfDocument(input);
-  openPdfInNewTab(doc, buildOvfExportFilename(input.ovf, input.quoteName));
+  await exportOvfPdf(input, { download: false });
 }

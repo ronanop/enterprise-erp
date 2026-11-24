@@ -165,6 +165,14 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  /* Authenticated AppShell: one vertical scrollbar (main), not document + main. */
+  html.erp-app-shell-lock,
+  html.erp-app-shell-lock body {
+    height: 100%;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+
   h1,
   h2,
   h3,

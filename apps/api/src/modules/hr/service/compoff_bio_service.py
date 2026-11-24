@@ -2,16 +2,32 @@
 
 from __future__ import annotations
 
+import errno
 import hmac
+import re
 import secrets
 import socket
+import threading
+import time
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import AppException, NotFoundException
+try:
+    from zk import ZK
+    from zk.exception import ZKErrorResponse, ZKNetworkError
+except ModuleNotFoundError:  # optional runtime dep (pyzk) - not always in the API image
+    ZK = None  # type: ignore[misc, assignment]
+
+    class ZKErrorResponse(Exception):
+        """Fallback when pyzk is not installed."""
+
+    class ZKNetworkError(Exception):
+        """Fallback when pyzk is not installed."""
+
+from core.exceptions import AppException, ConflictException, NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.repository.base import hash_token
 from modules.platform.compat.audit_facade import PlatformAuditFacade
@@ -42,7 +58,7 @@ class CompoffRequestService:
         self._audit = PlatformAuditFacade(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
-        cid = self._scope.resolve_list_company_id(ctx, company_id)
+        cid = self._scope.resolve_company_id(ctx, company_id)
         return self._repo.list_rows(ctx, cid)
 
     def get(self, ctx: TenantContext, row_id: UUID):
@@ -187,6 +203,53 @@ class CompoffRequestService:
         )
 
 
+_DEVICE_LOCAL_TZ = timezone(timedelta(hours=5, minutes=30))
+_LOG_LOOKBACK_DAYS = 31
+
+_IPV4 = re.compile(
+    r"^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$"
+)
+
+
+def _clean_ipv4(value: str | None, label: str) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if not _IPV4.match(text):
+        raise AppException(f"{label} must be an IPv4 address")
+    return text
+
+
+def _clean_comm_password(value: str | None) -> str | None:
+    """ZKTeco Comm. password: empty or 0 means no password. Otherwise 1–6 digits."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or text == "0":
+        return "0"
+    if not text.isdigit() or len(text) > 6:
+        raise AppException("Communication password must be 0, or 1 to 6 digits")
+    return text
+
+
+# Serialize ZK downloads per device so overlapping auto-sync / manual download
+# cannot leave half-open sessions (common cause of Broken pipe / EPIPE).
+_ZK_DOWNLOAD_LOCKS: dict[str, threading.Lock] = {}
+_ZK_DOWNLOAD_LOCKS_GUARD = threading.Lock()
+
+
+def _zk_download_lock(device_id: UUID) -> threading.Lock:
+    key = str(device_id)
+    with _ZK_DOWNLOAD_LOCKS_GUARD:
+        lock = _ZK_DOWNLOAD_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _ZK_DOWNLOAD_LOCKS[key] = lock
+        return lock
+
+
 class BiometricDeviceService:
     def __init__(self, db: Session) -> None:
         self._db = db
@@ -207,6 +270,47 @@ class BiometricDeviceService:
                 return True, f"Device reachable at {ip}:{port}"
         except OSError as exc:
             return False, f"Cannot reach {ip}:{port} - {exc}"
+
+    @staticmethod
+    def _is_transient_zk_error(exc: BaseException) -> bool:
+        err_no = getattr(exc, "errno", None)
+        text = str(exc).lower()
+        if err_no in {errno.EPIPE, errno.ECONNRESET, errno.ETIMEDOUT, errno.ECONNABORTED}:
+            return True
+        return any(
+            token in text
+            for token in (
+                "broken pipe",
+                "connection reset",
+                "timed out",
+                "timeout",
+                "temporarily unavailable",
+            )
+        )
+
+    @staticmethod
+    def _format_zk_download_error(ip: str, port: int, exc: BaseException) -> str:
+        err_no = getattr(exc, "errno", None)
+        text = str(exc).lower()
+        if err_no == errno.EPIPE or "broken pipe" in text:
+            return (
+                f"Device closed the connection (broken pipe) at {ip}:{port}. "
+                "Check LAN reachability from the API host, Comm password, and that "
+                "another client is not holding the device."
+            )
+        if err_no in {errno.ECONNREFUSED, errno.EHOSTUNREACH, errno.ENETUNREACH} or any(
+            token in text for token in ("refused", "unreachable", "no route")
+        ):
+            return (
+                f"Cannot reach biometric device at {ip}:{port}. "
+                f"Confirm the device is online and port {port} is open from the API host. ({exc})"
+            )
+        if err_no == errno.ETIMEDOUT or "timed out" in text or "timeout" in text:
+            return (
+                f"Timed out talking to biometric device at {ip}:{port}. "
+                "The device may be busy or the network path is slow. Try again."
+            )
+        return f"Cannot download attendance from {ip}:{port}. {exc}"
 
     def get(self, ctx: TenantContext, row_id: UUID):
         row = self._repo.get(ctx, row_id)
@@ -276,7 +380,7 @@ class BiometricDeviceService:
         )
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
-        cid = self._scope.resolve_list_company_id(ctx, company_id)
+        cid = self._scope.resolve_company_id(ctx, company_id)
         return self._repo.list_rows(ctx, cid)
 
     def create(
@@ -290,37 +394,195 @@ class BiometricDeviceService:
         device_model: str = "fingerprint_k40_timelabs",
         ip_address: str | None = None,
         port: int | None = None,
+        subnet_mask: str | None = None,
+        gateway: str | None = None,
+        comm_password: str | None = None,
         location_text: str | None = None,
         status: str = "active",
         generate_api_key: bool = True,
     ):
-        cid = self._scope.resolve_company_id(ctx, company_id)
+        # Module-wide HR admins resolve company_id as None — create must use branch.company_id.
         self._scope.validate_branch_access(ctx, branch_id)
-        if device_model not in {"fingerprint_k40_timelabs"}:
+        cid = self._scope.resolve_create_company_id(
+            ctx, branch_id=branch_id, company_id=company_id
+        )
+        if device_model not in {"fingerprint_k40_timelabs", "fingerprint_k40_zkteco_pro"}:
             raise AppException(f"Unsupported biometric device model: {device_model}")
+        code = (device_code or "").strip()
+        if not code:
+            raise AppException("Device code is required")
         if ip_address is not None and not str(ip_address).strip():
             ip_address = None
         if port is not None and (port < 1 or port > 65535):
             raise AppException("Port must be between 1 and 65535")
+        subnet_clean = _clean_ipv4(subnet_mask, "Subnet mask")
+        gateway_clean = _clean_ipv4(gateway, "Gateway")
+        comm_clean = _clean_comm_password(comm_password)
+
+        existing = self._repo.get_by_code_including_deleted(ctx, cid, code)
+        if existing is not None and not getattr(existing, "is_deleted", False):
+            raise ConflictException(
+                f"Device code '{code}' is already registered. Use a different code "
+                f"(e.g. K40-02) or open the existing device."
+            )
+
         plaintext: str | None = None
         api_key_hash = None
         if generate_api_key:
             plaintext = secrets.token_urlsafe(32)
             api_key_hash = hash_token(plaintext)
+
+        ip_clean = ip_address.strip() if ip_address else None
+
+        # Soft-deleted row still holds the unique (company_id, device_code) — revive it.
+        if existing is not None and getattr(existing, "is_deleted", False):
+            existing.is_deleted = False
+            existing.deleted_at = None
+            existing.deleted_by = None
+            existing.branch_id = branch_id
+            existing.device_name = device_name
+            existing.device_model = device_model
+            existing.ip_address = ip_clean
+            existing.port = port
+            existing.subnet_mask = subnet_clean
+            existing.gateway = gateway_clean
+            existing.comm_password = comm_clean
+            existing.location_text = location_text
+            existing.status = status
+            if api_key_hash is not None:
+                existing.api_key_hash = api_key_hash
+            existing.updated_by = ctx.user_id
+            self._db.flush()
+            return existing, plaintext
+
         row = self._repo.create(
             ctx,
             company_id=cid,
             branch_id=branch_id,
-            device_code=device_code,
+            device_code=code,
             device_name=device_name,
             device_model=device_model,
-            ip_address=ip_address.strip() if ip_address else None,
+            ip_address=ip_clean,
             port=port,
+            subnet_mask=subnet_clean,
+            gateway=gateway_clean,
+            comm_password=comm_clean,
             location_text=location_text,
             status=status,
             api_key_hash=api_key_hash,
         )
         return row, plaintext
+
+    def delete(self, ctx: TenantContext, row_id: UUID) -> None:
+        if not self._repo.soft_delete(ctx, row_id):
+            raise NotFoundException("Biometric device not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="hr_biometric_device",
+            entity_id=row_id,
+            operation="delete",
+            performed_by=ctx.user_id,
+        )
+
+    def download_logs(self, ctx: TenantContext, row_id: UUID) -> dict:
+        """Pull attendance from the K40 over TCP and store it as biometric attendance."""
+        device = self.get(ctx, row_id)
+        if device.status != "active":
+            raise AppException("Biometric device is inactive")
+        if ZK is None:
+            raise AppException(
+                "Biometric ZK library (pyzk) is not installed on this API server. "
+                "Install pyzk to download device logs."
+            )
+        if not device.ip_address or not device.port:
+            raise AppException("Set the device IP address and port before downloading logs.")
+
+        ip = str(device.ip_address).strip()
+        port = int(device.port)
+        reachable, reachability_message = self._probe_device(ip, port)
+        if not reachable:
+            raise AppException(reachability_message)
+
+        password = int(str(device.comm_password or "0").strip() or "0")
+        lock = _zk_download_lock(device.id)
+        if not lock.acquire(blocking=False):
+            raise AppException(
+                f"Attendance download already in progress for {device.device_code} "
+                f"({ip}:{port}). Wait for it to finish, then try again."
+            )
+        raw_logs: list = []
+        try:
+            last_exc: BaseException | None = None
+            for attempt in range(3):
+                terminal = ZK(
+                    ip,
+                    port=port,
+                    timeout=12,
+                    password=password,
+                    force_udp=False,
+                    ommit_ping=True,
+                )
+                conn = None
+                try:
+                    conn = terminal.connect()
+                    raw_logs = conn.get_attendance() or []
+                    last_exc = None
+                    break
+                except (OSError, ZKNetworkError, ZKErrorResponse) as exc:
+                    last_exc = exc
+                    if attempt < 2 and self._is_transient_zk_error(exc):
+                        time.sleep(0.8 * (attempt + 1))
+                        continue
+                    raise AppException(self._format_zk_download_error(ip, port, exc)) from exc
+                finally:
+                    if conn is not None:
+                        try:
+                            conn.disconnect()
+                        except (OSError, ZKNetworkError, ZKErrorResponse):
+                            pass
+            if last_exc is not None:
+                raise AppException(self._format_zk_download_error(ip, port, last_exc)) from last_exc
+        finally:
+            lock.release()
+
+        cutoff = datetime.now(_DEVICE_LOCAL_TZ) - timedelta(days=_LOG_LOOKBACK_DAYS)
+        grouped: dict[tuple[str, date], list[datetime]] = {}
+        logs_read = 0
+        for log in raw_logs:
+            user_id = str(getattr(log, "user_id", "") or "").strip()
+            stamped = getattr(log, "timestamp", None)
+            if not user_id or stamped is None:
+                continue
+            if stamped.tzinfo is None:
+                stamped = stamped.replace(tzinfo=_DEVICE_LOCAL_TZ)
+            if stamped < cutoff:
+                continue
+            logs_read += 1
+            grouped.setdefault((user_id, stamped.date()), []).append(stamped)
+
+        punches: list[dict] = []
+        for (user_id, attendance_date), times in grouped.items():
+            times.sort()
+            punches.append(
+                {
+                    # Match master_employee.employee_code (e.g. CT5353 on the K40).
+                    "employee_code": user_id.strip().upper(),
+                    "attendance_date": attendance_date,
+                    "check_in_at": times[0],
+                    "check_out_at": times[-1] if len(times) > 1 else None,
+                    "punch_events": times,
+                    "notes": f"biometric:{device.device_code}",
+                }
+            )
+
+        result = self.device_sync(
+            ctx,
+            punches=punches,
+            device_code=device.device_code,
+            company_id=device.company_id,
+        )
+        result["logs_read"] = logs_read
+        return result
 
     def rotate_api_key(self, ctx: TenantContext, device_id: UUID) -> str:
         row = self._repo.get(ctx, device_id)
@@ -386,7 +648,9 @@ class BiometricDeviceService:
                 if employee_id:
                     emp = self._master.get_employee(ctx, UUID(str(employee_id)))
                 else:
-                    emp = self._master.get_employee_by_code(ctx, cid, str(employee_code))
+                    emp = self._master.get_employee_by_code(
+                        ctx, cid, str(employee_code).strip().upper()
+                    )
             except Exception:
                 skipped += 1
                 continue

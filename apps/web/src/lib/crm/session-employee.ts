@@ -1,6 +1,12 @@
 import type { AuthSessionUser } from "@/lib/auth-user";
 import type { Option } from "@/services/sales-crm-service";
 
+/** Remove trailing " (EMP-001)" / similar from directory labels — name only. */
+export function stripEmployeeCodeSuffix(label: string): string {
+  const stripped = label.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  return stripped || label.trim();
+}
+
 /** Map signed-in user to a master_employee option (id + label). */
 export function resolveSessionEmployee(
   employees: Option[],
@@ -40,6 +46,6 @@ export function resolveSessionEmployeeLabel(
   user: AuthSessionUser | null,
 ): string {
   const match = resolveSessionEmployee(employees, user);
-  if (match) return match.label;
+  if (match) return stripEmployeeCodeSuffix(match.label);
   return user?.displayName?.trim() || user?.email?.trim() || "";
 }

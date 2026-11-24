@@ -4,7 +4,7 @@ from decimal import Decimal
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict
 
 
 class OrmModel(BaseModel):
@@ -377,36 +377,21 @@ class PayrollRunLineResponse(OrmModel):
     employee_salary_id: UUID | None
     department_id: UUID | None
     employment_id: UUID
-    paid_days: Decimal = Decimal("0")
-    lop_days: Decimal = Decimal("0")
-    leave_days: Decimal = Decimal("0")
-    period_days: Decimal = Decimal("0")
+    paid_days: Decimal
+    lop_days: Decimal
+    leave_days: Decimal
+    period_days: Decimal
     primary_shift_id: UUID | None = None
     day_summary_json: dict | None = None
-    gross_earnings: Decimal = Decimal("0")
-    total_deductions: Decimal = Decimal("0")
-    net_pay: Decimal = Decimal("0")
-    employer_contribution: Decimal = Decimal("0")
+    gross_earnings: Decimal
+    total_deductions: Decimal
+    net_pay: Decimal
+    employer_contribution: Decimal
     component_breakdown_json: dict | None
     status: str
     company_id: UUID
     branch_id: UUID
     version: int
-
-    @field_validator(
-        "paid_days",
-        "lop_days",
-        "leave_days",
-        "period_days",
-        "gross_earnings",
-        "total_deductions",
-        "net_pay",
-        "employer_contribution",
-        mode="before",
-    )
-    @classmethod
-    def _null_decimal_to_zero(cls, value: object) -> object:
-        return 0 if value is None else value
 
 class PayslipCreate(BaseModel):
     company_id: UUID | None = None

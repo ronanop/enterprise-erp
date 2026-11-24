@@ -19,7 +19,7 @@ export function QuickActionCard({
 }) {
   const surface =
     tone === "lavender"
-      ? "bg-[#F4EDFB] hover:bg-[#EDE0F8]"
+      ? "bg-primary/10 hover:bg-primary/15"
       : tone === "mint"
         ? "bg-[#ECFDF5] hover:bg-[#DDF8EC]"
         : tone === "peach"
@@ -27,7 +27,7 @@ export function QuickActionCard({
           : "bg-[#FFF1F2] hover:bg-[#FFE4E6]";
   const iconColor =
     tone === "lavender"
-      ? "text-[#9B5BB8]"
+      ? "text-primary"
       : tone === "mint"
         ? "text-[#00A866]"
         : tone === "peach"

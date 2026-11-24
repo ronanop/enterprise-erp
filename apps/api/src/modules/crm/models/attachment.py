@@ -14,7 +14,10 @@ class CrmAttachment(Base, *CrmDetailMixin):
     __tablename__ = "crm_attachment"
     __table_args__ = (
         CheckConstraint(
-            "category IN ('boq','sow','oem_quote','customer_po','vendor_quote','vendor_invoice','contract','other')",
+            "category IN ("
+            "'boq','sow','oem_quote','customer_po','vendor_quote','vendor_invoice',"
+            "'contract','other','ovf_pdf','po_pdf'"
+            ")",
             name="ck_crm_attachment_category",
         ),
         CheckConstraint(

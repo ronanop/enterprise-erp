@@ -2,11 +2,16 @@ import { jsPDF } from "jspdf";
 
 import type { HrMasterOption } from "@/services/hr-master-connector";
 import type { EmployeeRecord } from "@/types/employee-management";
-import type { PayslipRecord } from "@/types/payroll-management";
+import type { PayslipRecord, TaxRegime } from "@/types/payroll-management";
 import { getStoredOrgContext } from "@/lib/org-context-storage";
 import { employerPfAmount, getCachedPayrollPfPolicy } from "@/lib/payroll-pf-policy";
 import { maskAccount } from "@/lib/pii-mask";
-import { tdsForTheMonth, tdsForTheYear } from "@/lib/salary-structure-excel";
+import {
+  oldRegimeTaxOnTaxable,
+  roundUpRupee,
+  tdsForTheMonth,
+  tdsForTheYear,
+} from "@/lib/salary-structure-excel";
 import { amountInIndianWords, dash, formatInrPdf } from "@/utils/purchase-order-amount-words";
 
 export type PayslipCompany = {
@@ -29,7 +34,9 @@ export type PayslipPdfContext = {
   employmentType: string;
   pan: string;
   uan: string;
-  bank: string;
+  /** Masked account number only. */
+  bankAccountNumber: string;
+  bankName: string;
   ifsc: string;
   lateCount: string;
   paymentStatus: string;
@@ -63,6 +70,13 @@ function clean(value: unknown): string {
   const text = String(value ?? "").trim();
   if (!text || text === "—" || text === "-") return "";
   return text;
+}
+
+/** First letter of each word capital (e.g. "employee name" → "Employee Name"). */
+export function capitalizeWords(value: string): string {
+  const text = String(value ?? "").trim();
+  if (!text) return text;
+  return text.replace(/(^|[\s\-_/.(])([a-z])/g, (_, sep: string, ch: string) => `${sep}${ch.toUpperCase()}`);
 }
 
 function formatJoin(iso: string): string {
@@ -195,14 +209,15 @@ export function payslipPdfContext(
 
   return {
     employeeCode: clean(record?.employeeCode || option?.code || slip.employeeCode),
-    department: clean(record?.departmentName || option?.department || slip.department),
-    designation: clean(record?.designationName || option?.designation),
-    location: clean(record?.locationName || record?.extension.employment.location),
+    department: capitalizeWords(clean(record?.departmentName || option?.department || slip.department)),
+    designation: capitalizeWords(clean(record?.designationName || option?.designation)),
+    location: capitalizeWords(clean(record?.locationName || record?.extension.employment.location)),
     joiningDate: formatJoin(clean(record?.joiningDate || record?.extension.employment.joiningDate)),
-    employmentType: EMPLOYMENT_LABELS[employmentRaw] || employmentRaw,
+    employmentType: capitalizeWords(EMPLOYMENT_LABELS[employmentRaw] || employmentRaw),
     pan: clean(record?.extension.governmentIds.pan),
     uan: clean(record?.extension.governmentIds.uan),
-    bank: [account, bankName ? `(${bankName})` : ""].filter(Boolean).join(" "),
+    bankAccountNumber: account,
+    bankName: capitalizeWords(bankName),
     ifsc: clean(bankSource?.ifsc) || clean(option?.bankIfsc),
     lateCount: slip.lateCount == null ? "" : String(slip.lateCount),
     paymentStatus: paymentLabel(slip.paymentStatus),
@@ -290,6 +305,19 @@ export type PayslipFigures = {
   costToCompany: number;
 };
 
+export type PayslipTaxSummary = {
+  regime: TaxRegime;
+  annualGross: number;
+  standardDeduction: number;
+  hraExemption: number;
+  section80C: number;
+  section80D: number;
+  taxableIncome: number;
+  estimatedAnnualTax: number;
+  ytdTds: number;
+  balanceTds: number;
+};
+
 export type PayslipProjection = {
   earnings: number;
   deductions: number;
@@ -298,10 +326,20 @@ export type PayslipProjection = {
   monthTds: number;
   nextTds: number;
   nextNet: number | null;
+  tax: PayslipTaxSummary;
 };
 
 function isEmployerLabel(label: string): boolean {
   return label.toLowerCase().includes("employer");
+}
+
+function isTdsLabel(label: string): boolean {
+  return /tds|income tax/i.test(label);
+}
+
+function isEmployeePfLabel(label: string): boolean {
+  const lower = label.toLowerCase();
+  return /provident|\bpf\b/.test(lower) && !/employer/.test(lower);
 }
 
 function isOneTimeEarning(label: string): boolean {
@@ -312,9 +350,105 @@ function isOneTimeDeduction(label: string): boolean {
   return /leave without pay|\blop\b|late/i.test(label);
 }
 
+function deductionAmount(figures: PayslipFigures, match: (label: string) => boolean): number {
+  return figures.deductions.filter((row) => match(row.label)).reduce((sum, row) => sum + row.monthly, 0);
+}
+
+function earningYearly(figures: PayslipFigures, labelPattern: RegExp): number {
+  return figures.earnings
+    .filter((row) => labelPattern.test(row.label))
+    .reduce((sum, row) => sum + row.yearly, 0);
+}
+
+/** Inject Income Tax (TDS) into Deduction (B) when payroll omitted the line. */
+export function ensurePayslipTds(figures: PayslipFigures, monthTds: number): PayslipFigures {
+  const amount = Math.round(monthTds);
+  if (amount <= 0) return figures;
+  const existing = deductionAmount(figures, isTdsLabel);
+  if (existing > 0) return figures;
+  const deductions = [...figures.deductions, moneyRow("Income Tax (TDS)", amount, true)];
+  const monthlyDeductions = deductions.reduce((sum, row) => sum + row.monthly, 0);
+  const yearlyDeductions = deductions.reduce((sum, row) => sum + row.yearly, 0);
+  return {
+    ...figures,
+    deductions,
+    monthlyDeductions,
+    yearlyDeductions,
+    net: Math.max(0, Math.round(figures.net - amount)),
+  };
+}
+
+function buildTaxSummary(input: {
+  regime: TaxRegime;
+  annualGross: number;
+  figures: PayslipFigures;
+  ytdTdsPosted: number;
+  ytdPfPosted: number | null;
+  monthsLeft: number;
+  currentMonthTds: number;
+  currentMonthHadTds: boolean;
+}): PayslipTaxSummary {
+  const annualGross = Math.max(0, Math.round(input.annualGross));
+  const pfYearly =
+    input.ytdPfPosted != null && input.ytdPfPosted > 0
+      ? Math.round(input.ytdPfPosted + deductionAmount(input.figures, isEmployeePfLabel) * Math.max(0, input.monthsLeft))
+      : Math.round(deductionAmount(input.figures, isEmployeePfLabel) * 12);
+  const hraYearly = earningYearly(input.figures, /^hra$/i);
+  const basicYearly = earningYearly(input.figures, /^basic$/i);
+
+  let standardDeduction = 0;
+  let hraExemption = 0;
+  let section80C = 0;
+  let section80D = 0;
+  let taxableIncome = 0;
+  let estimatedAnnualTax = 0;
+
+  if (input.regime === "old") {
+    standardDeduction = 50000;
+    hraExemption = Math.min(hraYearly, Math.round(basicYearly * 0.4));
+    section80C = Math.min(150000, Math.max(0, pfYearly));
+    section80D = 0;
+    taxableIncome = Math.max(
+      0,
+      annualGross - standardDeduction - hraExemption - section80C - section80D,
+    );
+    estimatedAnnualTax = oldRegimeTaxOnTaxable(taxableIncome);
+  } else {
+    standardDeduction = 75000;
+    hraExemption = 0;
+    section80C = 0;
+    section80D = 0;
+    taxableIncome = Math.max(0, annualGross - standardDeduction);
+    estimatedAnnualTax = tdsForTheYear(annualGross);
+  }
+
+  const ytdTds = input.currentMonthHadTds
+    ? Math.max(0, Math.round(input.ytdTdsPosted))
+    : Math.max(0, Math.round(input.ytdTdsPosted + input.currentMonthTds));
+  const balanceTds = Math.max(0, estimatedAnnualTax - ytdTds);
+
+  return {
+    regime: input.regime,
+    annualGross,
+    standardDeduction,
+    hraExemption,
+    section80C,
+    section80D,
+    taxableIncome,
+    estimatedAnnualTax,
+    ytdTds,
+    balanceTds,
+  };
+}
+
 function moneyRow(label: string, monthly: number, recurring: boolean): PayslipMoneyRow {
   const amount = Math.round(monthly);
-  return { label, monthly: amount, yearly: recurring ? amount * 12 : amount, recurring };
+  return {
+    label: capitalizeWords(label),
+    monthly: amount,
+    yearly: recurring ? amount * 12 : amount,
+    recurring,
+  };
 }
 
 /**
@@ -428,7 +562,11 @@ export function payslipFigures(slip: PayslipRecord): PayslipFigures {
 }
 
 /** Actual year-to-date plus the current recurring structure for months that are not posted yet. */
-export function payslipProjection(figures: PayslipFigures, ctx: PayslipPdfContext): PayslipProjection {
+export function payslipProjection(
+  figures: PayslipFigures,
+  ctx: PayslipPdfContext,
+  regime: TaxRegime = "new",
+): PayslipProjection {
   const recurringEarnings = figures.earnings
     .filter((row) => row.recurring)
     .reduce((sum, row) => sum + row.monthly, 0);
@@ -443,21 +581,74 @@ export function payslipProjection(figures: PayslipFigures, ctx: PayslipPdfContex
   const unposted = Math.max(0, elapsed - covered) + ctx.monthsLeft;
   const earnings =
     ctx.ytdEarnings == null ? recurringEarnings * 12 + oneTimeEarnings : ctx.ytdEarnings + recurringEarnings * unposted;
+
+  const postedMonthTds = deductionAmount(figures, isTdsLabel);
+  const hadTdsLine = postedMonthTds > 0;
+  const provisionalYearTds =
+    regime === "old"
+      ? oldRegimeTaxOnTaxable(
+          Math.max(
+            0,
+            earnings -
+              50000 -
+              Math.min(earningYearly(figures, /^hra$/i), Math.round(earningYearly(figures, /^basic$/i) * 0.4)) -
+              Math.min(150000, deductionAmount(figures, isEmployeePfLabel) * 12),
+          ),
+        )
+      : tdsForTheYear(earnings);
+  const ytdPosted = ctx.ytdTds ?? 0;
+  const openMonths = hadTdsLine ? Math.max(1, ctx.monthsLeft) : Math.max(1, ctx.monthsLeft + 1);
+  const balanceBeforeCurrent = Math.max(0, provisionalYearTds - ytdPosted);
+  const computedMonthTds = roundUpRupee(balanceBeforeCurrent / openMonths);
+  const monthTds = hadTdsLine ? postedMonthTds : computedMonthTds;
+
+  const figuresWithTds = ensurePayslipTds(figures, monthTds);
+  const recurringDeductionsWithTds = figuresWithTds.deductions
+    .filter((row) => row.recurring)
+    .reduce((sum, row) => sum + row.monthly, 0);
   const deductions =
-    ctx.ytdDeductions == null ? figures.yearlyDeductions : ctx.ytdDeductions + recurringDeductions * unposted;
+    ctx.ytdDeductions == null
+      ? figuresWithTds.yearlyDeductions
+      : (hadTdsLine ? ctx.ytdDeductions : ctx.ytdDeductions + monthTds) +
+        recurringDeductionsWithTds * unposted;
+
+  const tax = buildTaxSummary({
+    regime,
+    annualGross: earnings,
+    figures: figuresWithTds,
+    ytdTdsPosted: ytdPosted,
+    ytdPfPosted: ctx.ytdPf,
+    monthsLeft: ctx.monthsLeft,
+    currentMonthTds: monthTds,
+    currentMonthHadTds: hadTdsLine,
+  });
+
   const nextCount = Math.min(3, ctx.monthsLeft, ctx.nextMonths.length);
-  const fullMonthPay = recurringEarnings;
-  const monthTds = tdsForTheMonth(fullMonthPay * 12);
-  const yearTds = tdsForTheYear(fullMonthPay * 12);
+  const futureMonthTds =
+    ctx.monthsLeft > 0 ? roundUpRupee(tax.balanceTds / ctx.monthsLeft) : 0;
+  const nextTdsInstallment = hadTdsLine && monthTds > 0 ? monthTds : futureMonthTds;
+
   return {
     earnings,
     deductions,
     net: earnings - deductions,
-    tdsYear: yearTds,
+    tdsYear: tax.estimatedAnnualTax,
     monthTds,
-    nextTds: nextCount > 0 ? monthTds * nextCount : 0,
-    nextNet: nextCount > 0 ? (fullMonthPay - recurringDeductions) * nextCount : null,
+    nextTds: nextCount > 0 ? nextTdsInstallment * nextCount : 0,
+    nextNet:
+      nextCount > 0
+        ? (recurringEarnings - recurringDeductionsWithTds) * nextCount
+        : null,
+    tax,
   };
+}
+
+/** Figures with TDS in Deduction (B) plus projection / tax summary aligned. */
+export function buildPayslipView(slip: PayslipRecord, ctx: PayslipPdfContext) {
+  const base = payslipFigures(slip);
+  const projection = payslipProjection(base, ctx, slip.taxRegime ?? "new");
+  const figures = ensurePayslipTds(base, projection.monthTds);
+  return { figures, projection };
 }
 
 function drawSlipPage(
@@ -511,23 +702,22 @@ function drawSlipPage(
   doc.text(`For the month of ${slip.monthLabel}`, pageW / 2, y, { align: "center" });
   y += 4;
 
-  const figures = payslipFigures(slip);
-  const projection = payslipProjection(figures, ctx);
+  const { figures, projection } = buildPayslipView(slip, ctx);
   const rows: [string, string, string, string][] = [
-    ["Payslip no.", dash(slip.payslipCode), "Payment", dash(ctx.paymentStatus)],
-    ["Employee", dash(slip.employeeName), "Employee code", dash(ctx.employeeCode)],
+    ["Payslip No.", dash(slip.payslipCode), "Employment Type", dash(ctx.employmentType)],
+    ["Employee Name", capitalizeWords(dash(slip.employeeName)), "Employee Code", dash(ctx.employeeCode)],
     ["Designation", dash(ctx.designation), "Department", dash(ctx.department)],
-    ["Location", dash(ctx.location), "Date of joining", dash(ctx.joiningDate)],
-    ["Employment type", dash(ctx.employmentType), "PAN", dash(ctx.pan)],
-    ["UAN", dash(ctx.uan), "Bank account", dash(ctx.bank)],
-    ["IFSC", dash(ctx.ifsc), "Late count", dash(ctx.lateCount)],
-    ["Working days", String(figures.salaryDays), "Present", String(figures.presentDays)],
-    ["Paid leave", String(figures.leaveDays), "Unpaid leave", figures.unpaidLeaveDays == null ? "—" : String(figures.unpaidLeaveDays)],
-    ["LOP days", String(figures.lopDays), "Pay days", String(slip.payableDays ?? slip.periodDays ?? figures.salaryDays)],
+    ["Location", dash(ctx.location), "Date Of Joining", dash(ctx.joiningDate)],
+    ["UAN", dash(ctx.uan), "PAN", dash(ctx.pan)],
+    ["Bank Account Number", dash(ctx.bankAccountNumber), "Bank Name", dash(ctx.bankName)],
+    ["IFSC", dash(ctx.ifsc), "Late Count", dash(ctx.lateCount)],
+    ["Working Days", String(figures.salaryDays), "Present", String(figures.presentDays)],
+    ["Paid Leave", String(figures.leaveDays), "Unpaid Leave", figures.unpaidLeaveDays == null ? "—" : String(figures.unpaidLeaveDays)],
+    ["LOP Days", String(figures.lopDays), "Pay Days", String(slip.payableDays ?? slip.periodDays ?? figures.salaryDays)],
   ];
   const metaRowH = 5.2;
   const metaH = rows.length * metaRowH;
-  const metaLabelW = 32;
+  const metaLabelW = 38;
   const metaMid = margin + contentW / 2;
   doc.setFillColor(255, 255, 255);
   doc.rect(margin, y, contentW, metaH, "F");
@@ -608,7 +798,7 @@ function drawSlipPage(
     margin,
     "Earnings (A)",
     figures.earnings,
-    "Total earnings (A)",
+    "Total Earnings (A)",
     figures.monthlyGross,
     figures.yearlyGross,
   );
@@ -616,7 +806,7 @@ function drawSlipPage(
     margin + half,
     "Deductions (B)",
     figures.deductions,
-    "Total deductions (B)",
+    "Total Deductions (B)",
     figures.monthlyDeductions,
     figures.yearlyDeductions,
   );
@@ -632,13 +822,13 @@ function drawSlipPage(
     }
   };
 
-  const words = wrap(doc, `Amount in words: ${amountInIndianWords(figures.net)}`, contentW - 6);
+  const words = wrap(doc, `Amount In Words: ${amountInIndianWords(figures.net)}`, contentW - 6);
   const summaryLines: Array<[string, string]> = [
-    ["Net payable salary", money(figures.net)],
-    ["Cost to company (monthly)", money(figures.costToCompany)],
-    ["PF (employer)", money(figures.employerPf)],
-    ["ESI (employer)", money(figures.employerEsi)],
-    ["Employer contribution", money(figures.employerContribution)],
+    ["Net Payable Salary", money(figures.net)],
+    ["Cost To Company (Monthly)", money(figures.costToCompany)],
+    ["PF (Employer)", money(figures.employerPf)],
+    ["ESI (Employer)", money(figures.employerEsi)],
+    ["Employer Contribution", money(figures.employerContribution)],
   ];
   const summaryRowH = 4.6;
   const wordsH = Math.max(summaryRowH, words.length * 3.6 + 2.4);
@@ -656,7 +846,7 @@ function drawSlipPage(
     const top = y + wordsH + index * summaryRowH;
     if (index > 0) gridLine(doc, margin, top, margin + contentW, top);
     const baseline = top + summaryRowH - 1.5;
-    doc.setFont("helvetica", label === "Net payable salary" ? "bold" : "normal");
+    doc.setFont("helvetica", label === "Net Payable Salary" ? "bold" : "normal");
     doc.text(label, margin + 1.4, baseline);
     doc.text(value, margin + contentW - 1.4, baseline, { align: "right" });
   });
@@ -666,44 +856,44 @@ function drawSlipPage(
 
   const columns: Array<{ title: string; subtitle: string; rows: Array<[string, string]> }> = [
     {
-      title: "Year to date",
+      title: "Year To Date",
       subtitle: ctx.yearLabel,
       rows: [
-        ["Total earnings", moneyOrBlank(ctx.ytdEarnings)],
-        ["Total deductions", moneyOrBlank(ctx.ytdDeductions)],
-        ["Net salary paid", moneyOrBlank(ctx.ytdNet)],
-        ["TDS deducted", moneyOrBlank(ctx.ytdTds)],
-        ["PF (employee)", moneyOrBlank(ctx.ytdPf)],
-        ["Professional tax", moneyOrBlank(ctx.ytdProfessionalTax)],
-        ["LOP deduction", moneyOrBlank(ctx.ytdLop)],
+        ["Total Earnings", moneyOrBlank(ctx.ytdEarnings)],
+        ["Total Deductions", moneyOrBlank(ctx.ytdDeductions)],
+        ["Net Salary Paid", moneyOrBlank(ctx.ytdNet)],
+        ["TDS Deducted", money(projection.tax.ytdTds)],
+        ["PF (Employee)", moneyOrBlank(ctx.ytdPf)],
+        ["Professional Tax", moneyOrBlank(ctx.ytdProfessionalTax)],
+        ["LOP Deduction", moneyOrBlank(ctx.ytdLop)],
       ],
     },
     {
-      title: "Annual projection",
+      title: "Annual Projection",
       subtitle: ctx.yearLabel,
       rows: [
-        ["Projected earnings", money(projection.earnings)],
-        ["Projected deductions", money(projection.deductions)],
-        ["Projected net salary", money(projection.net)],
+        ["Projected Earnings", money(projection.earnings)],
+        ["Projected Deductions", money(projection.deductions)],
+        ["Projected Net Salary", money(projection.net)],
         ["Projected TDS", money(projection.tdsYear)],
-        ["Balance months", String(ctx.monthsLeft)],
-        ["TDS, next 3 months", money(projection.nextTds)],
-        ["Net, next 3 months", projection.nextNet == null ? "—" : money(projection.nextNet)],
+        ["Balance Months", String(ctx.monthsLeft)],
+        ["TDS, Next 3 Months", money(projection.nextTds)],
+        ["Net, Next 3 Months", projection.nextNet == null ? "—" : money(projection.nextNet)],
       ],
     },
     {
-      title: "Tax summary",
+      title: "Tax Summary",
       subtitle: "",
       rows: [
-        ["Annual gross salary", money(projection.earnings)],
-        ["Standard deduction", "—"],
-        ["HRA exemption", "—"],
-        ["Section 80C", "—"],
-        ["Section 80D", "—"],
-        ["Taxable income", "—"],
-        ["Estimated annual tax", money(projection.tdsYear)],
-        ["TDS deducted (YTD)", moneyOrBlank(ctx.ytdTds)],
-        ["Balance TDS", money(Math.max(0, projection.tdsYear - (ctx.ytdTds ?? 0)))],
+        ["Annual Gross Salary", money(projection.tax.annualGross)],
+        ["Standard Deduction", money(projection.tax.standardDeduction)],
+        ["HRA Exemption", money(projection.tax.hraExemption)],
+        ["Section 80C", money(projection.tax.section80C)],
+        ["Section 80D", money(projection.tax.section80D)],
+        ["Taxable Income", money(projection.tax.taxableIncome)],
+        ["Estimated Annual Tax", money(projection.tax.estimatedAnnualTax)],
+        ["TDS Deducted (YTD)", money(projection.tax.ytdTds)],
+        ["Balance TDS", money(projection.tax.balanceTds)],
       ],
     },
   ];
@@ -759,10 +949,12 @@ function drawSlipPage(
   doc.setTextColor(0);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7.5);
-  doc.text("Next months TDS", margin + 1.4, y + nextHeadH - 1.6);
+  doc.text("Next Months TDS", margin + 1.4, y + nextHeadH - 1.6);
   doc.text("Amount", margin + contentW - 1.4, y + nextHeadH - 1.6, { align: "right" });
   gridLine(doc, margin, y + nextHeadH, margin + contentW, y + nextHeadH);
   gridLine(doc, nextValueX, y, nextValueX, y + nextH);
+  const nextMonthTds =
+    nextRows.length > 0 ? Math.round(projection.nextTds / Math.min(3, nextRows.length)) : 0;
   if (!nextRows.length) {
     doc.setFont("helvetica", "normal");
     doc.text("—", margin + 1.4, y + nextHeadH + nextRowH - 1.5);
@@ -775,7 +967,7 @@ function drawSlipPage(
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7.5);
       doc.text(monthName(key), margin + 1.4, baseline);
-      doc.text(money(projection.monthTds), margin + contentW - 1.4, baseline, { align: "right" });
+      doc.text(money(nextMonthTds), margin + contentW - 1.4, baseline, { align: "right" });
     });
   }
   const totalTop = y + nextHeadH + Math.max(nextRows.length, 1) * nextRowH;
@@ -783,12 +975,9 @@ function drawSlipPage(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7.5);
   doc.text("Total", margin + 1.4, totalTop + nextRowH - 1.5);
-  doc.text(
-    money(projection.monthTds * Math.max(nextRows.length, 0)),
-    margin + contentW - 1.4,
-    totalTop + nextRowH - 1.5,
-    { align: "right" },
-  );
+  doc.text(money(projection.nextTds), margin + contentW - 1.4, totalTop + nextRowH - 1.5, {
+    align: "right",
+  });
   strokeRect(doc, margin, y, contentW, nextH);
   y += nextH + 3;
 
@@ -798,7 +987,7 @@ function drawSlipPage(
   const notes = [
     "This is a system generated payslip and does not require a signature.",
     "Salary is processed based on attendance and company policies.",
-    "Tax calculations are shown only when a tax amount is stored. Declarations such as Section 80C are not estimated.",
+    "Tax calculations are based on current declarations and may change subject to actual investments.",
     "For any discrepancies, contact HR within 7 days.",
   ];
   for (const note of notes) {

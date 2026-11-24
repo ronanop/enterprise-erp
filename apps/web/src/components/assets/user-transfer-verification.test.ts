@@ -60,6 +60,20 @@ describe("isUserTransferVerificationComplete", () => {
     ).toBe(true);
   });
 
+  it("rejects not-working (dead) physical condition", () => {
+    expect(
+      isUserTransferVerificationComplete(
+        {
+          ...EMPTY_USER_TRANSFER_VERIFICATION,
+          dataBackupVerified: true,
+          qcCompleted: true,
+          physicalCondition: "dead",
+        },
+        [],
+      ),
+    ).toBe(false);
+  });
+
   it("requires all issued components verified", () => {
     expect(
       isUserTransferVerificationComplete(

@@ -10,7 +10,7 @@ import {
 } from "@/components/assets/asset-inventory-container";
 import { createAssetNavigation } from "@/components/assets/navigation/asset-navigation";
 import { BRANCH_ALL_VALUE, EMPTY_INVENTORY_FILTERS } from "@/components/assets/shared";
-import { assetOperationsService } from "@/services/assets-service";
+import { assetOperationsService, componentService } from "@/services/assets-service";
 
 const push = vi.fn();
 
@@ -42,7 +42,7 @@ vi.mock("@/services/assets-service", async (importOriginal) => {
     },
     componentService: {
       ...actual.componentService,
-      search: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 100 }),
+      search: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 200 }),
     },
   };
 });
@@ -92,6 +92,13 @@ afterEach(() => {
 
 beforeEach(() => {
   push.mockReset();
+  vi.mocked(componentService.search).mockReset();
+  vi.mocked(componentService.search).mockResolvedValue({
+    items: [],
+    total: 0,
+    page: 1,
+    page_size: 200,
+  });
   vi.spyOn(assetOperationsService, "listAssets").mockImplementation(() =>
     Promise.resolve({
       items: [assetItem],
@@ -147,13 +154,76 @@ describe("fetchInventoryPage", () => {
     expect(assetOperationsService.listAssets).toHaveBeenCalled();
     expect(result.assetList.items).toHaveLength(1);
   });
+
+  it("loads CHARGER accessories with page_size capped at API max 200", async () => {
+    const manyAssets = Array.from({ length: 25 }, (_, i) => ({
+      ...assetItem,
+      id: `asset-${i + 1}`,
+      asset_code: `AST-${i + 1}`,
+    }));
+    const listAssets = vi.fn().mockResolvedValue({
+      items: manyAssets,
+      total: 25,
+      page: 1,
+      page_size: 25,
+    });
+    const listAssignments = vi.fn().mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 200,
+    });
+    vi.mocked(componentService.search).mockResolvedValue({
+      items: [
+        {
+          id: "comp-1",
+          asset_id: "asset-1",
+          component_code: "CHG-1001",
+          component_name: "Charger",
+          component_type: "CHARGER",
+          serial_number: "CHG-1001",
+          status: "active",
+          company_id: "c1",
+          version: 1,
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 200,
+    });
+
+    const result = await fetchInventoryPage({
+      preset: "all",
+      filters: EMPTY_INVENTORY_FILTERS,
+      headerLocationId: BRANCH_ALL_VALUE,
+      page: 1,
+      deps: { listAssets, listAssignments },
+    });
+
+    expect(componentService.search).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "active",
+        page: 1,
+        page_size: 200,
+      }),
+    );
+    const searchArg = vi.mocked(componentService.search).mock.calls[0]![0]!;
+    expect(searchArg.page_size).toBeLessThanOrEqual(200);
+    expect(searchArg.asset_ids).toHaveLength(25);
+    expect(result.accessoriesByAssetId.get("asset-1")).toEqual([
+      expect.objectContaining({
+        typeLabel: "Charger",
+        serialDisplay: "CHG-1001",
+      }),
+    ]);
+  });
 });
 
 describe("AssetInventoryContainer", () => {
   it("renders inventory workspace title", async () => {
     render(<AssetInventoryContainer />);
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "IT Asset Inventory" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "All Assets" })).toBeInTheDocument();
     });
   });
 
@@ -163,16 +233,10 @@ describe("AssetInventoryContainer", () => {
     expect(screen.getAllByText("AST-100")[0]).toBeInTheDocument();
   });
 
-  it("applies ready preset filter to API", async () => {
-    const user = userEvent.setup();
+  it("does not render status preset pills", async () => {
     render(<AssetInventoryContainer />);
     await waitFor(() => expect(assetOperationsService.listAssets).toHaveBeenCalled());
-    await user.selectOptions(screen.getByTestId("inventory-status-filter"), "ready");
-    await waitFor(() => {
-      expect(assetOperationsService.listAssets).toHaveBeenCalledWith(
-        expect.objectContaining({ operational_status: "READY_TO_MOVE" }),
-      );
-    });
+    expect(screen.queryByTestId("inventory-status-filter")).not.toBeInTheDocument();
   });
 
   it("shows error card on failure", async () => {

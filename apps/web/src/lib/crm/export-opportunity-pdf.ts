@@ -320,12 +320,30 @@ export function buildOpportunityPdfDocument(input: OpportunityExportInput): jsPD
       ],
     );
 
+    const saleTypeLabel =
+      (lead.sale_type || "").trim().toLowerCase() === "sell_to"
+        ? "Sell To"
+        : (lead.sale_type || "").trim().toLowerCase() === "sell_through"
+          ? "Sell Through"
+          : lead.end_customer_name
+            ? companyName &&
+              lead.end_customer_name.trim().toLowerCase() ===
+              String(companyName).trim().toLowerCase()
+              ? "Sell To"
+              : "Sell Through"
+            : "-";
+    const saleTypeIsSellTo = saleTypeLabel === "Sell To";
     y = drawSectionTable(
       doc,
       y,
-      "End Customer Detail",
-      [["End Customer *", lead.end_customer_name]],
-      [["Industry", lead.industry || "None"]],
+      "Sale Type",
+      [["Sale Type *", saleTypeLabel]],
+      [
+        [
+          saleTypeIsSellTo ? "Account Name" : "End Customer Name *",
+          saleTypeIsSellTo ? companyName || lead.end_customer_name : lead.end_customer_name,
+        ],
+      ],
     );
 
     y = drawSectionTable(

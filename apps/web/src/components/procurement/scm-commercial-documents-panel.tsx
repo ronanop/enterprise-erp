@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Eye, Download, Paperclip, Plus, Trash2, Upload } from "lucide-react";
+import { ChevronDown, Eye, Download, Paperclip, Plus, Trash2, Upload } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,8 @@ import {
 } from "@/services/procurement-service";
 import { fileToBase64 } from "@/services/sales-crm-service";
 
+const MAX_SCM_DOCUMENTS = 20;
+
 const PRESET_SLOTS = [
   { category: "customer_po", label: "Customer PO" },
   { category: "vendor_quote", label: "Vendor Quote" },
@@ -39,6 +41,7 @@ function categoryLabel(category: string): string {
     customer_po: "Customer PO",
     vendor_quote: "Vendor Quote",
     vendor_invoice: "Vendor invoice",
+    ovf_pdf: "OVF PDF",
     other: "Other",
   };
   return labels[category] || category.replaceAll("_", " ");
@@ -66,6 +69,8 @@ export function ScmCommercialDocumentsPanel({
   onChanged,
   draftOnly = false,
   onDraftDocumentsChange,
+  refreshKey = 0,
+  collapsedSummary = false,
 }: {
   ovfId?: string | null;
   orderId?: string | null;
@@ -81,6 +86,10 @@ export function ScmCommercialDocumentsPanel({
   /** Queue files before a PO exists; the parent uploads them after PO creation. */
   draftOnly?: boolean;
   onDraftDocumentsChange?: (documents: PendingScmCommercialDocument[]) => void;
+  /** Bump to force a reload (e.g. after auto-attaching OVF PDF). */
+  refreshKey?: number;
+  /** Show a Documents control; the file list opens on click. */
+  collapsedSummary?: boolean;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachInputRef = useRef<HTMLInputElement>(null);
@@ -92,6 +101,7 @@ export function ScmCommercialDocumentsPanel({
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [attachDialogOpen, setAttachDialogOpen] = useState(false);
+  const [listOpen, setListOpen] = useState(!collapsedSummary);
   const [otherDocName, setOtherDocName] = useState("");
   const [attachTarget, setAttachTarget] = useState<
     { kind: "preset"; category: string; label: string } | { kind: "other" } | null
@@ -128,7 +138,7 @@ export function ScmCommercialDocumentsPanel({
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftOnly, orderId, ovfId]);
+  }, [draftOnly, orderId, ovfId, refreshKey]);
 
   useEffect(() => {
     void load();
@@ -165,7 +175,17 @@ export function ScmCommercialDocumentsPanel({
       category: "other",
       remarks: "",
     }));
-    setPendingDocuments((current) => [...current, ...queued]);
+    setPendingDocuments((current) => {
+      const room = MAX_SCM_DOCUMENTS - current.length;
+      if (room <= 0) {
+        setError(`You can attach at most ${MAX_SCM_DOCUMENTS} documents.`);
+        return current;
+      }
+      if (queued.length > room) {
+        setError(`Only ${room} more document${room === 1 ? "" : "s"} can be attached (limit ${MAX_SCM_DOCUMENTS}).`);
+      }
+      return [...current, ...queued.slice(0, room)];
+    });
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -192,6 +212,10 @@ export function ScmCommercialDocumentsPanel({
           ...current.filter((document) => document.category !== attachTarget.category),
           nextDocument,
         ];
+      }
+      if (current.length >= MAX_SCM_DOCUMENTS) {
+        setError(`You can attach at most ${MAX_SCM_DOCUMENTS} documents.`);
+        return current;
       }
       return [...current, nextDocument];
     });
@@ -299,7 +323,31 @@ export function ScmCommercialDocumentsPanel({
         }}
       />
 
-      <div className="flex flex-wrap items-start justify-between gap-2">
+      {collapsedSummary ? (
+        <button
+          type="button"
+          className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-md px-1 py-1 text-left transition-colors duration-200 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-expanded={listOpen}
+          onClick={() => setListOpen((open) => !open)}
+        >
+          <span className="flex items-center gap-2 text-sm font-bold tracking-tight">
+            <Paperclip className="size-3.5 text-[#0369A1]" aria-hidden />
+            Documents
+          </span>
+          <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            {loading ? "Loading…" : `${rows.length} connected`}
+            <ChevronDown
+              className={cn(
+                "size-3.5 shrink-0 transition-transform duration-200",
+                listOpen && "rotate-180",
+              )}
+              aria-hidden
+            />
+          </span>
+        </button>
+      ) : null}
+
+      <div className={cn("flex flex-wrap items-start justify-between gap-2", collapsedSummary && "hidden")}>
         <div className="min-w-0 space-y-0.5">
           <h2 className="flex items-center gap-2 text-sm font-bold tracking-tight">
             <Paperclip className="size-3.5 text-[#0369A1]" aria-hidden />
@@ -423,24 +471,28 @@ export function ScmCommercialDocumentsPanel({
         </div>
       ) : null}
 
-      {!draftOnly && loading ? (
+      {collapsedSummary && !listOpen ? null : !draftOnly && loading ? (
         <p className="text-xs text-muted-foreground">Loading documents…</p>
       ) : !draftOnly && rows.length === 0 ? (
         <p className="text-xs text-muted-foreground">No documents attached yet.</p>
       ) : !draftOnly && compact ? (
-        <div className="max-h-52 overflow-auto rounded-md border border-border">
+        <div className="rounded-md border border-border">
           <table className="w-full min-w-[520px] text-left text-xs">
-            <thead className="sticky top-0 z-[1] border-b border-border bg-muted/60 text-[10px] uppercase tracking-wide text-muted-foreground">
+            <thead className="border-b border-border bg-muted/60 text-[10px] uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-2 py-1.5 font-medium">File</th>
-                <th className="px-2 py-1.5 font-medium">Source</th>
                 <th className="px-2 py-1.5 font-medium">Category</th>
+                <th className="px-2 py-1.5 font-medium">File</th>
                 <th className="px-2 py-1.5 text-right font-medium"> </th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
                 <tr key={row.id} className="border-b border-border/60 last:border-b-0">
+                  <td className="px-2 py-1.5 whitespace-nowrap">
+                    <Badge variant="outline" className="h-5 px-1.5 text-[10px] capitalize">
+                      {categoryLabel(row.category)}
+                    </Badge>
+                  </td>
                   <td className="max-w-[220px] px-2 py-1.5">
                     <p className="truncate font-medium text-foreground" title={row.file_name}>
                       {row.file_name}
@@ -450,16 +502,6 @@ export function ScmCommercialDocumentsPanel({
                         {row.remarks}
                       </p>
                     ) : null}
-                  </td>
-                  <td className="px-2 py-1.5 whitespace-nowrap">
-                    <Badge variant="secondary" className="h-5 px-1.5 text-[10px] capitalize">
-                      {sourceLabel(row.entity_type)}
-                    </Badge>
-                  </td>
-                  <td className="px-2 py-1.5 whitespace-nowrap">
-                    <Badge variant="outline" className="h-5 px-1.5 text-[10px] capitalize">
-                      {categoryLabel(row.category)}
-                    </Badge>
                   </td>
                   <td className="px-2 py-1.5">
                     <div className="flex items-center justify-end gap-0.5">

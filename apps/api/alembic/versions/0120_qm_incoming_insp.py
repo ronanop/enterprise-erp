@@ -1,14 +1,8 @@
 """Create QmIncomingInspection table."""
 
-import sys
 from collections.abc import Sequence
-from pathlib import Path
 
 from alembic import op
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-
-from modules.quality.models.incoming_inspection import QmIncomingInspection  # noqa: F401
 
 revision: str = "0120_qm_incoming_insp"
 down_revision: str | None = "0119_qm_quality_char"
@@ -17,8 +11,16 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    try:
+        from modules.quality.models.incoming_inspection import QmIncomingInspection  # noqa: F401
+    except ModuleNotFoundError:
+        return
     QmIncomingInspection.__table__.create(bind=op.get_bind(), checkfirst=True)
 
 
 def downgrade() -> None:
+    try:
+        from modules.quality.models.incoming_inspection import QmIncomingInspection  # noqa: F401
+    except ModuleNotFoundError:
+        return
     QmIncomingInspection.__table__.drop(bind=op.get_bind(), checkfirst=True)

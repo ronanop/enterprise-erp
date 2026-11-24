@@ -22,13 +22,8 @@ from modules.foundation.models.security import (  # noqa: E402
     SecRolePermission,
     SecTenant,
     SecUser,
-    SecUserModule,
     SecUserOrgScope,
     SecUserRole,
-)
-from modules.foundation.domain.erp_modules import (  # noqa: E402
-    MODULE_ROLE_ADMIN,
-    MODULE_ROLE_MEMBER,
 )
 from modules.foundation.service.rbac_service import RBACService  # noqa: E402
 from modules.foundation.service.user_service import UserService  # noqa: E402
@@ -39,6 +34,7 @@ from modules.organization.models.hierarchy import OrgDepartment  # noqa: E402
 from modules.service.permissions import (  # noqa: E402
     SERVICE_COORDINATOR_PERMISSIONS,
     SERVICE_ENGINEER_PERMISSIONS,
+    SERVICE_MANAGER_PERMISSIONS,
 )
 from security.password import PasswordHasher  # noqa: E402
 
@@ -51,15 +47,27 @@ SERVICE_STAKEHOLDER_PERMISSIONS = [
 TEAM_SPECS: list[dict] = [
     {
         "email": "service.head@example.com",
-        "display_name": "Service Head",
+        "display_name": "Service Delivery Head",
         "role_code": "SERVICE_COORDINATOR",
-        "role_name": "Service Coordinator",
+        "role_name": "Service Delivery Head",
         "permissions": SERVICE_COORDINATOR_PERMISSIONS,
         "employee_code": "SVC-HEAD",
         "first_name": "Vikram",
         "last_name": "Desai",
-        "designation": "Service Head",
+        "designation": "Service Delivery Head",
         "mobile_suffix": "9101",
+    },
+    {
+        "email": "service.knocktl@example.com",
+        "display_name": "Knock TL",
+        "role_code": "SERVICE_MANAGER",
+        "role_name": "Knock TL",
+        "permissions": SERVICE_MANAGER_PERMISSIONS,
+        "employee_code": "SVC-KTL",
+        "first_name": "Neha",
+        "last_name": "Singh",
+        "designation": "Knock Team Lead",
+        "mobile_suffix": "9100",
     },
     {
         "email": "service.engineer1@example.com",
@@ -200,39 +208,6 @@ def ensure_user(db, tenant: SecTenant, email: str, display_name: str) -> SecUser
     user = db.scalar(select(SecUser).where(SecUser.id == created.id))
     assert user is not None
     return user
-
-
-def ensure_module_assignment(
-    db,
-    *,
-    tenant_id,
-    user_id,
-    role: str,
-    assigned_by,
-) -> None:
-    existing = db.scalar(
-        select(SecUserModule).where(
-            SecUserModule.tenant_id == tenant_id,
-            SecUserModule.user_id == user_id,
-            SecUserModule.module_key == "service",
-        )
-    )
-    if existing is None:
-        db.add(
-            SecUserModule(
-                id=uuid4(),
-                tenant_id=tenant_id,
-                user_id=user_id,
-                module_key="service",
-                role=role,
-                assigned_at=utcnow(),
-                assigned_by=assigned_by,
-            )
-        )
-        return
-    existing.role = role
-    existing.assigned_by = assigned_by
-    existing.assigned_at = utcnow()
 
 
 def ensure_org_scope(db, tenant_id, user_id, company, branch) -> None:
@@ -376,21 +351,6 @@ def main() -> None:
                 )
 
             ensure_org_scope(db, tenant.id, user.id, company, branch)
-            module_role = (
-                MODULE_ROLE_ADMIN
-                if spec["role_code"] == "SERVICE_COORDINATOR"
-                else MODULE_ROLE_MEMBER
-                if spec["role_code"] == "SERVICE_ENGINEER"
-                else MODULE_ROLE_MEMBER
-            )
-            if spec["role_code"] in {"SERVICE_COORDINATOR", "SERVICE_ENGINEER"}:
-                ensure_module_assignment(
-                    db,
-                    tenant_id=tenant.id,
-                    user_id=user.id,
-                    role=module_role,
-                    assigned_by=admin.id,
-                )
             emp = ensure_employee(
                 db,
                 tenant_id=tenant.id,
@@ -432,7 +392,7 @@ def main() -> None:
         for row in created_users:
             print(f"  {row['email']}")
             print(f"    Role         : {row['role']}")
-            print(f"    Employee     : {row['employee_code'] or '-'} ({row['employee_id'] or 'no employee link'})")
+            print(f"    Employee     : {row['employee_code'] or '—'} ({row['employee_id'] or 'no employee link'})")
         print("=" * 72)
         print("Sign out and sign in again so permissions reload.")
         print("Assign tickets: login as service.head@example.com -> open ticket -> Assign Owner panel.")

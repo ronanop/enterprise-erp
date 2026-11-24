@@ -49,6 +49,15 @@ const TONE_RING: Record<StatCardTone, string> = {
   rose: "hover:border-rose-400/60 hover:shadow-[0_8px_24px_-12px_rgba(244,63,94,0.3)]",
 };
 
+const TONE_BAR: Record<StatCardTone, string> = {
+  default: "bg-[#0369A1]",
+  sky: "bg-sky-500",
+  emerald: "bg-emerald-500",
+  amber: "bg-amber-500",
+  slate: "bg-slate-500",
+  rose: "bg-rose-500",
+};
+
 export function StatCard({
   title,
   value,
@@ -73,7 +82,7 @@ export function StatCard({
   return (
     <Card
       className={cn(
-        "border-border/70 bg-background/95 shadow-sm transition-[border-color,box-shadow,transform] duration-200",
+        "relative overflow-hidden rounded-xl border-border/70 bg-card shadow-sm transition-[border-color,box-shadow,transform] duration-200",
         "motion-reduce:transition-none",
         interactive &&
           cn(
@@ -101,7 +110,11 @@ export function StatCard({
           : undefined
       }
     >
-      <CardHeader className="flex flex-row items-start justify-between space-y-0 px-4 pb-1.5 pt-3">
+      <span
+        className={cn("absolute inset-y-0 left-0 w-1", TONE_BAR[tone])}
+        aria-hidden
+      />
+      <CardHeader className="flex flex-row items-start justify-between space-y-0 px-4 pb-1.5 pt-3 pl-5">
         <CardTitle
           className={cn(
             "text-[11px] font-semibold tracking-wide uppercase",
@@ -121,7 +134,7 @@ export function StatCard({
           </span>
         ) : null}
       </CardHeader>
-      <CardContent className="px-4 pb-3.5 pt-0">
+      <CardContent className="px-4 pb-3.5 pt-0 pl-5">
         <p className="text-xl font-semibold tabular-nums tracking-tight text-foreground sm:text-2xl">
           {displayValue}
         </p>

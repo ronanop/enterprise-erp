@@ -8,6 +8,10 @@ import {
   CrmDetailItem,
   CrmSection,
 } from "@/components/crm/crm-ui";
+import {
+  RequiredFieldsDialog,
+  missingRequiredMessage,
+} from "@/components/crm/sales/required-fields-dialog";
 import { FinanceField, FinanceSelect } from "@/components/finance/journals/finance-form-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,6 +50,9 @@ export function CloudOpportunityPanel({ opportunity, cloudVariant, disabled, onS
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [mandateOpen, setMandateOpen] = useState(false);
+  const [mandateMessage, setMandateMessage] = useState("");
+  const [mandateFields, setMandateFields] = useState<string[]>([]);
 
   useEffect(() => {
     setMrr(opportunity.customer_mrr != null ? String(opportunity.customer_mrr) : "");
@@ -80,6 +87,25 @@ export function CloudOpportunityPanel({ opportunity, cloudVariant, disabled, onS
   const showAssessment = variant === "poc_assessment" || variant === "migration";
 
   async function onSave() {
+    const missing: string[] = [];
+    if (!mrr.trim()) missing.push("Customer MRR (₹)");
+    if (!arr.trim()) missing.push("Customer ARR (₹)");
+    if (!customerDiscount.trim()) missing.push("Customer discount (%)");
+    if (showAssessment && !assessmentType.trim()) {
+      missing.push("Assessment / POC type");
+    }
+    if (showMigrationCredits) {
+      if (!phase1.trim()) missing.push("Phase 1 credits");
+      if (!phase2.trim()) missing.push("Phase 2 credits");
+      if (!phase3.trim()) missing.push("Phase 3 credits");
+    }
+    if (missing.length > 0) {
+      setMandateFields(missing);
+      setMandateMessage(missingRequiredMessage(missing));
+      setMandateOpen(true);
+      return;
+    }
+
     setBusy(true);
     setError(null);
     setSaved(false);
@@ -246,6 +272,16 @@ export function CloudOpportunityPanel({ opportunity, cloudVariant, disabled, onS
         {saved ? <span className="text-xs text-emerald-700">Saved</span> : null}
         {error ? <span className="text-xs text-destructive">{error}</span> : null}
       </div>
+
+      <RequiredFieldsDialog
+        open={mandateOpen}
+        message={mandateMessage}
+        fields={mandateFields}
+        onClose={() => {
+          setMandateOpen(false);
+          setMandateFields([]);
+        }}
+      />
     </CrmSection>
   );
 }

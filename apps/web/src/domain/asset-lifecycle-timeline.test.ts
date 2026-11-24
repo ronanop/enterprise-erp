@@ -26,8 +26,8 @@ describe("asset lifecycle timeline mappers", () => {
     expect(events).toHaveLength(1);
     expect(events[0].kind).toBe("returned");
     expect(events[0].title).toContain("Ada");
-    expect(events[0].meta?.find((m) => m.label === "Assigned")?.value).toBe("Sep 1, 2026");
-    expect(events[0].meta?.find((m) => m.label === "De-assigned")?.value).toBe("Sep 10, 2026");
+    expect(events[0].meta).toBeUndefined();
+    expect(events[0].occurredAt).toBe("2026-09-10T16:00:00.000Z");
   });
 
   it("maps maintenance cycles with entered and completed timestamps", () => {
@@ -62,5 +62,29 @@ describe("asset lifecycle timeline mappers", () => {
     ]);
     expect(events[0].kind).toBe("created");
     expect(events[0].occurredAt).toBe("2026-09-01T10:00:00.000Z");
+  });
+
+  it("drops Lifecycle stage cards and Reason detail fragments", () => {
+    const events = mapApiLifecycleEvents([
+      {
+        id: "1",
+        kind: "status",
+        stage: "Lifecycle",
+        title: "Lifecycle approve",
+        detail: "Status: Active",
+        occurred_at: "2026-09-01T10:00:00.000Z",
+      },
+      {
+        id: "2",
+        kind: "status",
+        stage: "Status",
+        title: "Operational status changed",
+        detail: "To: Ready to Move; Reason: asset_registration",
+        occurred_at: "2026-09-01T11:00:00.000Z",
+      },
+    ]);
+    expect(events).toHaveLength(1);
+    expect(events[0].id).toBe("2");
+    expect(events[0].detail).toBe("To: Ready to Move");
   });
 });

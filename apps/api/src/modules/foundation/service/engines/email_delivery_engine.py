@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import base64
 import re
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from modules.foundation.adapters.smtp_email_adapter import SmtpEmailAdapter
+from modules.foundation.adapters.smtp_email_adapter import EmailAttachment, SmtpEmailAdapter
 from modules.foundation.models.notification import NtfDelivery, NtfEvent, NtfTemplate
 from modules.foundation.repository.base import utcnow
 
@@ -80,10 +81,36 @@ class EmailDeliveryEngine:
             self._db.commit()
             return {"status": "failed", "message": "missing recipient"}
 
+        mail_attachments: list[EmailAttachment] = []
+        raw_attachments = payload.get("_attachments")
+        if isinstance(raw_attachments, list):
+            for item in raw_attachments:
+                if not isinstance(item, dict):
+                    continue
+                filename = str(item.get("filename") or "attachment.bin").strip() or "attachment.bin"
+                content_b64 = str(item.get("content_base64") or "").strip()
+                content_type = str(item.get("content_type") or "application/octet-stream").strip()
+                if not content_b64:
+                    continue
+                try:
+                    content = base64.b64decode(content_b64, validate=False)
+                except Exception:  # noqa: BLE001
+                    continue
+                if not content:
+                    continue
+                mail_attachments.append(
+                    EmailAttachment(
+                        filename=filename,
+                        content=content,
+                        content_type=content_type or "application/octet-stream",
+                    )
+                )
+
         result = self._adapter.send_mail(
             to_address=to_address,
             subject=subject or "(no subject)",
             body_html=body or "",
+            attachments=mail_attachments or None,
         )
         delivery.provider_response = result.provider_response
         if result.ok:

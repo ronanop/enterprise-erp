@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/select";
 import { isAuthenticated } from "@/lib/auth";
 import { ApiClientError, resourceService } from "@/services/api-client";
+import { formatDropdownLabel } from "@/components/assets/shared/format-dropdown-label";
 
 type AssetRow = {
   id: string;
@@ -384,7 +385,7 @@ export function AssetDepreciationWorkspace() {
                   </SelectItem>
                   {STATUS_OPTIONS.filter(Boolean).map((status) => (
                     <SelectItem key={status} value={status} className="cursor-pointer">
-                      {status}
+                      {formatDropdownLabel(status)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -405,7 +406,7 @@ export function AssetDepreciationWorkspace() {
                   </SelectItem>
                   {METHODS.map((method) => (
                     <SelectItem key={method} value={method} className="cursor-pointer">
-                      {method}
+                      {formatDropdownLabel(method)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -608,7 +609,7 @@ export function AssetDepreciationWorkspace() {
                   <SelectContent>
                     {METHODS.map((method) => (
                       <SelectItem key={method} value={method} className="cursor-pointer">
-                        {method}
+                        {formatDropdownLabel(method)}
                       </SelectItem>
                     ))}
                   </SelectContent>

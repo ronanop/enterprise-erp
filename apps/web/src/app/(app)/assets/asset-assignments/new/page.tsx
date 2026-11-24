@@ -10,6 +10,7 @@ import {
   assignmentNavigationPaths,
   createAssignmentNavigation,
 } from "@/components/assets/navigation/assignment-navigation";
+import { buildDcChallanHref } from "@/components/assets/navigation/dc-challan-navigation";
 
 /**
  * Issue-asset page host.
@@ -27,13 +28,31 @@ export default function IssueAssetWizardPage() {
         draftId={mapped.draftId}
         initialState={mapped.initialState}
         onCancel={() => assignmentNav.openInventory(mapped.query.assetId)}
-        onSuccess={(assignmentId) => {
+        onCreateDcNow={(state) => {
+          router.push(
+            buildDcChallanHref({
+              assetId: state.assetId || mapped.query.assetId,
+              assignmentId: state.draftId || undefined,
+              challanId: state.dcChallanId || undefined,
+            }),
+          );
+        }}
+        onSuccess={(assignmentId, context) => {
           markInventoryStale({
             reason: "issue",
-            assetId: mapped.query.assetId,
+            assetId: context?.assetId || mapped.query.assetId,
           });
-          void assignmentId;
-          assignmentNav.openInventory(mapped.query.assetId);
+          if (context?.dcChallanMode === "create_now") {
+            router.push(
+              buildDcChallanHref({
+                assetId: context.assetId || mapped.query.assetId,
+                assignmentId,
+                challanId: context.dcChallanId,
+              }),
+            );
+            return;
+          }
+          assignmentNav.openInventory(context?.assetId || mapped.query.assetId);
         }}
       />
       <p className="text-center text-xs text-muted-foreground">

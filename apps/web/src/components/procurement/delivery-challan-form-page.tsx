@@ -8,8 +8,10 @@ import {
   Eye,
   FileDown,
   FileText,
+  FileUp,
   ListChecks,
   Package,
+  Paperclip,
   PenLine,
   Trash2,
   Truck,
@@ -30,19 +32,29 @@ import {
   DeliveryBillTakenBadge,
   DeliveryBillTakenButton,
 } from "@/components/procurement/delivery-bill-taken-badge";
+import { assertSafeUploadFile } from "@/lib/safe-attachment";
 import { ApiClientError, formatApiError } from "@/services/api-client";
 import {
+  getInvoiceGenerationTaskForBatch,
   getPurchaseOrder,
   getScmOvfPreview,
+  listInvoiceGenerationTasksForOrder,
   listOrderReceiptBatches,
   listProcurementInventory,
+  listReceiptBatchAttachments,
   listVendorOptions,
+  openReceiptBatchAttachment,
+  saveReceiptBatchVendorInvoice,
+  type ProcInvoiceGenerationTask,
   type ProcOrder,
+  type ReceiptBatchAttachment,
   type ScmOvfPreview,
   type ScmReceiptBatch,
   type VendorOption,
 } from "@/services/procurement-service";
+import { fileToBase64 } from "@/services/sales-crm-service";
 import {
+  expandGrnNumberList,
   fullPoChallanLines,
   mergeGrnInventoryStockToChallanLines,
   mergeInventoryAndPoChallanLines,
@@ -81,19 +93,42 @@ import {
 } from "@/utils/delivery-challan-storage";
 import { resolveChallanBillStatus } from "@/utils/delivery-challan-bill";
 import { patchPendingGrnChallan, upsertPendingGrnChallan } from "@/utils/grn-challan-pending";
-import { deliveryStatusUpdateHref } from "@/utils/delivery-status-routes";
 import { ensureDeliveryStatusForChallan, getDeliveryStatus } from "@/utils/delivery-status-storage";
 import { syncOvfTimelineForChallan, syncOvfTimelineForDeliveryStatus } from "@/utils/ovf-timeline-sync";
-import { ovfGrnStockSourceKey, ovfStockSourceKey, takeOvfInventoryShipSelection } from "@/utils/ovf-stock";
+import {
+  ovfGrnStockSourceKey,
+  ovfStockSourceKey,
+  poGrnStockSourceKey,
+  takeOvfInventoryShipSelection,
+  clearPoGrnPendingShipSelection,
+  takePoGrnPendingShipSelection,
+  takePoGrnStockShipSelection,
+} from "@/utils/ovf-stock";
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+const READ_ONLY_INPUT =
+  "h-8 cursor-default bg-muted/40 text-foreground read-only:opacity-100";
+
+function pickBillingInvoiceTask(
+  tasks: ProcInvoiceGenerationTask[],
+): ProcInvoiceGenerationTask | null {
+  if (tasks.length === 0) return null;
+  const completed = tasks.find(
+    (task) => task.status === "completed" && Boolean(task.invoice_number?.trim()),
+  );
+  if (completed) return completed;
+  const pending = tasks.find((task) => task.status === "pending");
+  return pending || tasks[0] || null;
+}
+
 const NO_SPINNER =
   "[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
 
-const PDF_DOCUMENT_TYPE = "DELIVERY CHALLAN";
+const PDF_DOCUMENT_TYPE_DC = "DELIVERY CHALLAN";
+const PDF_DOCUMENT_TYPE_BILLING = "BILLING";
 const PDF_COPY_LABEL = "ORIGINAL FOR CONSIGNEE";
 const DELIVERY_CHALLAN_LIST_HREF = "/procurement/delivery-challan";
 
@@ -114,7 +149,8 @@ function safeProcurementReturnTo(raw: string | null): string | null {
   }
 }
 
-function challanBackLabel(backHref: string): string {
+function challanBackLabel(backHref: string, kind?: GrnChallanKind | "" | null): string {
+  if (kind === "billing") return "Back to billing";
   if (/\/orders\/[^/]+/.test(backHref)) return "Purchase order";
   if (backHref.includes("/grns")) return "GRNs";
   if (backHref.includes("/inventory")) return "Inventory";
@@ -137,7 +173,9 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
   const router = useRouter();
   const orderIdParam = embedded?.orderId ?? searchParams.get("orderId");
   const grnKeyParam = searchParams.get("grnKey");
+  const batchKeyParam = searchParams.get("batchKey");
   const kindParam = searchParams.get("kind") as GrnChallanKind | null;
+  const fromChallanParam = searchParams.get("fromChallan");
   const ovfIdParam = searchParams.get("ovfId");
   const ovfShipSource = searchParams.get("source");
   const isOvfShip =
@@ -148,14 +186,15 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
       ovfShipSource === "ovf_combined");
   const isOvfStock = Boolean(ovfIdParam?.trim()) && ovfShipSource === "ovf_stock";
   const isOvfGrnStock = Boolean(ovfIdParam?.trim()) && ovfShipSource === "ovf_grn_stock";
-  const isOvfPrefilledLines = isOvfStock || isOvfGrnStock;
+  const isPoGrnStock =
+    ovfShipSource === "po_grn_stock" && Boolean(orderIdParam?.trim());
+  const isOvfPrefilledLines = isOvfStock || isOvfGrnStock || isPoGrnStock;
   const returnToParam = searchParams.get("returnTo");
   const fromInventory = searchParams.get("from") === "inventory";
   const returnTo = useMemo(() => safeProcurementReturnTo(returnToParam), [returnToParam]);
   const backHref = resolveChallanModuleExitHref(
     returnTo || (fromInventory ? "/procurement/inventory" : null),
   );
-  const backLabel = challanBackLabel(backHref);
   const isNew = !challanId;
   const isLocked = Boolean(challanId) && !embedded;
 
@@ -198,8 +237,16 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
         ? ""
         : "delivery_challan",
   );
+  const backLabel = challanBackLabel(backHref, grnKind || kindParam);
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [invoiceDate, setInvoiceDate] = useState("");
+  const [sourceChallanId, setSourceChallanId] = useState<string | null>(null);
+  const [invoiceDocument, setInvoiceDocument] = useState<{
+    id: string;
+    fileName: string;
+  } | null>(null);
+  const [invoiceDocBusy, setInvoiceDocBusy] = useState(false);
+  const invoiceFileInputRef = useRef<HTMLInputElement>(null);
   const [loadedOrder, setLoadedOrder] = useState<ProcOrder | null>(null);
   const [ovfContext, setOvfContext] = useState<ScmOvfPreview | null>(null);
   const [grnBatches, setGrnBatches] = useState<ScmReceiptBatch[]>([]);
@@ -215,6 +262,15 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
   >([]);
   const skipAutoApplyLinesRef = useRef(Boolean(challanId));
   const linesLockedFromSaveRef = useRef(Boolean(challanId));
+
+  /** Challan/PO header, customer identity, and lines come from PO/stock — not free-edit. */
+  const lockSourceFields =
+    isLocked ||
+    hasSaved ||
+    grnKind === "billing" ||
+    isOvfPrefilledLines ||
+    Boolean(orderIdParam?.trim()) ||
+    Boolean(loadedOrder);
 
   const defaultShipTo = "";
 
@@ -300,10 +356,17 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
         entityName: entityPdf.entityName,
         entityAddressBlock: entityPdf.entityAddressBlock,
         entityGstBlock: entityPdf.entityGstBlock,
-        documentType: PDF_DOCUMENT_TYPE,
+        documentType:
+          grnKind === "billing" ? PDF_DOCUMENT_TYPE_BILLING : PDF_DOCUMENT_TYPE_DC,
         copyLabel: PDF_COPY_LABEL,
-        challanNumber,
-        challanDate,
+        challanNumber:
+          grnKind === "billing"
+            ? invoiceNumber.trim() || challanNumber
+            : challanNumber,
+        challanDate:
+          grnKind === "billing"
+            ? invoiceDate.trim() || challanDate
+            : challanDate,
         customerName,
         customerBillTo,
         customerShipTo,
@@ -324,6 +387,9 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
       }),
     [
       entityPdf,
+      grnKind,
+      invoiceNumber,
+      invoiceDate,
       challanNumber,
       challanDate,
       customerName,
@@ -352,6 +418,15 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
     if (!loadedOrder || prefillBusy) return;
     applyLinesFromSource();
   }, [applyLinesFromSource, loadedOrder, prefillBusy, itemsSourceMode, selectedGrnKeys, effectiveGrnBatches]);
+
+  useEffect(() => {
+    if (prefillBusy || grnKind !== "billing") {
+      if (grnKind !== "billing") setInvoiceDocument(null);
+      return;
+    }
+    void refreshBillingInvoiceDocument();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh when billing context settles
+  }, [prefillBusy, grnKind, invoiceNumber, effectiveGrnBatches, orderId, orderIdParam]);
 
   function applyPrefillHeader(
     order: ProcOrder,
@@ -491,6 +566,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
     setGrnKind(saved.grnKind ?? "");
     setInvoiceNumber(saved.invoiceNumber ?? "");
     setInvoiceDate(saved.invoiceDate ?? "");
+    setSourceChallanId(saved.sourceChallanId ?? null);
   }
 
   useEffect(() => {
@@ -576,6 +652,137 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
       return;
     }
 
+    if (!challanId && fromChallanParam && kindParam === "billing") {
+      const source = getDeliveryChallan(fromChallanParam);
+      if (!source || source.grnKind === "billing") {
+        setLoadError("Delivery challan not found.");
+        setPrefillBusy(false);
+        return;
+      }
+      hydrateFromSaved(source);
+      setGrnKind("billing");
+      setInvoiceNumber("");
+      setInvoiceDate("");
+      setChallanNumber("");
+      setSourceChallanId(source.id);
+      setHasSaved(false);
+      linesLockedFromSaveRef.current = true;
+      skipAutoApplyLinesRef.current = true;
+      if (source.orderId) {
+        void (async () => {
+          try {
+            const { order, batches, ovf } = await loadOrderContext(source.orderId!);
+            setLoadedOrder(order);
+            setOvfContext(ovf);
+            setGrnBatches(batches);
+          } catch {
+            /* header already copied from the delivery challan */
+          } finally {
+            setPrefillBusy(false);
+          }
+        })();
+      } else {
+        setPrefillBusy(false);
+      }
+      return;
+    }
+
+    if (isPoGrnStock && orderIdParam) {
+      let cancelled = false;
+      setPrefillBusy(true);
+      setLoadError(null);
+      void (async () => {
+        try {
+          const shipSelection =
+            takePoGrnStockShipSelection(orderIdParam) ||
+            (batchKeyParam ? takePoGrnPendingShipSelection(batchKeyParam) : null);
+          const [{ order, vendor, batches, ovf, poNumber }, inventory] = await Promise.all([
+            loadOrderContext(orderIdParam),
+            listProcurementInventory(),
+          ]);
+          if (cancelled) return;
+          setOrderId(orderIdParam);
+          setLoadedOrder(order);
+          setOvfContext(ovf);
+          setGrnBatches(batches);
+          skipAutoApplyLinesRef.current = true;
+          linesLockedFromSaveRef.current = true;
+          setGrnKind(
+            kindParam === "billing" || kindParam === "delivery_challan"
+              ? kindParam
+              : "delivery_challan",
+          );
+          applyPrefillHeader(order, ovf, poNumber, vendor?.label || "");
+          setItemsSourceMode("selected_grns");
+          setSelectedGrnKeys([]);
+          const grnNumsFromSelection = expandGrnNumberList(
+            (shipSelection?.lines || []).map((line) => {
+              const fromLine = (line.grn_number || "").trim();
+              if (fromLine) return fromLine;
+              if (!line.stock_unit_id) return "";
+              const inv = inventory.find(
+                (row) => String(row.stock_unit_id) === String(line.stock_unit_id),
+              );
+              return (inv?.grn_number || "").trim();
+            }),
+          );
+          const grnNumsFromInventory = expandGrnNumberList(
+            inventory
+              .filter(
+                (row) =>
+                  row.source === "grn" &&
+                  row.order_id === orderIdParam &&
+                  (Number(row.received_quantity) || 0) > 0,
+              )
+              .map((row) => (row.grn_number || "").trim()),
+          );
+          setLinkedGrnNumbers(
+            grnNumsFromSelection.length > 0 ? grnNumsFromSelection : grnNumsFromInventory,
+          );
+          if (kindParam === "billing") {
+            try {
+              const invoiceTask = pickBillingInvoiceTask(
+                await listInvoiceGenerationTasksForOrder(orderIdParam),
+              );
+              if (invoiceTask?.invoice_number) {
+                setInvoiceNumber(String(invoiceTask.invoice_number).trim());
+              }
+              if (invoiceTask?.invoice_date) {
+                setInvoiceDate(String(invoiceTask.invoice_date).slice(0, 10));
+              }
+            } catch {
+              /* optional prefill from Accounts My Jobs */
+            }
+          }
+          const selectionAsOvf = shipSelection
+            ? {
+              ovf_id: ovf?.ovf_id || order.source_document_id || "",
+              order_id: shipSelection.order_id,
+              lines: shipSelection.lines,
+            }
+            : null;
+          const grnStockLines = selectionAsOvf
+            ? ovfInventorySelectionToChallanLines(selectionAsOvf, ovf, inventory)
+            : mergeGrnInventoryStockToChallanLines(inventory, orderIdParam, ovf, order);
+          setLines(grnStockLines.length > 0 ? grnStockLines : [emptyChallanLine()]);
+          if (grnStockLines.length === 0) {
+            setLoadError("No GRN warehouse stock found for this purchase order.");
+          }
+        } catch (err) {
+          if (!cancelled) {
+            setLoadError(
+              formatApiError(err, "Failed to load purchase order GRN stock for challan."),
+            );
+          }
+        } finally {
+          if (!cancelled) setPrefillBusy(false);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
     if (isOvfShip && ovfIdParam) {
       let cancelled = false;
       setPrefillBusy(true);
@@ -597,8 +804,8 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
           setCustomerBillTo((ovf.billing_address || "").trim() || customer);
           setCustomerShipTo(
             (ovf.shipping_address || "").trim() ||
-              (ovf.billing_address || "").trim() ||
-              customer,
+            (ovf.billing_address || "").trim() ||
+            customer,
           );
           setCustomerGstNo((ovf.customer_gst || "").trim());
           const attn = [ovf.shipping_contact_person, ovf.billing_contact_person]
@@ -650,34 +857,27 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
             setPoDate(customerPo.poDate || (ovf.po_date || "").slice(0, 10));
             setItemsSourceMode("selected_grns");
             setSelectedGrnKeys([]);
-            const grnNumsFromSelection = [
-              ...new Set(
-                (shipSelection?.lines || [])
-                  .map((line) => {
-                    const fromLine = (line.grn_number || "").trim();
-                    if (fromLine) return fromLine;
-                    if (!line.stock_unit_id) return "";
-                    const inv = inventory.find(
-                      (row) => String(row.stock_unit_id) === String(line.stock_unit_id),
-                    );
-                    return (inv?.grn_number || "").trim();
-                  })
-                  .filter(Boolean),
-              ),
-            ];
-            const grnNumsFromInventory = [
-              ...new Set(
-                inventory
-                  .filter(
-                    (row) =>
-                      row.source === "grn" &&
-                      row.order_id === orderIdForGrn &&
-                      (Number(row.received_quantity) || 0) > 0,
-                  )
-                  .map((row) => (row.grn_number || "").trim())
-                  .filter(Boolean),
-              ),
-            ];
+            const grnNumsFromSelection = expandGrnNumberList(
+              (shipSelection?.lines || []).map((line) => {
+                const fromLine = (line.grn_number || "").trim();
+                if (fromLine) return fromLine;
+                if (!line.stock_unit_id) return "";
+                const inv = inventory.find(
+                  (row) => String(row.stock_unit_id) === String(line.stock_unit_id),
+                );
+                return (inv?.grn_number || "").trim();
+              }),
+            );
+            const grnNumsFromInventory = expandGrnNumberList(
+              inventory
+                .filter(
+                  (row) =>
+                    row.source === "grn" &&
+                    row.order_id === orderIdForGrn &&
+                    (Number(row.received_quantity) || 0) > 0,
+                )
+                .map((row) => (row.grn_number || "").trim()),
+            );
             setLinkedGrnNumbers(
               grnNumsFromSelection.length > 0 ? grnNumsFromSelection : grnNumsFromInventory,
             );
@@ -782,11 +982,36 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
           const matchedBatch = resolvedBatches.find(
             (batch) => receiptBatchKey(batch) === fromGrn,
           );
-          if (matchedBatch?.vendor_invoice_number) {
-            setInvoiceNumber(String(matchedBatch.vendor_invoice_number).trim());
-          }
-          if (matchedBatch?.vendor_invoice_date) {
-            setInvoiceDate(String(matchedBatch.vendor_invoice_date).slice(0, 10));
+          if (kind === "billing") {
+            try {
+              let invoiceTask: ProcInvoiceGenerationTask | null = null;
+              if (matchedBatch?.id) {
+                invoiceTask = await getInvoiceGenerationTaskForBatch(String(matchedBatch.id));
+              }
+              if (!invoiceTask?.invoice_number) {
+                invoiceTask = pickBillingInvoiceTask(
+                  await listInvoiceGenerationTasksForOrder(orderIdParam),
+                );
+              }
+              if (invoiceTask?.invoice_number) {
+                setInvoiceNumber(String(invoiceTask.invoice_number).trim());
+              }
+              if (invoiceTask?.invoice_date) {
+                setInvoiceDate(String(invoiceTask.invoice_date).slice(0, 10));
+              } else if (matchedBatch?.vendor_invoice_date) {
+                setInvoiceDate(String(matchedBatch.vendor_invoice_date).slice(0, 10));
+              }
+              if (!invoiceTask?.invoice_number && matchedBatch?.vendor_invoice_number) {
+                setInvoiceNumber(String(matchedBatch.vendor_invoice_number).trim());
+              }
+            } catch {
+              if (matchedBatch?.vendor_invoice_number) {
+                setInvoiceNumber(String(matchedBatch.vendor_invoice_number).trim());
+              }
+              if (matchedBatch?.vendor_invoice_date) {
+                setInvoiceDate(String(matchedBatch.vendor_invoice_date).slice(0, 10));
+              }
+            }
           }
           const merged = mergeSelectedGrnChallanLines(
             resolvedBatches,
@@ -820,7 +1045,18 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
     return () => {
       cancelled = true;
     };
-  }, [challanId, grnKeyParam, kindParam, orderIdParam, isOvfShip, ovfIdParam, ovfShipSource]);
+  }, [
+    challanId,
+    grnKeyParam,
+    batchKeyParam,
+    kindParam,
+    fromChallanParam,
+    orderIdParam,
+    isOvfShip,
+    isPoGrnStock,
+    ovfIdParam,
+    ovfShipSource,
+  ]);
 
   const setLineField = useCallback(
     (id: string, key: keyof Omit<DeliveryChallanLine, "id">, value: string) => {
@@ -847,6 +1083,11 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
     if (isOvfGrnStock && ovfIdParam?.trim()) {
       return [ovfGrnStockSourceKey(ovfIdParam.trim(), recordId)];
     }
+    if (isPoGrnStock && orderIdParam?.trim()) {
+      return [
+        (batchKeyParam || "").trim() || poGrnStockSourceKey(orderIdParam.trim(), recordId),
+      ];
+    }
     return selectedGrnKeys;
   }
 
@@ -856,15 +1097,26 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
       purchaseOrderNumber.trim(),
       ovfContext,
     );
+    const resolvedKind: GrnChallanKind =
+      grnKind === "billing" || grnKind === "delivery_challan"
+        ? grnKind
+        : "delivery_challan";
     return {
       id: recordId,
       orderId,
-      challanNumber: challanNumber.trim(),
-      challanDate,
+      challanNumber:
+        resolvedKind === "billing"
+          ? invoiceNumber.trim() || challanNumber.trim()
+          : challanNumber.trim(),
+      challanDate:
+        resolvedKind === "billing"
+          ? invoiceDate.trim() || challanDate
+          : challanDate,
       entityName: entity.entityName,
       entityAddressBlock: entity.entityAddressBlock,
       entityGstBlock: entity.entityGstBlock,
-      documentType: PDF_DOCUMENT_TYPE,
+      documentType:
+        resolvedKind === "billing" ? PDF_DOCUMENT_TYPE_BILLING : PDF_DOCUMENT_TYPE_DC,
       copyLabel: PDF_COPY_LABEL,
       customerName: customerName.trim(),
       customerBillTo: customerBillTo.trim(),
@@ -886,9 +1138,10 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
       itemsSourceMode,
       selectedGrnKeys: resolveSaveGrnKeys(),
       selectedGrnNumbers,
-      grnKind: grnKind === "billing" || grnKind === "delivery_challan" ? grnKind : "delivery_challan",
+      grnKind: resolvedKind,
       invoiceNumber: invoiceNumber.trim() || undefined,
       invoiceDate: invoiceDate.trim() || undefined,
+      sourceChallanId: sourceChallanId || undefined,
       lines,
       deliveryMode,
       transportDetails: transportDetails.trim(),
@@ -899,23 +1152,6 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
   }
 
   function onSave() {
-    let numberToSave = challanNumber.trim();
-    if (!numberToSave) {
-      numberToSave = peekNextDeliveryChallanNumber();
-      setChallanNumber(numberToSave);
-    }
-    if (!numberToSave) {
-      setLoadError("Challan number is required.");
-      return;
-    }
-    if (!purchaseOrderNumber.trim()) {
-      setLoadError("Customer PO number is required.");
-      return;
-    }
-    if (!customerName.trim()) {
-      setLoadError("Customer name is required.");
-      return;
-    }
     if (grnKind === "billing") {
       if (!invoiceNumber.trim()) {
         setLoadError("Invoice number is required for billing GRNs.");
@@ -925,6 +1161,30 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
         setLoadError("Invoice date is required for billing GRNs.");
         return;
       }
+    }
+    let numberToSave = challanNumber.trim();
+    if (grnKind === "billing") {
+      numberToSave = invoiceNumber.trim() || numberToSave;
+      if (numberToSave && numberToSave !== challanNumber.trim()) {
+        setChallanNumber(numberToSave);
+      }
+    } else if (!numberToSave) {
+      numberToSave = peekNextDeliveryChallanNumber();
+      setChallanNumber(numberToSave);
+    }
+    if (!numberToSave) {
+      setLoadError(
+        grnKind === "billing" ? "Invoice number is required." : "Challan number is required.",
+      );
+      return;
+    }
+    if (!purchaseOrderNumber.trim()) {
+      setLoadError("Customer PO number is required.");
+      return;
+    }
+    if (!customerName.trim()) {
+      setLoadError("Customer name is required.");
+      return;
     }
     setLoadError(null);
     const existingChallan = recordId ? getDeliveryChallan(recordId) : null;
@@ -940,13 +1200,13 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
       saved,
       grnKind === "billing" && invoiceNumber.trim()
         ? {
-            billStatus: "fully_billed",
-            billInvoiceNumber: invoiceNumber.trim(),
-            billInvoiceDate: invoiceDate.trim(),
-            billedQuantity: String(
-              saved.lines.reduce((sum, line) => sum + (Number(line.quantitySent) || 0), 0),
-            ),
-          }
+          billStatus: "fully_billed",
+          billInvoiceNumber: invoiceNumber.trim(),
+          billInvoiceDate: invoiceDate.trim(),
+          billedQuantity: String(
+            saved.lines.reduce((sum, line) => sum + (Number(line.quantitySent) || 0), 0),
+          ),
+        }
         : { billStatus: "unbilled" },
     );
     if (grnKind === "billing" && invoiceNumber.trim()) {
@@ -960,12 +1220,14 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
     const saveKeys = resolveSaveGrnKeys();
     const batchKey = saveKeys[0] || `saved:${saved.id}`;
     let pendingOrderId = orderId || saved.orderId || saved.id;
-    let source: "grn" | "ovf_stock" | "ovf_grn_stock" = "grn";
+    let source: "grn" | "ovf_stock" | "ovf_grn_stock" | "po_grn_stock" = "grn";
     if (batchKey.startsWith("ovf-stock:")) {
       source = "ovf_stock";
       pendingOrderId = ovfIdParam?.trim() || pendingOrderId;
     } else if (batchKey.startsWith("ovf-grn-stock:")) {
       source = "ovf_grn_stock";
+    } else if (batchKey.startsWith("po-grn-stock:")) {
+      source = "po_grn_stock";
     }
     upsertPendingGrnChallan({
       orderId: pendingOrderId,
@@ -996,13 +1258,20 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
       savedRecordId: saved.id,
       source,
     });
+    if (source === "po_grn_stock" || batchKey.startsWith("po-grn-stock:")) {
+      clearPoGrnPendingShipSelection(batchKey);
+    }
     // Keep stored challan kind aligned with the tab it belongs to.
     if (saved.grnKind !== resolvedKind) {
       upsertDeliveryChallan({ ...saved, grnKind: resolvedKind });
     }
     setHasSaved(true);
     if (!embedded) {
-      router.push(deliveryStatusUpdateHref(recordId));
+      router.push(
+        resolvedKind === "billing"
+          ? "/procurement/delivery-challan?tab=billing"
+          : "/procurement/delivery-challan",
+      );
       return;
     }
     setBanner("Delivery challan saved. You can download the PDF now.");
@@ -1011,10 +1280,170 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
     }
   }
 
+  function pickInvoiceAttachment(
+    attachments: ReceiptBatchAttachment[],
+  ): ReceiptBatchAttachment | null {
+    if (!attachments.length) return null;
+    const byName = attachments.find((file) =>
+      /invoice/i.test(file.file_name || ""),
+    );
+    return byName || attachments[attachments.length - 1] || attachments[0] || null;
+  }
+
+  async function resolveBillingInvoiceBatchIds(): Promise<string[]> {
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    const push = (value: string | null | undefined) => {
+      const id = String(value || "").trim();
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      ids.push(id);
+    };
+
+    const keySet = new Set(
+      (selectedGrnKeys.length > 0
+        ? selectedGrnKeys
+        : effectiveGrnBatches.map((batch) => receiptBatchKey(batch))
+      )
+        .map((key) => key.trim())
+        .filter(Boolean),
+    );
+    for (const batch of effectiveGrnBatches) {
+      if (keySet.has(receiptBatchKey(batch))) push(batch.id);
+    }
+
+    // po-grn-stock / synthetic keys often won't match receiptBatchKey — use invoice task batch.
+    try {
+      const resolvedOrderId = String(orderId || orderIdParam || loadedOrder?.id || "").trim();
+      if (resolvedOrderId) {
+        const tasks = await listInvoiceGenerationTasksForOrder(resolvedOrderId);
+        const preferred =
+          tasks.find(
+            (task) =>
+              task.status === "completed" &&
+              Boolean(task.invoice_number?.trim()) &&
+              (!invoiceNumber.trim() ||
+                task.invoice_number?.trim() === invoiceNumber.trim()),
+          ) ||
+          pickBillingInvoiceTask(tasks) ||
+          null;
+        if (preferred?.receipt_batch_id) push(preferred.receipt_batch_id);
+      }
+    } catch {
+      /* optional */
+    }
+
+    for (const batch of effectiveGrnBatches) push(batch.id);
+    return ids;
+  }
+
+  async function resolveBillingInvoiceDocument(): Promise<{
+    id: string;
+    fileName: string;
+  } | null> {
+    if (invoiceDocument?.id) return invoiceDocument;
+    const batchIds = await resolveBillingInvoiceBatchIds();
+    for (const batchId of batchIds) {
+      const batch = effectiveGrnBatches.find((row) => String(row.id) === batchId);
+      try {
+        const attachments =
+          batch?.attachments && batch.attachments.length > 0
+            ? batch.attachments
+            : await listReceiptBatchAttachments(batchId);
+        const file = pickInvoiceAttachment(attachments);
+        if (file?.id) {
+          return {
+            id: String(file.id),
+            fileName: file.file_name || "Invoice document",
+          };
+        }
+      } catch {
+        /* try next */
+      }
+    }
+    return null;
+  }
+
+  async function refreshBillingInvoiceDocument() {
+    if (grnKind !== "billing") {
+      setInvoiceDocument(null);
+      return;
+    }
+    try {
+      const doc = await resolveBillingInvoiceDocument();
+      setInvoiceDocument(doc);
+    } catch {
+      setInvoiceDocument(null);
+    }
+  }
+
+  async function onAttachInvoiceDocument(file: File | null) {
+    if (!file || grnKind !== "billing") return;
+    const batchIds = await resolveBillingInvoiceBatchIds();
+    const batchId = batchIds[0] || "";
+    if (!batchId) {
+      setLoadError("No billing GRN batch found to attach the invoice document.");
+      return;
+    }
+    const branchId = loadedOrder?.branch_id || "";
+    const companyId = loadedOrder?.company_id || null;
+    if (!branchId) {
+      setLoadError("Branch context is required to attach the invoice document.");
+      return;
+    }
+    setInvoiceDocBusy(true);
+    setLoadError(null);
+    try {
+      assertSafeUploadFile(file);
+      const content_base64 = await fileToBase64(file);
+      await saveReceiptBatchVendorInvoice(batchId, {
+        vendor_invoice_number: invoiceNumber.trim() || null,
+        vendor_invoice_date: invoiceDate.trim() || null,
+        file_name: file.name,
+        content_base64,
+        content_type: file.type || null,
+        branch_id: branchId,
+        company_id: companyId,
+      });
+      // Refresh batch list so attachment summaries stick for later preview.
+      if (orderId || orderIdParam) {
+        const batches = await listOrderReceiptBatches(String(orderId || orderIdParam));
+        setGrnBatches(batches);
+      }
+      const attachments = await listReceiptBatchAttachments(batchId);
+      const attached = pickInvoiceAttachment(attachments);
+      if (!attached?.id) {
+        throw new Error("Invoice document uploaded but could not be opened yet. Try Preview again.");
+      }
+      setInvoiceDocument({
+        id: String(attached.id),
+        fileName: attached.file_name || file.name,
+      });
+      setBanner("Invoice document attached. You can preview it now.");
+    } catch (err) {
+      setLoadError(formatApiError(err, "Failed to attach invoice document"));
+    } finally {
+      setInvoiceDocBusy(false);
+      if (invoiceFileInputRef.current) invoiceFileInputRef.current.value = "";
+    }
+  }
+
   async function onPreviewPdf() {
     setPdfBusy(true);
     setLoadError(null);
     try {
+      // Billing: open the Accounts-attached invoice document, not a generated challan draft.
+      if (grnKind === "billing") {
+        const doc = await resolveBillingInvoiceDocument();
+        if (!doc?.id) {
+          throw new Error(
+            "No invoice document is attached for this billing GRN yet. Attach the invoice file below, then preview.",
+          );
+        }
+        setInvoiceDocument(doc);
+        await openReceiptBatchAttachment(doc.id);
+        return;
+      }
       await openDeliveryChallanPdfPreview(pdfInput, { watermark: !hasSaved });
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Failed to preview PDF");
@@ -1079,18 +1508,20 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
           Save
         </Button>
       ) : null}
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        className="cursor-pointer transition-colors duration-200"
-        onClick={() => void onPreviewPdf()}
-        disabled={prefillBusy || pdfBusy}
-        title={hasSaved ? "Preview PDF" : "Preview draft PDF with watermark"}
-      >
-        <Eye className="mr-1.5 size-3.5" />
-        {hasSaved ? "Preview PDF" : "Preview draft"}
-      </Button>
+      {grnKind !== "billing" ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="cursor-pointer transition-colors duration-200"
+          onClick={() => void onPreviewPdf()}
+          disabled={prefillBusy || pdfBusy}
+          title={hasSaved ? "Preview PDF" : "Preview draft PDF with watermark"}
+        >
+          <Eye className="mr-1.5 size-3.5" />
+          {hasSaved ? "Preview PDF" : "Preview draft"}
+        </Button>
+      ) : null}
       {hasSaved ? (
         <Button
           type="button"
@@ -1149,350 +1580,453 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
         disabled={isLocked || hasSaved}
         className="m-0 min-w-0 space-y-4 border-0 p-0 disabled:opacity-100"
       >
-      <DeliverySectionCard title="Challan & purchase order" icon={FileText}>
-        {loadedOrder ? (
-          <p className="mb-3 text-sm font-medium text-foreground">{entityPdf.entityName}</p>
-        ) : null}
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <FinanceField label="Challan number">
-            <Input
-              value={challanNumber}
-              onChange={(e) => setChallanNumber(e.target.value)}
-              className="h-8"
-            />
-          </FinanceField>
-          <FinanceField label="Challan date">
-            <Input
-              type="date"
-              value={challanDate}
-              onChange={(e) => setChallanDate(e.target.value)}
-              className="h-8"
-            />
-          </FinanceField>
-          <FinanceField label="Customer PO number">
-            <Input
-              value={purchaseOrderNumber}
-              onChange={(e) => setPurchaseOrderNumber(e.target.value)}
-              className="h-8"
-            />
-          </FinanceField>
-          <FinanceField label="Customer PO date">
-            <Input
-              type="date"
-              value={poDate}
-              onChange={(e) => setPoDate(e.target.value)}
-              className="h-8"
-            />
-          </FinanceField>
-        </div>
-        {grnKind === "billing" ? (
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <FinanceField label="Invoice number *">
+        <DeliverySectionCard
+          title={grnKind === "billing" ? "Invoice details" : "Challan & purchase order"}
+          icon={FileText}
+        >
+          {loadedOrder ? (
+            <p className="mb-3 text-sm font-medium text-foreground">{entityPdf.entityName}</p>
+          ) : null}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {grnKind === "billing" ? (
+              <>
+                <FinanceField label="Invoice number *">
+                  <Input
+                    value={invoiceNumber}
+                    readOnly
+                    className={READ_ONLY_INPUT}
+                    placeholder="From Accounts My Jobs"
+                    title="Fetched from Accounts invoice generation"
+                  />
+                </FinanceField>
+                <FinanceField label="Invoice date *">
+                  <Input
+                    type="date"
+                    value={invoiceDate}
+                    readOnly
+                    className={READ_ONLY_INPUT}
+                    title="Fetched from Accounts invoice generation"
+                  />
+                </FinanceField>
+                <div className="sm:col-span-2 lg:col-span-4 space-y-1.5">
+                  <span className="text-xs font-medium text-foreground">Invoice document *</span>
+                  <input
+                    ref={invoiceFileInputRef}
+                    type="file"
+                    className="sr-only"
+                    accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,application/pdf,image/*"
+                    disabled={invoiceDocBusy || isLocked || hasSaved}
+                    onChange={(e) => void onAttachInvoiceDocument(e.target.files?.[0] || null)}
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 cursor-pointer gap-1.5 transition-colors duration-200"
+                      disabled={invoiceDocBusy || isLocked || hasSaved}
+                      onClick={() => invoiceFileInputRef.current?.click()}
+                    >
+                      <Paperclip className="size-3.5" aria-hidden />
+                      {invoiceDocument?.id ? "Replace file" : "Attach document"}
+                    </Button>
+                    {invoiceDocument?.fileName ? (
+                      <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border border-border/70 bg-muted/30 px-2 py-1 text-xs text-foreground">
+                        <FileUp className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                        <span className="truncate" title={invoiceDocument.fileName}>
+                          {invoiceDocument.fileName}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        Accounts completed this invoice without a file — attach it here to preview.
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <FinanceField label="Challan number">
+                  <Input
+                    value={challanNumber}
+                    onChange={
+                      lockSourceFields ? undefined : (e) => setChallanNumber(e.target.value)
+                    }
+                    readOnly={lockSourceFields}
+                    className={lockSourceFields ? READ_ONLY_INPUT : "h-8"}
+                  />
+                </FinanceField>
+                <FinanceField label="Challan date">
+                  <Input
+                    type="date"
+                    value={challanDate}
+                    onChange={
+                      lockSourceFields ? undefined : (e) => setChallanDate(e.target.value)
+                    }
+                    readOnly={lockSourceFields}
+                    className={lockSourceFields ? READ_ONLY_INPUT : "h-8"}
+                  />
+                </FinanceField>
+              </>
+            )}
+            <FinanceField label="Customer PO number">
               <Input
-                value={invoiceNumber}
-                onChange={(e) => setInvoiceNumber(e.target.value)}
-                className="h-8"
-                placeholder="Customer / cache invoice no."
+                value={purchaseOrderNumber}
+                onChange={
+                  lockSourceFields ? undefined : (e) => setPurchaseOrderNumber(e.target.value)
+                }
+                readOnly={lockSourceFields}
+                className={lockSourceFields ? READ_ONLY_INPUT : "h-8"}
               />
             </FinanceField>
-            <FinanceField label="Invoice date *">
+            <FinanceField label="Customer PO date">
               <Input
                 type="date"
-                value={invoiceDate}
-                onChange={(e) => setInvoiceDate(e.target.value)}
-                className="h-8"
+                value={poDate}
+                onChange={lockSourceFields ? undefined : (e) => setPoDate(e.target.value)}
+                readOnly={lockSourceFields}
+                className={lockSourceFields ? READ_ONLY_INPUT : "h-8"}
               />
             </FinanceField>
           </div>
-        ) : null}
-        {null}
-      </DeliverySectionCard>
+        </DeliverySectionCard>
 
-      <DeliverySectionCard title="Customer" icon={FileText}>
-        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
-          <FinanceField label="Customer name">
-            <Input
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              className="h-8"
-            />
-          </FinanceField>
-          <FinanceField label="Customer GST no.">
-            <Input
-              value={customerGstNo}
-              onChange={(e) => setCustomerGstNo(e.target.value)}
-              className="h-8"
-            />
-          </FinanceField>
-          <FinanceField label="Customer bill to">
-            <FinanceTextarea
-              value={customerBillTo}
-              onChange={(e) => setCustomerBillTo(e.target.value)}
-              rows={4}
-            />
-          </FinanceField>
-          <FinanceField label="Customer ship to">
-            <FinanceTextarea
-              value={customerShipTo}
-              onChange={(e) => setCustomerShipTo(e.target.value)}
-              rows={4}
-            />
-          </FinanceField>
-          <FinanceField label="Kind attn / site contact">
-            <Input
-              value={kindAttn}
-              onChange={(e) => setKindAttn(e.target.value)}
-              className="h-8"
-            />
-          </FinanceField>
-          <FinanceField label="Remarks">
-            <Input value={remarks} onChange={(e) => setRemarks(e.target.value)} className="h-8" />
-          </FinanceField>
-          <FinanceField label="Prepared by">
-            <Input
-              value={preparedBy}
-              onChange={(e) => setPreparedBy(e.target.value)}
-              className="h-8"
-            />
-          </FinanceField>
-          <FinanceField label="Delivered by">
-            <Input
-              value={deliveredBy}
-              onChange={(e) => setDeliveredBy(e.target.value)}
-              className="h-8"
-            />
-          </FinanceField>
-        </div>
-      </DeliverySectionCard>
+        <DeliverySectionCard title="Customer" icon={FileText}>
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
+            <FinanceField label="Customer name">
+              <Input
+                value={customerName}
+                onChange={
+                  lockSourceFields ? undefined : (e) => setCustomerName(e.target.value)
+                }
+                readOnly={lockSourceFields}
+                className={lockSourceFields ? READ_ONLY_INPUT : "h-8"}
+              />
+            </FinanceField>
+            <FinanceField label="Customer GST no.">
+              <Input
+                value={customerGstNo}
+                onChange={
+                  lockSourceFields ? undefined : (e) => setCustomerGstNo(e.target.value)
+                }
+                readOnly={lockSourceFields}
+                className={lockSourceFields ? READ_ONLY_INPUT : "h-8"}
+              />
+            </FinanceField>
+            <FinanceField label="Customer bill to">
+              <FinanceTextarea
+                value={customerBillTo}
+                onChange={
+                  lockSourceFields ? undefined : (e) => setCustomerBillTo(e.target.value)
+                }
+                readOnly={lockSourceFields}
+                rows={4}
+                className={lockSourceFields ? "cursor-default bg-muted/40" : undefined}
+              />
+            </FinanceField>
+            <FinanceField label="Customer ship to">
+              <FinanceTextarea
+                value={customerShipTo}
+                onChange={
+                  lockSourceFields ? undefined : (e) => setCustomerShipTo(e.target.value)
+                }
+                readOnly={lockSourceFields}
+                rows={4}
+                className={lockSourceFields ? "cursor-default bg-muted/40" : undefined}
+              />
+            </FinanceField>
+            <FinanceField label="Kind attn / site contact">
+              <Input
+                value={kindAttn}
+                onChange={(e) => setKindAttn(e.target.value)}
+                className="h-8"
+              />
+            </FinanceField>
+            <FinanceField label="Remarks">
+              <Input value={remarks} onChange={(e) => setRemarks(e.target.value)} className="h-8" />
+            </FinanceField>
+          </div>
+        </DeliverySectionCard>
 
-      {null /* Items on challan / Source section hidden */}
+        {null /* Items on challan / Source section hidden */}
 
-      <DeliverySectionCard title="Line items" icon={Package}>
-        <div className="erp-scroll overflow-x-auto rounded-md border border-border">
-          <table className="w-full min-w-[980px] text-left text-sm">
-            <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="w-12 px-2 py-2 font-medium">S.No</th>
-                <th className="min-w-[260px] px-2 py-2 font-medium">Product</th>
-                <th className="min-w-[200px] px-2 py-2 font-medium">Description</th>
-                <th className="w-24 px-2 py-2 font-medium">HSN/SAC</th>
-                <th className="w-20 px-2 py-2 font-medium">Asset</th>
-                <th className="w-20 px-2 py-2 font-medium">Qty</th>
-                <th className="w-24 px-2 py-2 font-medium">Rate</th>
-                <th className="w-16 px-2 py-2 font-medium"> </th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map((row, index) => (
-                <tr key={row.id} className="border-b border-border/70 align-top">
-                  <td className="px-2 py-2 tabular-nums text-muted-foreground">{index + 1}</td>
-                  <td className="px-2 py-2">
-                    {fromInventory && isNew ? (
-                      <FinanceSelect
-                        value={row.product}
-                        onChange={(e) => applyInventoryProductToLine(row.id, e.target.value)}
-                        className="h-8 min-w-[240px]"
-                        aria-label={`Inventory product for line ${index + 1}`}
-                        disabled={isLocked || isOvfPrefilledLines}
-                      >
-                        <option value="">Select inventory item…</option>
-                        {inventoryProductOptions.map((opt) => (
-                          <option key={opt.name} value={opt.name}>
-                            {opt.name}
-                            {opt.availableQty > 0 ? ` (${opt.availableQty} avail.)` : ""}
-                          </option>
-                        ))}
-                        {row.product &&
-                        !inventoryProductOptions.some((opt) => opt.name === row.product) ? (
-                          <option value={row.product}>{row.product}</option>
-                        ) : null}
-                      </FinanceSelect>
-                    ) : (
-                      <Input
-                        value={row.product}
-                        onChange={(e) => setLineField(row.id, "product", e.target.value)}
-                        className="h-8 min-w-[240px]"
-                        placeholder="Product name"
-                        title={row.product || undefined}
-                      />
-                    )}
-                  </td>
-                  <td className="px-2 py-2">
-                    <Input
-                      value={row.itemName}
-                      onChange={(e) => setLineField(row.id, "itemName", e.target.value)}
-                      className="h-8 min-w-[180px]"
-                      placeholder="Description"
-                      title={row.itemName || undefined}
-                    />
-                  </td>
-                  <td className="px-2 py-2">
-                    <Input
-                      value={row.hsnSac}
-                      onChange={(e) => setLineField(row.id, "hsnSac", e.target.value)}
-                      className="h-8"
-                    />
-                  </td>
-                  <td className="px-2 py-2">
-                    <Input
-                      value={row.assetNo}
-                      onChange={(e) => setLineField(row.id, "assetNo", e.target.value)}
-                      className="h-8"
-                    />
-                  </td>
-                  <td className="px-2 py-2">
-                    <Input
-                      type="number"
-                      min={0}
-                      step="any"
-                      value={row.quantitySent}
-                      onChange={(e) => setLineField(row.id, "quantitySent", e.target.value)}
-                      className={cn("h-8", NO_SPINNER)}
-                    />
-                  </td>
-                  <td className="px-2 py-2">
-                    <Input
-                      type="number"
-                      min={0}
-                      step="any"
-                      value={row.rate}
-                      onChange={(e) => setLineField(row.id, "rate", e.target.value)}
-                      className={cn("h-8", NO_SPINNER)}
-                    />
-                  </td>
-                  <td className="px-2 py-2">
-                    <button
-                      type="button"
-                      aria-label="Remove line"
-                      title="Remove"
-                      className="inline-flex size-8 cursor-pointer items-center justify-center rounded-md text-destructive transition-colors duration-200 hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
-                      onClick={() => removeLine(row.id)}
-                      disabled={isOvfPrefilledLines}
-                    >
-                      <Trash2 className="size-4" aria-hidden />
-                    </button>
-                  </td>
+        <DeliverySectionCard title="Line items" icon={Package}>
+          <div className="erp-scroll overflow-x-auto rounded-md border border-border">
+            <table className="w-full min-w-[980px] text-left text-sm">
+              <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="w-12 px-2 py-2 font-medium">S.No</th>
+                  <th className="min-w-[260px] px-2 py-2 font-medium">Product</th>
+                  <th className="min-w-[200px] px-2 py-2 font-medium">Description</th>
+                  <th className="w-24 px-2 py-2 font-medium">HSN/SAC</th>
+                  <th className="w-20 px-2 py-2 font-medium">Asset</th>
+                  <th className="w-20 px-2 py-2 font-medium">Qty</th>
+                  <th className="w-24 px-2 py-2 font-medium">Rate</th>
+                  {lockSourceFields ? null : (
+                    <th className="w-16 px-2 py-2 font-medium"> </th>
+                  )}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="mt-2 h-7 cursor-pointer px-2 text-xs"
-          onClick={addLine}
-          disabled={isOvfPrefilledLines}
-        >
-          Add item
-        </Button>
-
-        <div className="mt-4 flex justify-end">
-          <div className="w-full max-w-md overflow-hidden rounded-md border border-border text-sm">
-            <table className="w-full">
+              </thead>
               <tbody>
-                {taxSummary.rows.map((row) => (
-                  <tr
-                    key={row.label}
-                    className="border-b border-border/70 last:border-b-0"
-                  >
-                    <td
-                      className={cn(
-                        "px-3 py-2 text-foreground",
-                        row.emphasis && "font-semibold",
+                {lines.map((row, index) => (
+                  <tr key={row.id} className="border-b border-border/70 align-top">
+                    <td className="px-2 py-2 tabular-nums text-muted-foreground">{index + 1}</td>
+                    <td className="px-2 py-2">
+                      {fromInventory && isNew && !lockSourceFields ? (
+                        <FinanceSelect
+                          value={row.product}
+                          onChange={(e) => applyInventoryProductToLine(row.id, e.target.value)}
+                          className="h-8 min-w-[240px]"
+                          aria-label={`Inventory product for line ${index + 1}`}
+                          disabled={isLocked || isOvfPrefilledLines}
+                        >
+                          <option value="">Select inventory item…</option>
+                          {inventoryProductOptions.map((opt) => (
+                            <option key={opt.name} value={opt.name}>
+                              {opt.name}
+                              {opt.availableQty > 0 ? ` (${opt.availableQty} avail.)` : ""}
+                            </option>
+                          ))}
+                          {row.product &&
+                            !inventoryProductOptions.some((opt) => opt.name === row.product) ? (
+                            <option value={row.product}>{row.product}</option>
+                          ) : null}
+                        </FinanceSelect>
+                      ) : (
+                        <Input
+                          value={row.product}
+                          onChange={
+                            lockSourceFields
+                              ? undefined
+                              : (e) => setLineField(row.id, "product", e.target.value)
+                          }
+                          readOnly={lockSourceFields}
+                          className={cn(
+                            "min-w-[240px]",
+                            lockSourceFields ? READ_ONLY_INPUT : "h-8",
+                          )}
+                          placeholder="Product name"
+                          title={row.product || undefined}
+                        />
                       )}
-                    >
-                      {row.rateLabel ? `${row.label} (${row.rateLabel})` : row.label}
                     </td>
-                    <td
-                      className={cn(
-                        "px-3 py-2 text-right tabular-nums",
-                        row.emphasis && "font-semibold",
-                      )}
-                    >
-                      {row.amount}
+                    <td className="px-2 py-2">
+                      <Input
+                        value={(row.itemName || "").replace(/^\[quote:[^\]]+\]\s*/i, "")}
+                        onChange={
+                          lockSourceFields
+                            ? undefined
+                            : (e) => setLineField(row.id, "itemName", e.target.value)
+                        }
+                        readOnly={lockSourceFields}
+                        className={cn(
+                          "min-w-[180px]",
+                          lockSourceFields ? READ_ONLY_INPUT : "h-8",
+                        )}
+                        placeholder="Description"
+                        title={
+                          (row.itemName || "").replace(/^\[quote:[^\]]+\]\s*/i, "") || undefined
+                        }
+                      />
                     </td>
+                    <td className="px-2 py-2">
+                      <Input
+                        value={row.hsnSac}
+                        onChange={
+                          lockSourceFields
+                            ? undefined
+                            : (e) => setLineField(row.id, "hsnSac", e.target.value)
+                        }
+                        readOnly={lockSourceFields}
+                        className={lockSourceFields ? READ_ONLY_INPUT : "h-8"}
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <Input
+                        value={row.assetNo}
+                        onChange={
+                          lockSourceFields
+                            ? undefined
+                            : (e) => setLineField(row.id, "assetNo", e.target.value)
+                        }
+                        readOnly={lockSourceFields}
+                        className={lockSourceFields ? READ_ONLY_INPUT : "h-8"}
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <Input
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={row.quantitySent}
+                        onChange={
+                          lockSourceFields
+                            ? undefined
+                            : (e) => setLineField(row.id, "quantitySent", e.target.value)
+                        }
+                        readOnly={lockSourceFields}
+                        className={cn(
+                          NO_SPINNER,
+                          lockSourceFields ? READ_ONLY_INPUT : "h-8",
+                        )}
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <Input
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={row.rate}
+                        onChange={
+                          lockSourceFields
+                            ? undefined
+                            : (e) => setLineField(row.id, "rate", e.target.value)
+                        }
+                        readOnly={lockSourceFields}
+                        className={cn(
+                          NO_SPINNER,
+                          lockSourceFields ? READ_ONLY_INPUT : "h-8",
+                        )}
+                      />
+                    </td>
+                    {lockSourceFields ? null : (
+                      <td className="px-2 py-2">
+                        <button
+                          type="button"
+                          aria-label="Remove line"
+                          title="Remove"
+                          className="inline-flex size-8 cursor-pointer items-center justify-center rounded-md text-destructive transition-colors duration-200 hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
+                          onClick={() => removeLine(row.id)}
+                          disabled={isOvfPrefilledLines}
+                        >
+                          <Trash2 className="size-4" aria-hidden />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
-      </DeliverySectionCard>
+          {lockSourceFields ? null : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-2 h-7 cursor-pointer px-2 text-xs"
+              onClick={addLine}
+              disabled={isOvfPrefilledLines}
+            >
+              Add item
+            </Button>
+          )}
 
-      <DeliverySectionCard title="Transport" icon={Truck}>
-        <fieldset className="mb-4 space-y-2">
-          <legend className="text-xs font-medium text-muted-foreground">Mode of delivery</legend>
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-6">
-            <label className="flex cursor-pointer items-start gap-2 text-sm">
-              <input
-                type="radio"
-                name="challan-delivery-mode"
-                className="mt-0.5 size-4 cursor-pointer accent-primary"
-                checked={deliveryMode === "NRGP"}
-                onChange={() => setDeliveryMode("NRGP")}
-              />
-              <span>
-                <span className="font-medium text-foreground">NRGP</span>
-                <span className="mt-0.5 block text-xs text-muted-foreground">
-                  Non-returnable gate pass
-                </span>
-              </span>
-            </label>
-            <label className="flex cursor-pointer items-start gap-2 text-sm">
-              <input
-                type="radio"
-                name="challan-delivery-mode"
-                className="mt-0.5 size-4 cursor-pointer accent-primary"
-                checked={deliveryMode === "RGP"}
-                onChange={() => setDeliveryMode("RGP")}
-              />
-              <span>
-                <span className="font-medium text-foreground">RGP</span>
-                <span className="mt-0.5 block text-xs text-muted-foreground">
-                  Returnable gate pass
-                </span>
-              </span>
-            </label>
+          <div className="mt-4 flex justify-end">
+            <div className="w-full max-w-md overflow-hidden rounded-md border border-border text-sm">
+              <table className="w-full">
+                <tbody>
+                  {taxSummary.rows.map((row) => (
+                    <tr
+                      key={row.label}
+                      className="border-b border-border/70 last:border-b-0"
+                    >
+                      <td
+                        className={cn(
+                          "px-3 py-2 text-foreground",
+                          row.emphasis && "font-semibold",
+                        )}
+                      >
+                        {row.rateLabel ? `${row.label} (${row.rateLabel})` : row.label}
+                      </td>
+                      <td
+                        className={cn(
+                          "px-3 py-2 text-right tabular-nums",
+                          row.emphasis && "font-semibold",
+                        )}
+                      >
+                        {row.amount}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </fieldset>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <FinanceField label="Transport details">
-            <FinanceTextarea
-              value={transportDetails}
-              onChange={(e) => setTransportDetails(e.target.value)}
-              rows={3}
-            />
-          </FinanceField>
-          <FinanceField label="Driver / vehicle details">
-            <FinanceTextarea
-              value={driverVehicleDetails}
-              onChange={(e) => setDriverVehicleDetails(e.target.value)}
-              rows={3}
-            />
-          </FinanceField>
-        </div>
-      </DeliverySectionCard>
+        </DeliverySectionCard>
 
-      <DeliverySectionCard title="Signatures" icon={PenLine}>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <FinanceField label="Signature of sender">
-            <FinanceTextarea
-              value={senderSignature}
-              onChange={(e) => setSenderSignature(e.target.value)}
-              rows={2}
-            />
-          </FinanceField>
-          <FinanceField label="Signature of receiver">
-            <FinanceTextarea
-              value={receiverSignature}
-              onChange={(e) => setReceiverSignature(e.target.value)}
-              rows={2}
-            />
-          </FinanceField>
-        </div>
-      </DeliverySectionCard>
+        <DeliverySectionCard title="Transport" icon={Truck}>
+          <fieldset className="mb-4 space-y-2">
+            <legend className="text-xs font-medium text-muted-foreground">Mode of delivery</legend>
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-6">
+              <label className="flex cursor-pointer items-start gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="challan-delivery-mode"
+                  className="mt-0.5 size-4 cursor-pointer accent-primary"
+                  checked={deliveryMode === "NRGP"}
+                  onChange={() => setDeliveryMode("NRGP")}
+                />
+                <span>
+                  <span className="font-medium text-foreground">NRGP</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    Non-returnable gate pass
+                  </span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="challan-delivery-mode"
+                  className="mt-0.5 size-4 cursor-pointer accent-primary"
+                  checked={deliveryMode === "RGP"}
+                  onChange={() => setDeliveryMode("RGP")}
+                />
+                <span>
+                  <span className="font-medium text-foreground">RGP</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    Returnable gate pass
+                  </span>
+                </span>
+              </label>
+            </div>
+          </fieldset>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FinanceField label="Transport details">
+              <FinanceTextarea
+                value={transportDetails}
+                onChange={(e) => setTransportDetails(e.target.value)}
+                rows={3}
+              />
+            </FinanceField>
+            <FinanceField label="Driver / vehicle details">
+              <FinanceTextarea
+                value={driverVehicleDetails}
+                onChange={(e) => setDriverVehicleDetails(e.target.value)}
+                rows={3}
+              />
+            </FinanceField>
+          </div>
+        </DeliverySectionCard>
+
+        <DeliverySectionCard title="Signatures" icon={PenLine}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FinanceField label="Signature of sender">
+              <FinanceTextarea
+                value={senderSignature}
+                onChange={(e) => setSenderSignature(e.target.value)}
+                rows={2}
+              />
+            </FinanceField>
+            <FinanceField label="Signature of receiver">
+              <FinanceTextarea
+                value={receiverSignature}
+                onChange={(e) => setReceiverSignature(e.target.value)}
+                rows={2}
+              />
+            </FinanceField>
+          </div>
+        </DeliverySectionCard>
       </fieldset>
 
       <div className="border-t border-border/60 pt-4">{footerActions}</div>

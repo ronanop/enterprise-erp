@@ -67,7 +67,7 @@ class AssignmentComponentRepository(AstScopedRepository):
     def list_issued_for_asset(
         self, ctx: TenantContext, asset_id: UUID
     ) -> list[AstAssignmentComponent]:
-        """Active ISSUED custody lines for any assignment on this asset."""
+        """Active ISSUED custody lines for any open assignment on this asset."""
         from modules.asset.models import AstAssetAssignment
 
         stmt = (
@@ -79,6 +79,7 @@ class AssignmentComponentRepository(AstScopedRepository):
             .where(
                 AstAssetAssignment.asset_id == asset_id,
                 AstAssetAssignment.is_deleted.is_(False),
+                AstAssetAssignment.status.notin_(["cancelled", "returned"]),
                 AstAssignmentComponent.issue_status
                 == AssignmentComponentIssueStatus.ISSUED.value,
                 AstAssignmentComponent.is_deleted.is_(False),
@@ -95,15 +96,29 @@ class AssignmentComponentRepository(AstScopedRepository):
         component_id: UUID,
         exclude_assignment_id: UUID | None = None,
     ) -> AstAssignmentComponent | None:
-        """Return a custody row that prevents re-issue (ISSUED/MISSING/DAMAGED/RETAINED)."""
-        from modules.asset.domain.enums import ASSIGNMENT_COMPONENT_UNAVAILABLE_STATUSES
+        """Return a custody row that prevents re-issue (ISSUED/MISSING/DAMAGED/RETAINED).
 
-        stmt = select(AstAssignmentComponent).where(
-            AstAssignmentComponent.component_id == component_id,
-            AstAssignmentComponent.issue_status.in_(
-                list(ASSIGNMENT_COMPONENT_UNAVAILABLE_STATUSES)
-            ),
-            AstAssignmentComponent.is_deleted.is_(False),
+        Ignores lines on cancelled/returned assignments so a failed cancel cleanup
+        cannot permanently lock accessories.
+        """
+        from modules.asset.domain.enums import ASSIGNMENT_COMPONENT_UNAVAILABLE_STATUSES
+        from modules.asset.models import AstAssetAssignment
+
+        stmt = (
+            select(AstAssignmentComponent)
+            .join(
+                AstAssetAssignment,
+                AstAssetAssignment.id == AstAssignmentComponent.assignment_id,
+            )
+            .where(
+                AstAssignmentComponent.component_id == component_id,
+                AstAssignmentComponent.issue_status.in_(
+                    list(ASSIGNMENT_COMPONENT_UNAVAILABLE_STATUSES)
+                ),
+                AstAssignmentComponent.is_deleted.is_(False),
+                AstAssetAssignment.is_deleted.is_(False),
+                AstAssetAssignment.status.notin_(["cancelled", "returned"]),
+            )
         )
         if exclude_assignment_id is not None:
             stmt = stmt.where(AstAssignmentComponent.assignment_id != exclude_assignment_id)
@@ -117,10 +132,22 @@ class AssignmentComponentRepository(AstScopedRepository):
         component_id: UUID,
         exclude_assignment_id: UUID | None = None,
     ) -> AstAssignmentComponent | None:
-        stmt = select(AstAssignmentComponent).where(
-            AstAssignmentComponent.component_id == component_id,
-            AstAssignmentComponent.issue_status == AssignmentComponentIssueStatus.ISSUED.value,
-            AstAssignmentComponent.is_deleted.is_(False),
+        from modules.asset.models import AstAssetAssignment
+
+        stmt = (
+            select(AstAssignmentComponent)
+            .join(
+                AstAssetAssignment,
+                AstAssetAssignment.id == AstAssignmentComponent.assignment_id,
+            )
+            .where(
+                AstAssignmentComponent.component_id == component_id,
+                AstAssignmentComponent.issue_status
+                == AssignmentComponentIssueStatus.ISSUED.value,
+                AstAssignmentComponent.is_deleted.is_(False),
+                AstAssetAssignment.is_deleted.is_(False),
+                AstAssetAssignment.status.notin_(["cancelled", "returned"]),
+            )
         )
         if exclude_assignment_id is not None:
             stmt = stmt.where(AstAssignmentComponent.assignment_id != exclude_assignment_id)
@@ -133,13 +160,23 @@ class AssignmentComponentRepository(AstScopedRepository):
         if not component_ids:
             return set()
         from modules.asset.domain.enums import ASSIGNMENT_COMPONENT_UNAVAILABLE_STATUSES
+        from modules.asset.models import AstAssetAssignment
 
-        stmt = select(AstAssignmentComponent.component_id).where(
-            AstAssignmentComponent.component_id.in_(component_ids),
-            AstAssignmentComponent.issue_status.in_(
-                list(ASSIGNMENT_COMPONENT_UNAVAILABLE_STATUSES)
-            ),
-            AstAssignmentComponent.is_deleted.is_(False),
+        stmt = (
+            select(AstAssignmentComponent.component_id)
+            .join(
+                AstAssetAssignment,
+                AstAssetAssignment.id == AstAssignmentComponent.assignment_id,
+            )
+            .where(
+                AstAssignmentComponent.component_id.in_(component_ids),
+                AstAssignmentComponent.issue_status.in_(
+                    list(ASSIGNMENT_COMPONENT_UNAVAILABLE_STATUSES)
+                ),
+                AstAssignmentComponent.is_deleted.is_(False),
+                AstAssetAssignment.is_deleted.is_(False),
+                AstAssetAssignment.status.notin_(["cancelled", "returned"]),
+            )
         )
         stmt = self.apply_ast_filter(stmt, AstAssignmentComponent, ctx, branch_scoped=False)
         return set(self.db.scalars(stmt).all())

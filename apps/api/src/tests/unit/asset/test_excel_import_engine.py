@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import pytest
 
-from modules.asset.domain.enums import AssetOperationalStatus
+from modules.asset.domain.enums import AssetAssignmentStatus, AssetOperationalStatus
 from modules.asset.domain.excel_import import (
     ExcelImportDefaults,
     ExcelImportRowInput,
@@ -137,31 +137,81 @@ def test_imports_warning_when_confirmed() -> None:
     assert result.operational_status == Ready
 
 
-def test_duplicate_asset_tag_skips() -> None:
+def test_existing_asset_tag_reuses_and_imports() -> None:
     engine, assets, _, _ = _engine()
     existing_id = uuid4()
-    assets.find_by_asset_code.return_value = SimpleNamespace(id=existing_id)
+    assets.find_by_asset_code.return_value = SimpleNamespace(
+        id=existing_id, operational_status=Ready
+    )
     result = engine.import_row(_ctx(), _row(), defaults=_defaults(), confirm_warnings=False)
-    assert result.outcome == ExcelImportRowOutcome.DUPLICATE.value
-    assert result.reason == ExcelImportSkipReason.DUPLICATE_ASSET_TAG.value
+    assert result.outcome == ExcelImportRowOutcome.IMPORTED.value
     assert result.asset_id == existing_id
+    assert result.reason == "existing_asset"
     assets.create_for_import.assert_not_called()
 
 
-def test_duplicate_serial_skips() -> None:
-    engine, assets, _, _ = _engine()
+def test_existing_serial_assigns_when_requested() -> None:
+    engine, assets, assignments, _ = _engine()
     existing_id = uuid4()
+    assignment_id = uuid4()
+    employee_id = uuid4()
     assets.find_by_asset_code.return_value = None
-    assets.find_by_serial_number.return_value = SimpleNamespace(id=existing_id)
+    assets.find_by_serial_number.return_value = SimpleNamespace(
+        id=existing_id, operational_status=Ready
+    )
+    assignments.create.return_value = SimpleNamespace(id=assignment_id)
+    assignments.submit.return_value = SimpleNamespace(
+        id=assignment_id, status=AssetAssignmentStatus.ACTIVE.value
+    )
     result = engine.import_row(
         _ctx(),
-        _row(serial_number="SN-9"),
+        _row(
+            serial_number="SN-9",
+            operational_status=Assigned,
+            employee_id=employee_id,
+        ),
         defaults=_defaults(),
         confirm_warnings=False,
     )
-    assert result.outcome == ExcelImportRowOutcome.DUPLICATE.value
-    assert result.reason == ExcelImportSkipReason.DUPLICATE_SERIAL.value
+    assert result.outcome == ExcelImportRowOutcome.IMPORTED.value
+    assert result.asset_id == existing_id
+    assert result.assignment_id == assignment_id
+    assert result.operational_status == Assigned
     assets.create_for_import.assert_not_called()
+    assignments.create.assert_called_once()
+
+
+def test_assigned_applies_excel_issue_date_to_allocated_at() -> None:
+    from datetime import date
+
+    engine, assets, assignments, _ = _engine()
+    asset_id = uuid4()
+    assignment_id = uuid4()
+    employee_id = uuid4()
+    assets.find_by_asset_code.return_value = None
+    assets.find_by_serial_number.return_value = None
+    assets.create_for_import.return_value = SimpleNamespace(id=asset_id)
+    assets.submit.return_value = SimpleNamespace(id=asset_id)
+    assets.approve.return_value = SimpleNamespace(id=asset_id, version=1)
+    assignments.create.return_value = SimpleNamespace(id=assignment_id)
+    assignments.submit.return_value = SimpleNamespace(
+        id=assignment_id, status=AssetAssignmentStatus.ACTIVE.value
+    )
+    result = engine.import_row(
+        _ctx(),
+        _row(
+            operational_status=Assigned,
+            employee_id=employee_id,
+            issue_date=date(2025, 1, 15),
+        ),
+        defaults=_defaults(),
+        confirm_warnings=False,
+    )
+    assert result.outcome == ExcelImportRowOutcome.IMPORTED.value
+    assignments.apply_allocated_at_from_issue_date.assert_called_once()
+    call_args = assignments.apply_allocated_at_from_issue_date.call_args
+    assert call_args.args[1] == assignment_id
+    assert call_args.args[2] == date(2025, 1, 15)
 
 
 def test_empty_asset_tag_imports_with_auto_code() -> None:
@@ -222,7 +272,9 @@ def test_assigned_creates_employee_assignment_workflow() -> None:
     assets.submit.return_value = SimpleNamespace(id=asset_id)
     assets.approve.return_value = SimpleNamespace(id=asset_id, version=1)
     assignments.create.return_value = SimpleNamespace(id=assignment_id)
-    assignments.submit.return_value = SimpleNamespace(id=assignment_id)
+    assignments.submit.return_value = SimpleNamespace(
+        id=assignment_id, status=AssetAssignmentStatus.SUBMITTED.value
+    )
     assignments.approve.return_value = SimpleNamespace(id=assignment_id)
     result = engine.import_row(
         _ctx(),
@@ -238,6 +290,33 @@ def test_assigned_creates_employee_assignment_workflow() -> None:
     assert assignments.create.call_args.kwargs["employee_id"] == employee_id
     assignments.submit.assert_called_once()
     assignments.approve.assert_called_once()
+
+
+def test_assigned_skips_approve_when_submit_already_activated() -> None:
+    """Local/dev: submit() activates immediately when workflow governance is off."""
+    engine, assets, assignments, _ = _engine()
+    asset_id = uuid4()
+    assignment_id = uuid4()
+    employee_id = uuid4()
+    assets.find_by_asset_code.return_value = None
+    assets.find_by_serial_number.return_value = None
+    assets.create_for_import.return_value = SimpleNamespace(id=asset_id)
+    assets.submit.return_value = SimpleNamespace(id=asset_id)
+    assets.approve.return_value = SimpleNamespace(id=asset_id, version=1)
+    assignments.create.return_value = SimpleNamespace(id=assignment_id)
+    assignments.submit.return_value = SimpleNamespace(
+        id=assignment_id, status=AssetAssignmentStatus.ACTIVE.value
+    )
+    result = engine.import_row(
+        _ctx(),
+        _row(operational_status=Assigned, employee_id=employee_id),
+        defaults=_defaults(),
+        confirm_warnings=False,
+    )
+    assert result.outcome == ExcelImportRowOutcome.IMPORTED.value
+    assert result.assignment_id == assignment_id
+    assignments.submit.assert_called_once()
+    assignments.approve.assert_not_called()
 
 
 def test_assigned_without_employee_fails() -> None:
@@ -667,7 +746,9 @@ def test_installs_charger_component_when_serial_present() -> None:
     assert kwargs["asset_id"] == asset_id
     assert kwargs["branch_id"] == branch_id
     assert kwargs["component_type"] == "CHARGER"
+    assert kwargs["component_code"] == "CHG-1001"
     assert kwargs["serial_number"] == "CHG-1001"
+    assert kwargs["component_name"] == "Charger"
 
 
 def test_skips_charger_install_when_serial_blank() -> None:

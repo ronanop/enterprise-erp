@@ -197,6 +197,7 @@ class OrderService:
         company_po_number: str | None = None,
         approved_by_name: str | None = None,
         order_ref_cache: str | None = None,
+        order_kind: str = "product",
     ):
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
@@ -206,6 +207,9 @@ class OrderService:
             model=ProcOrderHeader,
             code_column="document_number",
         )
+        kind = (order_kind or "product").strip().lower() or "product"
+        if kind not in {"product", "vendor_service", "internal_service"}:
+            kind = "product"
         row = self._repo.create_order(
             ctx,
             company_id=cid,
@@ -230,6 +234,7 @@ class OrderService:
             company_po_number=company_po_number,
             approved_by_name=(approved_by_name or "").strip() or None,
             order_ref_cache=(order_ref_cache or "").strip() or None,
+            order_kind=kind,
         )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,

@@ -237,6 +237,9 @@ export type ScmLinkedPurchaseOrder = {
   document_number?: string | null;
   company_po_number?: string | null;
   status?: string | null;
+  fulfillment_stage?: string | null;
+  /** Sum of active PO line quantities. */
+  total_qty?: number | null;
 };
 
 export type ScmPoGroup = {
@@ -247,6 +250,8 @@ export type ScmPoGroup = {
   document_number?: string | null;
   company_po_number?: string | null;
   status?: string | null;
+  required_qty?: number | null;
+  ordered_qty?: number | null;
 };
 
 export type ScmQueueItem = {
@@ -292,6 +297,8 @@ export type ScmQueueItem = {
   /** One group per distributor that needs a PO (excludes in-stock lines). */
   po_groups?: ScmPoGroup[];
   purchase_orders?: ScmLinkedPurchaseOrder[];
+  /** Non-stock vendor demand qty that needs Create PO coverage. */
+  required_po_qty?: number;
   item_plan?: ScmItemPlan;
 };
 
@@ -402,6 +409,7 @@ export type ScmOvfPreview = {
   /** Customer delivery date / period from OVF (often YYYY-MM-DD). */
   delivery_period?: string | null;
   customer_name: string | null;
+  customer_account_number?: string | null;
   quote_name: string | null;
   account_name: string | null;
   owner_name: string | null;
@@ -446,6 +454,7 @@ export type ScmOvfPreview = {
   open_distributor_names?: string[];
   po_groups?: ScmPoGroup[];
   purchase_orders?: ScmLinkedPurchaseOrder[];
+  required_po_qty?: number;
   scm_on_hold?: boolean;
   scm_on_hold_at?: string | null;
   scm_hold_blocked?: boolean;
@@ -453,6 +462,13 @@ export type ScmOvfPreview = {
   scm_last_hold_released_at?: string | null;
   scm_hold_history?: ScmOvfHoldHistoryEntry[];
   scm_on_hold_remark?: string | null;
+  scm_hold_request_status?: "pending" | "accepted" | "rejected" | string | null;
+  scm_hold_request_remark?: string | null;
+  scm_hold_requested_at?: string | null;
+  scm_charge_request_status?: "pending" | "accepted" | "rejected" | string | null;
+  scm_charge_request_freight?: number | null;
+  scm_charge_request_finance_pct?: number | null;
+  scm_charge_requested_at?: string | null;
   purchase_order_status?: string | null;
   stock_fulfillment_status?: "none" | "partial" | "complete" | string;
   remaining_demand_qty?: number;
@@ -528,6 +544,7 @@ export type ProcOrder = {
   branch_id?: string;
   status: string;
   workflow_status?: string | null;
+  scm_approval_stage?: ScmApprovalStage | null;
   currency_code: string;
   payment_terms: string | null;
   total_amount: number;
@@ -535,6 +552,8 @@ export type ProcOrder = {
   source_module: string | null;
   source_document_type?: string | null;
   source_document_id: string | null;
+  /** product | vendor_service | internal_service */
+  order_kind?: string | null;
   company_po_number: string | null;
   entity_code?: string | null;
   baseline_amount?: number;
@@ -548,6 +567,16 @@ export type ProcOrder = {
   etd_confirmed_at?: string | null;
   customer_ack_sent_at?: string | null;
   etd_reminder_last_sent_at?: string | null;
+  fulfillment_stage?: string | null;
+  vendor_response_status?: string | null;
+  vendor_response_remark?: string | null;
+  vendor_responded_at?: string | null;
+  customer_promised_delivery_date?: string | null;
+  po_sent_to_vendor_at?: string | null;
+  customer_order_processed_sent_at?: string | null;
+  customer_dispatch_shared_at?: string | null;
+  customer_pod_uploaded_at?: string | null;
+  customer_delivery_meta?: Record<string, unknown> | null;
   customer_name: string | null;
   ovf_no?: string | null;
   approved_by_name?: string | null;
@@ -780,12 +809,14 @@ export async function createPoFromOvf(
     finalize?: boolean;
     hold?: boolean;
     distributor_name?: string | null;
+    force_new?: boolean;
     lines?: Array<{
       product_name: string;
       qty: number;
       unit_price: number;
       rate_currency?: "INR" | "USD";
       tax_rate?: number;
+      description?: string | null;
     }>;
   },
 ): Promise<ProcOrder> {
@@ -878,6 +909,247 @@ export async function updateScmExpectedDeliveryDate(
     method: "PATCH",
     body,
   });
+  invalidateProcurementListCache();
+  return unwrapData(res);
+}
+
+export type ScmDeliveryContact = {
+  order_id: string;
+  email: string | null;
+  crm_email: string | null;
+  customer_name: string | null;
+  customer_ack_sent_at: string | null;
+};
+
+export async function getScmDeliveryContact(orderId: string): Promise<ScmDeliveryContact> {
+  const res = await apiClient<ScmDeliveryContact>(
+    `${SCM_API}/orders/${orderId}/delivery-contact`,
+  );
+  return unwrapData(res);
+}
+
+export type ScmDummyDeliverySend = {
+  order_id: string;
+  email: string;
+  customer_ack_sent_at: string;
+  dummy: boolean;
+  etd?: string | null;
+  message: string;
+};
+
+/** Send order acknowledgement over SMTP (includes ETD) and unlock Record GRN. */
+export async function sendScmDeliveryAcknowledgement(
+  orderId: string,
+  body?: { email?: string | null; expected_delivery_date?: string | null },
+): Promise<ScmDummyDeliverySend> {
+  const res = await apiClient<ScmDummyDeliverySend>(
+    `${SCM_API}/orders/${orderId}/delivery-acknowledgement/send`,
+    {
+      method: "POST",
+      body: {
+        email: body?.email ?? null,
+        expected_delivery_date: body?.expected_delivery_date ?? null,
+      },
+    },
+  );
+  invalidateProcurementListCache();
+  return unwrapData(res);
+}
+
+/** @deprecated Use sendScmDeliveryAcknowledgement */
+export async function dummySendScmDeliveryAcknowledgement(
+  orderId: string,
+  body?: { email?: string | null },
+): Promise<ScmDummyDeliverySend> {
+  return sendScmDeliveryAcknowledgement(orderId, body);
+}
+
+export type ScmFulfillmentStage =
+  | "awaiting_vendor_send"
+  | "awaiting_vendor_response"
+  | "vendor_rejected"
+  | "vendor_accepted"
+  | "customer_notified"
+  | "vendor_dispatch_recorded"
+  | "grn_in_stock"
+  | "customer_delivery_ready"
+  | "customer_dispatched"
+  | "delivered";
+
+export type ScmFulfillmentLineState = {
+  order_line_id: string;
+  line_number?: number | null;
+  product_name?: string | null;
+  product_code?: string | null;
+  ordered_qty: number;
+  dispatched_qty: number;
+  remaining_to_dispatch: number;
+  received_qty: number;
+  grn_cap_qty: number;
+};
+
+export type ScmVendorDispatch = {
+  id: string;
+  order_header_id: string;
+  sequence: number;
+  dc_number?: string | null;
+  invoice_number?: string | null;
+  lr_awb_number?: string | null;
+  dispatch_date?: string | null;
+  eway_notes?: string | null;
+  transport_notes?: string | null;
+  attachment_refs?: Record<string, unknown> | unknown[] | null;
+  status: string;
+  grn_status?: "pending" | "partial" | "done" | string;
+  grn_received_qty?: number;
+  grn_dispatch_qty?: number;
+  grn_numbers?: string[];
+  created_at?: string | null;
+  lines: {
+    id: string;
+    order_line_id: string;
+    dispatch_qty: number;
+    grn_received_qty?: number;
+    grn_remaining_qty?: number;
+  }[];
+};
+
+export type ScmFulfillmentState = {
+  order_id: string;
+  fulfillment_stage: ScmFulfillmentStage | string | null;
+  vendor_response_status: string;
+  vendor_response_remark?: string | null;
+  vendor_responded_at?: string | null;
+  expected_delivery_date?: string | null;
+  customer_promised_delivery_date?: string | null;
+  po_sent_to_vendor_at?: string | null;
+  customer_order_processed_sent_at?: string | null;
+  customer_dispatch_shared_at?: string | null;
+  customer_pod_uploaded_at?: string | null;
+  customer_delivery_meta: Record<string, unknown>;
+  grn_unlocked: boolean;
+  vendor_email?: string | null;
+  vendor_name?: string | null;
+  customer_email?: string | null;
+  customer_name?: string | null;
+  lines: ScmFulfillmentLineState[];
+  dispatches: ScmVendorDispatch[];
+};
+
+export async function getScmOrderFulfillment(orderId: string): Promise<ScmFulfillmentState> {
+  const res = await apiClient<ScmFulfillmentState>(
+    `${SCM_API}/orders/${orderId}/fulfillment`,
+  );
+  return unwrapData(res);
+}
+
+export async function sendScmPoToVendor(
+  orderId: string,
+  body?: { email?: string | null; po_pdf_base64?: string | null; po_pdf_filename?: string | null },
+): Promise<ScmFulfillmentState> {
+  const res = await apiClient<ScmFulfillmentState>(
+    `${SCM_API}/orders/${orderId}/fulfillment/send-to-vendor`,
+    {
+      method: "POST",
+      body: {
+        email: body?.email ?? null,
+        po_pdf_base64: body?.po_pdf_base64 ?? null,
+        po_pdf_filename: body?.po_pdf_filename ?? null,
+      },
+    },
+  );
+  invalidateProcurementListCache();
+  return unwrapData(res);
+}
+
+export async function recordScmVendorResponse(
+  orderId: string,
+  body: {
+    status: "accepted" | "rejected";
+    remark?: string | null;
+    expected_delivery_date?: string | null;
+  },
+): Promise<ScmFulfillmentState> {
+  const res = await apiClient<ScmFulfillmentState>(
+    `${SCM_API}/orders/${orderId}/fulfillment/vendor-response`,
+    { method: "POST", body },
+  );
+  invalidateProcurementListCache();
+  return unwrapData(res);
+}
+
+export async function sendScmCustomerOrderProcessed(
+  orderId: string,
+  body?: { email?: string | null },
+): Promise<ScmFulfillmentState> {
+  const res = await apiClient<ScmFulfillmentState>(
+    `${SCM_API}/orders/${orderId}/fulfillment/send-customer-order-processed`,
+    { method: "POST", body: { email: body?.email ?? null } },
+  );
+  invalidateProcurementListCache();
+  return unwrapData(res);
+}
+
+export async function createScmVendorDispatch(
+  orderId: string,
+  body: {
+    dc_number?: string | null;
+    invoice_number?: string | null;
+    lr_awb_number?: string | null;
+    dispatch_date?: string | null;
+    eway_notes?: string | null;
+    transport_notes?: string | null;
+    attachment_refs?: Record<string, unknown> | null;
+    lines: { order_line_id: string; dispatch_qty: number }[];
+  },
+): Promise<ScmFulfillmentState> {
+  const res = await apiClient<ScmFulfillmentState>(
+    `${SCM_API}/orders/${orderId}/fulfillment/vendor-dispatches`,
+    { method: "POST", body },
+  );
+  invalidateProcurementListCache();
+  return unwrapData(res);
+}
+
+export async function upsertScmCustomerDelivery(
+  orderId: string,
+  body: Record<string, unknown>,
+): Promise<ScmFulfillmentState> {
+  const res = await apiClient<ScmFulfillmentState>(
+    `${SCM_API}/orders/${orderId}/fulfillment/customer-delivery`,
+    { method: "POST", body },
+  );
+  invalidateProcurementListCache();
+  return unwrapData(res);
+}
+
+export async function shareScmCustomerDispatch(
+  orderId: string,
+  body?: { email?: string | null },
+): Promise<ScmFulfillmentState> {
+  const res = await apiClient<ScmFulfillmentState>(
+    `${SCM_API}/orders/${orderId}/fulfillment/share-customer-dispatch`,
+    { method: "POST", body: { email: body?.email ?? null } },
+  );
+  invalidateProcurementListCache();
+  return unwrapData(res);
+}
+
+export async function uploadScmCustomerPod(
+  orderId: string,
+  body?: { pod_file_name?: string | null; pod_content_base64?: string | null; note?: string | null },
+): Promise<ScmFulfillmentState> {
+  const res = await apiClient<ScmFulfillmentState>(
+    `${SCM_API}/orders/${orderId}/fulfillment/customer-pod`,
+    {
+      method: "POST",
+      body: {
+        pod_file_name: body?.pod_file_name ?? null,
+        pod_content_base64: body?.pod_content_base64 ?? null,
+        note: body?.note ?? null,
+      },
+    },
+  );
   invalidateProcurementListCache();
   return unwrapData(res);
 }
@@ -978,6 +1250,8 @@ export async function upsertCorrespondenceTemplate(body: {
   );
 }
 
+export type ScmApprovalStage = "accept_po" | "management";
+
 export type ScmFinalizeApproval = {
   id: string;
   kind: "finalize";
@@ -994,6 +1268,29 @@ export type ScmFinalizeApproval = {
   decided_at: string | null;
   order_status: string;
   workflow_status: string | null;
+  scm_approval_stage?: ScmApprovalStage | null;
+  stage_label?: string | null;
+  requested_by_id?: string | null;
+  requested_by_name?: string | null;
+};
+
+export type ProcApprovalStepOwnerUser = {
+  user_id: string;
+  display_name: string;
+  email: string;
+};
+
+export type ProcApprovalStepOwnersGroup = {
+  step_key: string;
+  label: string;
+  team_role: string;
+  owners: ProcApprovalStepOwnerUser[];
+};
+
+export type ProcApprovalCapabilities = {
+  is_module_admin: boolean;
+  steps: string[];
+  can_decide_approvals: boolean;
 };
 
 export async function listScmFinalizeApprovals(): Promise<ScmFinalizeApproval[]> {
@@ -1001,9 +1298,242 @@ export async function listScmFinalizeApprovals(): Promise<ScmFinalizeApproval[]>
   return unwrapData(res);
 }
 
-export async function requestScmFinalizeApproval(orderId: string): Promise<ProcOrder> {
+export type ScmHoldApproval = {
+  id: string;
+  ovf_id: string;
+  ovf_no: string;
+  customer_name: string | null;
+  owner_name: string | null;
+  status: "pending" | "accepted" | "rejected";
+  remark: string | null;
+  requested_at: string | null;
+  requested_by_name: string | null;
+};
+
+export async function listScmHoldApprovals(): Promise<ScmHoldApproval[]> {
+  const res = await apiClient<ScmHoldApproval[]>(`${SCM_API}/hold-approvals`);
+  return unwrapData(res);
+}
+
+export async function acceptScmOvfHold(ovfId: string): Promise<ScmOvfPreview> {
+  const res = await apiClient<ScmOvfPreview>(`${SCM_API}/ovf/${ovfId}/accept-hold`, {
+    method: "POST",
+  });
+  invalidateScmOvfPreviewCache(ovfId);
+  return unwrapData(res);
+}
+
+export async function rejectScmOvfHold(ovfId: string): Promise<ScmOvfPreview> {
+  const res = await apiClient<ScmOvfPreview>(`${SCM_API}/ovf/${ovfId}/reject-hold`, {
+    method: "POST",
+  });
+  invalidateScmOvfPreviewCache(ovfId);
+  return unwrapData(res);
+}
+
+export type ScmChargeApproval = {
+  id: string;
+  ovf_id: string;
+  ovf_no: string;
+  customer_name: string | null;
+  owner_name: string | null;
+  status: "pending" | "accepted" | "rejected";
+  freight: number;
+  finance_cost_pct: number;
+  requested_at: string | null;
+  requested_by_name: string | null;
+};
+
+export async function listScmChargeApprovals(): Promise<ScmChargeApproval[]> {
+  const res = await apiClient<ScmChargeApproval[]>(`${SCM_API}/charge-approvals`);
+  return unwrapData(res);
+}
+
+export async function acceptScmOvfCharges(ovfId: string): Promise<ScmOvfPreview> {
+  const res = await apiClient<ScmOvfPreview>(`${SCM_API}/ovf/${ovfId}/accept-charges`, {
+    method: "POST",
+  });
+  invalidateScmOvfPreviewCache(ovfId);
+  return unwrapData(res);
+}
+
+export async function rejectScmOvfCharges(ovfId: string): Promise<ScmOvfPreview> {
+  const res = await apiClient<ScmOvfPreview>(`${SCM_API}/ovf/${ovfId}/reject-charges`, {
+    method: "POST",
+  });
+  invalidateScmOvfPreviewCache(ovfId);
+  return unwrapData(res);
+}
+
+export async function listProcApprovalStepOwners(): Promise<ProcApprovalStepOwnersGroup[]> {
+  const res = await apiClient<ProcApprovalStepOwnersGroup[]>(
+    `${SCM_API}/approval-step-owners`,
+  );
+  return unwrapData(res);
+}
+
+export async function replaceProcApprovalStepOwners(
+  stepKey: string,
+  userIds: string[],
+): Promise<ProcApprovalStepOwnersGroup> {
+  const res = await apiClient<ProcApprovalStepOwnersGroup>(
+    `${SCM_API}/approval-step-owners/${encodeURIComponent(stepKey)}`,
+    { method: "PUT", body: { user_ids: userIds } },
+  );
+  return unwrapData(res);
+}
+
+export async function getProcApprovalCapabilities(): Promise<ProcApprovalCapabilities> {
+  const res = await apiClient<ProcApprovalCapabilities>(
+    `${SCM_API}/approval-capabilities`,
+  );
+  return unwrapData(res);
+}
+
+export type ProcInvoiceGenerationTask = {
+  id: string;
+  task_code: string;
+  title: string;
+  status: string;
+  order_header_id: string;
+  receipt_batch_id: string;
+  grn_number: string;
+  purchase_order_number: string;
+  vendor_name: string;
+  customer_name: string;
+  items_summary: string;
+  assigned_user_id: string;
+  company_id?: string | null;
+  branch_id?: string | null;
+  requested_by_id?: string | null;
+  requested_by_name?: string | null;
+  invoice_number?: string | null;
+  invoice_date?: string | null;
+  invoice_quantity?: number | null;
+  invoice_amount?: number | null;
+  /** SCM Billing GRN qty (auto-fetched). */
+  suggested_quantity?: number | null;
+  /** SCM Billing GRN amount from PO rates (auto-fetched). */
+  suggested_amount?: number | null;
+  completed_at?: string | null;
+  created_at?: string | null;
+};
+
+export async function createInvoiceGenerationTasks(input: {
+  order_id: string;
+  receipt_batch_id: string;
+  items_summary?: string;
+  vendor_name?: string;
+  customer_name?: string;
+  /** Combined GRN labels when selection spans multiple receipt waves. */
+  grn_number?: string;
+  /** Selected billing qty (stock/partial) — drives My Jobs suggested totals. */
+  billing_quantity?: number | null;
+  billing_amount?: number | null;
+}): Promise<ProcInvoiceGenerationTask[]> {
+  const res = await apiClient<ProcInvoiceGenerationTask[]>(
+    `${SCM_API}/invoice-generation-tasks`,
+    {
+      method: "POST",
+      body: {
+        order_id: input.order_id,
+        receipt_batch_id: input.receipt_batch_id,
+        items_summary: input.items_summary ?? "",
+        vendor_name: input.vendor_name ?? "",
+        customer_name: input.customer_name ?? "",
+        grn_number: input.grn_number ?? "",
+        billing_quantity:
+          input.billing_quantity == null || Number.isNaN(Number(input.billing_quantity))
+            ? null
+            : Number(input.billing_quantity),
+        billing_amount:
+          input.billing_amount == null || Number.isNaN(Number(input.billing_amount))
+            ? null
+            : Number(input.billing_amount),
+      },
+    },
+  );
+  return unwrapData(res);
+}
+
+export async function listMyInvoiceGenerationTasks(
+  status: string | null = "pending",
+): Promise<ProcInvoiceGenerationTask[]> {
+  const qs =
+    status === null || status === ""
+      ? ""
+      : `?status=${encodeURIComponent(status)}`;
+  const res = await apiClient<ProcInvoiceGenerationTask[]>(
+    `${SCM_API}/invoice-generation-tasks/mine${qs}`,
+  );
+  return unwrapData(res);
+}
+
+export async function getInvoiceGenerationTaskForBatch(
+  receiptBatchId: string,
+): Promise<ProcInvoiceGenerationTask | null> {
+  const res = await apiClient<ProcInvoiceGenerationTask | null>(
+    `${SCM_API}/invoice-generation-tasks/by-batch/${encodeURIComponent(receiptBatchId)}`,
+  );
+  return res.data ?? null;
+}
+
+export async function listInvoiceGenerationTasksForOrder(
+  orderId: string,
+): Promise<ProcInvoiceGenerationTask[]> {
+  const id = orderId.trim();
+  if (!id) return [];
+  const res = await apiClient<ProcInvoiceGenerationTask[]>(
+    `${SCM_API}/invoice-generation-tasks/by-order/${encodeURIComponent(id)}`,
+  );
+  return unwrapData(res);
+}
+
+export async function submitInvoiceGenerationTask(
+  taskId: string,
+  body: {
+    invoice_number: string;
+    invoice_date: string;
+    invoice_quantity?: number | null;
+    invoice_amount?: number | null;
+    file_name?: string | null;
+    content_base64?: string | null;
+    content_type?: string | null;
+  },
+): Promise<ProcInvoiceGenerationTask> {
+  const res = await apiClient<ProcInvoiceGenerationTask>(
+    `${SCM_API}/invoice-generation-tasks/${encodeURIComponent(taskId)}/submit`,
+    { method: "POST", body },
+  );
+  return unwrapData(res);
+}
+
+export async function requestScmFinalizeApproval(
+  orderId: string,
+  body?: {
+    po_pdf_base64?: string | null;
+    po_pdf_filename?: string | null;
+    remarks?: string | null;
+  },
+): Promise<ProcOrder> {
   const res = await apiClient<ProcOrder>(
     `${SCM_API}/orders/${orderId}/request-finalize-approval`,
+    {
+      method: "POST",
+      body: {
+        po_pdf_base64: body?.po_pdf_base64 ?? null,
+        po_pdf_filename: body?.po_pdf_filename ?? null,
+        remarks: body?.remarks ?? null,
+      },
+    },
+  );
+  invalidateProcurementListCache();
+  return unwrapData(res);
+}
+
+export async function acceptScmPoApproval(orderId: string): Promise<ProcOrder> {
+  const res = await apiClient<ProcOrder>(
+    `${SCM_API}/orders/${orderId}/accept-po-approval`,
     { method: "POST", body: {} },
   );
   invalidateProcurementListCache();
@@ -1019,10 +1549,16 @@ export async function rejectScmFinalizeApproval(orderId: string): Promise<ProcOr
   return unwrapData(res);
 }
 
-export async function finalizeScmOrder(orderId: string): Promise<ProcOrder> {
+export async function finalizeScmOrder(
+  orderId: string,
+  body?: { po_pdf_base64?: string | null; po_pdf_filename?: string | null },
+): Promise<ProcOrder> {
   const res = await apiClient<ProcOrder>(`${SCM_API}/orders/${orderId}/finalize`, {
     method: "POST",
-    body: {},
+    body: {
+      po_pdf_base64: body?.po_pdf_base64 ?? null,
+      po_pdf_filename: body?.po_pdf_filename ?? null,
+    },
   });
   invalidateProcurementListCache();
   return unwrapData(res);
@@ -1100,10 +1636,19 @@ export async function createPoFromInventory(payload: {
 }
 
 export async function listProcurementInventory(): Promise<ProcurementInventoryRow[]> {
-  return cachedFetch(PROCUREMENT_INVENTORY_CACHE_KEY, PROCUREMENT_LIST_TTL_MS, async () => {
-    const res = await apiClient<ProcurementInventoryRow[]>(`${SCM_API}/inventory`);
-    return unwrapData(res);
-  });
+  const rows = await cachedFetch(
+    PROCUREMENT_INVENTORY_CACHE_KEY,
+    PROCUREMENT_LIST_TTL_MS,
+    async () => {
+      const res = await apiClient<ProcurementInventoryRow[]>(`${SCM_API}/inventory`);
+      return unwrapData(res);
+    },
+  );
+  // Do not keep an empty snapshot warm — stale [] hid real stock after API/scope fixes.
+  if (rows.length === 0) {
+    invalidateClientCache(PROCUREMENT_INVENTORY_CACHE_KEY);
+  }
+  return rows;
 }
 
 export async function updateInventoryStockSerial(
@@ -1142,6 +1687,23 @@ export async function updateInventoryOrderLineDescription(
 export async function clearProcurementInventoryStock(): Promise<{ removed: number }> {
   const res = await apiClient<{ removed: number }>(`${SCM_API}/inventory/clear-stock`, {
     method: "POST",
+  });
+  invalidateProcurementListCache();
+  return unwrapData(res);
+}
+
+export async function consumeProcurementInventoryUnits(
+  stockUnitIds: string[],
+  companyId?: string | null,
+): Promise<{ removed: number }> {
+  const ids = [...new Set(stockUnitIds.map((id) => String(id || "").trim()).filter(Boolean))];
+  if (ids.length === 0) return { removed: 0 };
+  const res = await apiClient<{ removed: number }>(`${SCM_API}/inventory/consume-units`, {
+    method: "POST",
+    body: {
+      stock_unit_ids: ids,
+      company_id: companyId || null,
+    },
   });
   invalidateProcurementListCache();
   return unwrapData(res);
@@ -1191,6 +1753,8 @@ export type ScmReceiptBatch = {
   receipt_at: string | null;
   created_by?: string | null;
   created_by_name?: string | null;
+  vendor_dispatch_id?: string | null;
+  vendor_dispatch_sequence?: number | null;
   vendor_invoice_number?: string | null;
   vendor_invoice_date?: string | null;
   vendor_invoice_quantity?: number | null;
@@ -1294,10 +1858,22 @@ export async function openReceiptBatchAttachment(attachmentId: string): Promise<
   if (!response.ok) {
     throw new Error(`Failed to open attachment (${response.status})`);
   }
-  const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
-  window.open(url, "_blank", "noopener,noreferrer");
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  const headerType = response.headers.get("content-type");
+  const disposition = response.headers.get("content-disposition") || "";
+  const nameMatch = /filename\*?=(?:UTF-8''|")?([^\";]+)/i.exec(disposition);
+  const fileName = nameMatch ? decodeURIComponent(nameMatch[1].replace(/"/g, "")) : "invoice";
+  const raw = await response.blob();
+  const blob =
+    headerType && !raw.type
+      ? new Blob([raw], { type: headerType.split(";")[0].trim() })
+      : raw;
+  if (isInlineSafeAttachment(fileName, blob.type || headerType)) {
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank", "noopener,noreferrer");
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    return;
+  }
+  triggerBlobDownload(blob, fileName || "invoice");
 }
 
 export type ScmCommercialAttachment = {
@@ -1585,6 +2161,7 @@ export async function updateLineReceipt(
     billing?: boolean;
     billing_quantity?: number;
     delivery_challan_quantity?: number;
+    vendor_dispatch_id?: string | null;
   },
 ): Promise<ProcOrder> {
   const res = await apiClient<ProcOrder>(

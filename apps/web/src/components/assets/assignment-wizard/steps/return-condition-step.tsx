@@ -6,24 +6,14 @@ import { cn } from "@/lib/utils";
 const OPTIONS: {
   value: ReturnCondition;
   title: string;
-  description: string;
-  tone?: "destructive";
 }[] = [
   {
     value: "good",
-    title: "Good — return to stock",
-    description: "Asset goes to Ready To Move (can be re-issued).",
+    title: "Good — Return To Stock",
   },
   {
     value: "outdated",
-    title: "Outdated — retire",
-    description: "Asset marked Retired (not given to anyone).",
-  },
-  {
-    value: "dead",
-    title: "Not working — pending disposal",
-    description: "Asset marked Pending disposal.",
-    tone: "destructive",
+    title: "Outdated — Send to Disposal",
   },
 ];
 
@@ -43,22 +33,18 @@ export function ReturnConditionStep({ state, onChange }: ReturnConditionStepProp
             <label
               key={opt.value}
               className={cn(
-                "flex cursor-pointer gap-3 rounded-lg border px-3 py-3 transition-colors duration-200",
+                "flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-3 transition-colors duration-200",
                 checked ? "border-primary bg-primary/5" : "border-border hover:bg-muted/30",
-                opt.tone === "destructive" && checked && "border-destructive/50 bg-destructive/5",
               )}
             >
               <input
                 type="radio"
                 name="return-condition"
-                className="mt-1 size-4 cursor-pointer"
+                className="size-4 cursor-pointer"
                 checked={checked}
                 onChange={() => onChange({ returnCondition: opt.value })}
               />
-              <span className="text-sm">
-                <span className="font-medium text-foreground">{opt.title}</span>
-                <span className="mt-0.5 block text-xs text-muted-foreground">{opt.description}</span>
-              </span>
+              <span className="text-sm font-medium text-foreground">{opt.title}</span>
             </label>
           );
         })}

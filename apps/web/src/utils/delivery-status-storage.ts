@@ -10,6 +10,7 @@ export const SHIPMENT_STATUS_OPTIONS = [
   "Dispatched",
   "In transit",
   "Out for delivery",
+  "Delayed",
   "Failed delivery",
   "Returned",
 ] as const;
@@ -64,6 +65,12 @@ export type DeliveryStatusRecord = {
   itemType: DeliveryItemType | "";
   podDocument: DeliveryStatusAttachment | null;
   docketNumber: string;
+  /** Shared across By hand and Courier. */
+  transporterName: string;
+  /** Lorry receipt / goods receipt number — shared across modes. */
+  lrGrNumber: string;
+  customerTaxInvoiceDocument: DeliveryStatusAttachment | null;
+  packingListDocument: DeliveryStatusAttachment | null;
   boxCount: string;
   surfaceMode: string;
   remarks: string;
@@ -78,6 +85,12 @@ export type DeliveryStatusRecord = {
   billedAt: string;
   /** When delivered and true, this DC appears under Procurement → Installation. */
   requiresInstallation: boolean;
+  /** ISO timestamp after customer out-for-delivery email succeeds (empty = not sent yet). */
+  outForDeliveryEmailSentAt: string;
+  /** ISO timestamp after customer outcome email succeeds (Delivered / Delayed / Failed). */
+  outcomeEmailSentAt: string;
+  /** Last outcome successfully emailed: Delivered | Failed delivery | Delayed. */
+  outcomeEmailKind: string;
   updatedAt: string;
 };
 
@@ -145,6 +158,11 @@ export function isFailedShipmentStatus(status: string): boolean {
   return raw === "failed delivery" || raw === "failed";
 }
 
+export function isDelayedShipmentStatus(status: string): boolean {
+  const raw = asText(status).trim().toLowerCase();
+  return raw === "delayed" || raw === "delay";
+}
+
 /** First visit after DC create = dispatch setup. Later visits = Delivered / Failed. */
 export function deliveryStatusUiMode(
   record: Pick<DeliveryStatusRecord, "deliveryMode">,
@@ -176,6 +194,9 @@ export function deriveDeliveryStatusLabel(
   if (isFailedShipmentStatus(explicit) || explicit === "Returned") {
     return explicit === "Returned" ? "Returned" : "Failed delivery";
   }
+  if (isDelayedShipmentStatus(explicit)) {
+    return "Delayed";
+  }
   const deliveredDate = asText(value.actualDeliveryDate).trim();
   if (explicit === "Delivered" || deliveredDate) {
     return "Delivered";
@@ -196,6 +217,8 @@ function normalizeBillStatus(value: unknown): DeliveryBillStatus {
 function normalize(raw: Partial<DeliveryStatusRecord> & { challanId: string }): DeliveryStatusRecord {
   const cacheInvoiceDocument = normalizeAttachment(raw.cacheInvoiceDocument);
   const podDocument = normalizeAttachment(raw.podDocument);
+  const customerTaxInvoiceDocument = normalizeAttachment(raw.customerTaxInvoiceDocument);
+  const packingListDocument = normalizeAttachment(raw.packingListDocument);
   const billDocument = normalizeAttachment(raw.billDocument);
   const deliveryMode = normalizeMode(raw.deliveryMode);
   const itemType = normalizeItemType(raw.itemType);
@@ -222,6 +245,10 @@ function normalize(raw: Partial<DeliveryStatusRecord> & { challanId: string }): 
     itemType,
     podDocument,
     docketNumber: raw.docketNumber ?? raw.trackingNumber ?? "",
+    transporterName: asText(raw.transporterName).trim(),
+    lrGrNumber: asText(raw.lrGrNumber).trim(),
+    customerTaxInvoiceDocument,
+    packingListDocument,
     boxCount: raw.boxCount ?? "",
     surfaceMode: normalizeSurfaceMode(raw.surfaceMode),
     remarks: raw.remarks ?? "",
@@ -233,6 +260,9 @@ function normalize(raw: Partial<DeliveryStatusRecord> & { challanId: string }): 
     billRemarks: asText(raw.billRemarks).trim(),
     billedAt: asText(raw.billedAt).trim(),
     requiresInstallation: Boolean(raw.requiresInstallation),
+    outForDeliveryEmailSentAt: asText(raw.outForDeliveryEmailSentAt).trim(),
+    outcomeEmailSentAt: asText(raw.outcomeEmailSentAt).trim(),
+    outcomeEmailKind: asText(raw.outcomeEmailKind).trim(),
     updatedAt: raw.updatedAt ?? "",
   };
   const shipmentStatus = deriveDeliveryStatusLabel(base);
@@ -255,13 +285,13 @@ function readAll(): DeliveryStatusRecord[] {
     const parsed = JSON.parse(raw) as DeliveryStatusRecord[];
     return Array.isArray(parsed)
       ? parsed.flatMap((row) => {
-          try {
-            if (!row || typeof row !== "object") return [];
-            return [normalize(row)];
-          } catch {
-            return [];
-          }
-        })
+        try {
+          if (!row || typeof row !== "object") return [];
+          return [normalize(row)];
+        } catch {
+          return [];
+        }
+      })
       : [];
   } catch {
     return [];
@@ -359,6 +389,10 @@ export function defaultStatusFromChallan(challan: DeliveryChallanRecord): Delive
     itemType: "",
     podDocument: null,
     docketNumber: "",
+    transporterName: "",
+    lrGrNumber: "",
+    customerTaxInvoiceDocument: null,
+    packingListDocument: null,
     boxCount: "",
     surfaceMode: "",
     remarks: "",
@@ -370,6 +404,9 @@ export function defaultStatusFromChallan(challan: DeliveryChallanRecord): Delive
     billRemarks: "",
     billedAt: "",
     requiresInstallation: false,
+    outForDeliveryEmailSentAt: "",
+    outcomeEmailSentAt: "",
+    outcomeEmailKind: "",
     updatedAt: "",
   });
 }
@@ -427,6 +464,7 @@ export function shipmentStatusBadgeVariant(
   const value = asText(status).toLowerCase();
   if (value === "delivered") return "success";
   if (value === "failed delivery" || value === "returned") return "destructive";
+  if (value === "delayed" || value === "delay") return "warning";
   if (value === "pending" || value === "pending dispatch") return "warning";
   if (value === "by hand" || value === "courier") return "secondary";
   if (value === "dispatched" || value === "in transit" || value === "out for delivery") {
@@ -449,6 +487,10 @@ export type DeliveryStatusFormErrors = Partial<
     | "podDocument"
     | "docketNumber"
     | "courierProvider"
+    | "transporterName"
+    | "lrGrNumber"
+    | "customerTaxInvoiceDocument"
+    | "packingListDocument"
     | "reminderEmail"
     | "expectedDeliveryDate"
     | "boxCount"
@@ -460,41 +502,39 @@ export type DeliveryStatusFormErrors = Partial<
 
 export function validateDeliveryStatusForm(
   value: Omit<DeliveryStatusRecord, "challanId" | "updatedAt">,
+  options?: { requireDispatch?: boolean },
 ): DeliveryStatusFormErrors {
   const errors: DeliveryStatusFormErrors = {};
+  const requireDispatch = options?.requireDispatch !== false;
   // Cache invoice is optional at delivery - bill DC material later after payment.
-  if (value.deliveryMode !== "hand" && value.deliveryMode !== "courier") {
-    errors.deliveryMode = "Select By hand or Courier.";
-  }
-
-  if (value.deliveryMode === "hand") {
-    if (!asText(value.deliveryBoyName).trim()) {
-      errors.deliveryBoyName = "Delivery person is required.";
+  if (requireDispatch) {
+    if (value.deliveryMode !== "hand" && value.deliveryMode !== "courier") {
+      errors.deliveryMode = "Select By hand or Courier.";
     }
+
     if (!asText(value.dispatchDate).trim()) {
       errors.dispatchDate = "Dispatch date is required.";
     }
-    if (value.itemType !== "hardware" && value.itemType !== "software") {
-      errors.itemType = "Select hardware or software.";
-    }
-    const markingDelivered =
-      asText(value.shipmentStatus).trim() === "Delivered" ||
-      Boolean(asText(value.actualDeliveryDate).trim());
-    if (
-      markingDelivered &&
-      (value.itemType === "hardware" || value.itemType === "software") &&
-      !value.podDocument?.fileName
-    ) {
-      errors.podDocument = "POD attachment is required when marking delivered.";
-    }
-  }
 
-  if (value.deliveryMode === "courier") {
-    if (!asText(value.docketNumber).trim()) {
-      errors.docketNumber = "Docket number is required for courier.";
+    if (value.deliveryMode === "hand") {
+      if (!asText(value.deliveryBoyName).trim()) {
+        errors.deliveryBoyName = "Delivery person is required.";
+      }
+      const markingDelivered =
+        asText(value.shipmentStatus).trim() === "Delivered" ||
+        Boolean(asText(value.actualDeliveryDate).trim());
+      if (markingDelivered && !value.podDocument?.fileName) {
+        errors.podDocument = "POD attachment is required when marking delivered.";
+      }
     }
-    if (!asText(value.courierProvider).trim()) {
-      errors.courierProvider = "Select a courier.";
+
+    if (value.deliveryMode === "courier") {
+      if (!asText(value.docketNumber).trim()) {
+        errors.docketNumber = "Docket number is required for courier.";
+      }
+      if (!asText(value.courierProvider).trim()) {
+        errors.courierProvider = "Select a courier.";
+      }
     }
   }
 

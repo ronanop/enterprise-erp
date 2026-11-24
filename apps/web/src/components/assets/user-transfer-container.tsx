@@ -163,7 +163,7 @@ export function UserTransferContainer({ assetId }: UserTransferContainerProps) {
     setFinalizeError(null);
     try {
       const isManual = assignForm.employeeSource === "MANUAL_ENTRY";
-      const result = await userTransferService.assignToNewUser(assetId.trim(), {
+      await userTransferService.assignToNewUser(assetId.trim(), {
         verification_id: verificationResult.verification_id,
         employee_source: assignForm.employeeSource,
         employee_id: isManual ? null : assignForm.employeeId,
@@ -182,14 +182,7 @@ export function UserTransferContainer({ assetId }: UserTransferContainerProps) {
         assignment_remarks: assignForm.assignmentRemarks.trim() || null,
         asset_version: context.version,
       });
-      const q = new URLSearchParams({
-        assetId: context.asset_id,
-        transfer: result.document_number,
-      });
-      if (result.new_assignment_id) {
-        q.set("assignmentId", result.new_assignment_id);
-      }
-      router.push(`/assets/asset-assignments?${q.toString()}`);
+      router.push(assignmentNavigationPaths.inventory);
     } catch (err) {
       if (err instanceof ApiClientError) {
         setFinalizeError(err.message || "Unable to complete transfer.");

@@ -15,6 +15,7 @@ from modules.master_data.service.code_generator_service import CodeGeneratorServ
 from modules.master_data.service.duplicate_checker_service import DuplicateCheckerService
 from modules.master_data.service.governance_service import GovernanceService
 from modules.master_data.service.master_scope_validator import MasterScopeValidator
+from modules.organization.repository.company_repository import CompanyRepository
 from modules.organization.repository.hierarchy_repository import DepartmentRepository
 
 
@@ -22,6 +23,7 @@ class EmployeeService:
     def __init__(self, db: Session) -> None:
         self._repo = EmployeeRepository(db)
         self._departments = DepartmentRepository(db)
+        self._companies = CompanyRepository(db)
         self._audit = PlatformAuditFacade(db)
         self._codes = CodeGeneratorService(db)
         self._duplicates = DuplicateCheckerService(db)
@@ -55,6 +57,23 @@ class EmployeeService:
         if row is None:
             raise NotFoundException(f"Employee code '{employee_code}' not found")
         return self.get_employee(ctx, row.id)
+
+    def allocate_next_employee_code(self, ctx: TenantContext, company_id: UUID | None = None) -> str:
+        """Next employee code for a company: ``{company_code}000001`` (serial resets per company)."""
+        resolved_company_id = self._scope.resolve_company_id(ctx, company_id)
+        company = self._companies.get_by_id(ctx, resolved_company_id)
+        company_code = (
+            str(getattr(company, "company_code", "") or "").strip().upper()
+            if company is not None
+            else ""
+        ) or "EMP"
+        return self._codes.generate(
+            MasterEntityType.EMPLOYEE,
+            resolved_company_id,
+            model=MasterEmployee,
+            code_column="employee_code",
+            prefix=company_code,
+        )
 
     def create_employee(
         self,
@@ -96,12 +115,7 @@ class EmployeeService:
         self._validate_department_scope(ctx, branch_id, department_id)
 
         if employee_code is None:
-            employee_code = self._codes.generate(
-                MasterEntityType.EMPLOYEE,
-                resolved_company_id,
-                model=MasterEmployee,
-                code_column="employee_code",
-            )
+            employee_code = self.allocate_next_employee_code(ctx, resolved_company_id)
         else:
             self._duplicates.ensure_unique_code(
                 model=MasterEmployee,

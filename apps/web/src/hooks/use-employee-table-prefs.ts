@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-const STORAGE_KEY = "erp.hr.workforce.tablePrefs.v3";
+const STORAGE_KEY = "erp.hr.workforce.tablePrefs.v4";
 
 export type EmployeeTableColumnKey =
   | "employeeCode"
@@ -35,11 +35,12 @@ export type EmployeeTablePrefs = {
   visibleColumns: EmployeeTableColumnKey[];
 };
 
-/** Columns shown by default (aligned with workforce Excel fields). */
+/** Columns shown by default (aligned with workforce Excel fields).
+ * Entity is omitted — company/entity scope is the top-right header switcher.
+ */
 export const DEFAULT_EMPLOYEE_TABLE_COLUMNS: EmployeeTableColumnKey[] = [
   "employeeCode",
   "name",
-  "entity",
   "organisation",
   "location",
   "designation",
@@ -71,8 +72,8 @@ export const EMPLOYEE_TABLE_COLUMN_LABELS: Record<EmployeeTableColumnKey, string
   reportingManager: "Reporting Manager",
   employmentType: "Type",
   gender: "Gender",
-  email: "Cache Email ID",
-  personalEmail: "Email ID",
+  email: "cache email id",
+  personalEmail: "Email id",
   phone: "Emp. Contact No.",
   grade: "Grade",
   jobLevel: "Job Level",

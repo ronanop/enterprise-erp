@@ -117,13 +117,14 @@ describe("AssetInventoryContainer navigation", () => {
     return row;
   }
 
-  it("opens drawer on View without routing", async () => {
+  it("does not offer View Details or QR Code in the row menu", async () => {
     const user = userEvent.setup();
     render(<AssetInventoryContainer />);
     const row = await tableRowForAssetCode("AST-99");
-    await user.click(within(row).getByRole("button", { name: "View" }));
-    expect(await screen.findByTestId("asset-detail-drawer")).toBeInTheDocument();
-    expect(push).not.toHaveBeenCalled();
+    await user.click(within(row).getByRole("button", { name: "More actions" }));
+    expect(screen.queryByTestId("inventory-menu-viewDetails")).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "View Details" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "QR Code" })).not.toBeInTheDocument();
   });
 
   it("navigates on assign menu action", async () => {
@@ -143,33 +144,28 @@ describe("AssetInventoryContainer navigation", () => {
     const user = userEvent.setup();
     render(<AssetInventoryContainer />);
     const row = await tableRowForAssetCode("AST-99");
-    expect(within(row).getByTestId("inventory-action-view")).toBeInTheDocument();
+    expect(within(row).queryByTestId("inventory-action-view")).not.toBeInTheDocument();
     expect(within(row).queryByTestId("inventory-action-edit")).not.toBeInTheDocument();
     await user.click(within(row).getByRole("button", { name: "More actions" }));
     await user.click(await screen.findByRole("menuitem", { name: "Edit" }));
     expect(push).toHaveBeenCalledWith("/assets/assets/asset-99/edit");
   });
 
-  it("opens DeleteAssetConfirmDialog from 3-dot menu; cancel does not soft-delete", async () => {
+  it("does not show Delete or User Transfer in the 3-dot menu", async () => {
     const user = userEvent.setup();
     render(<AssetInventoryContainer />);
     const row = await tableRowForAssetCode("AST-99");
     await user.click(within(row).getByRole("button", { name: "More actions" }));
-    expect(await screen.findByRole("menuitem", { name: "Delete" })).toBeInTheDocument();
-    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
-    expect(screen.getByTestId("delete-asset-confirm-dialog")).toBeInTheDocument();
-    expect(screen.getByTestId("delete-asset-code")).toHaveTextContent("AST-99");
-    await user.click(screen.getByTestId("delete-asset-cancel-button"));
-    expect(screen.queryByTestId("delete-asset-confirm-dialog")).not.toBeInTheDocument();
-    expect(assetRegisterService.softDelete).not.toHaveBeenCalled();
+    expect(screen.queryByRole("menuitem", { name: "Delete" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "User Transfer" })).not.toBeInTheDocument();
   });
 
-  it("navigates on portal quick link from drawer", async () => {
+  it("navigates on Information Portal from the row menu", async () => {
     const user = userEvent.setup();
     render(<AssetInventoryContainer />);
     const row = await tableRowForAssetCode("AST-99");
-    await user.click(within(row).getByRole("button", { name: "View" }));
-    await user.click(await screen.findByRole("button", { name: "Information Portal" }));
+    await user.click(within(row).getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Information Portal" }));
     expect(push).toHaveBeenCalledWith("/assets/information-portal/asset-99");
   });
 });

@@ -14,6 +14,7 @@ import {
 } from "@/components/hr/setup/setup-drawer";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
+import { formatApiError } from "@/services/api-client";
 import { createShift, peekNextShiftCode, updateShift } from "@/services/shift-roster-service";
 import type { ShiftRosterDirectory } from "@/services/shift-roster-service";
 import type { ShiftRecord, ShiftTypeCode } from "@/types/shift-roster-management";
@@ -35,6 +36,7 @@ export function CreateShiftDrawer({
   const isEdit = Boolean(initial);
   const [shiftCode, setShiftCode] = useState("");
   const [shiftName, setShiftName] = useState("");
+  const [branchId, setBranchId] = useState("");
   const [shiftType, setShiftType] = useState<ShiftTypeCode>("general");
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("18:00");
@@ -58,10 +60,16 @@ export function CreateShiftDrawer({
 
   useEffect(() => {
     if (!open) return;
+    const defaultBranch =
+      initial?.branchId ||
+      directory?.options.branches.find((b) => Boolean(b.companyId))?.id ||
+      directory?.options.branches[0]?.id ||
+      "";
     if (initial) {
       const ext = { ...DEFAULT_SHIFT_EXTENSION, ...initial.extension };
       setShiftCode(initial.shiftCode);
       setShiftName(initial.shiftName);
+      setBranchId(defaultBranch);
       setShiftType(initial.shiftType);
       setStartTime(toTimeInputValue(initial.startTime) || "09:00");
       setEndTime(toTimeInputValue(initial.endTime) || "18:00");
@@ -85,6 +93,7 @@ export function CreateShiftDrawer({
     }
     setShiftCode(peekNextShiftCode());
     setShiftName("");
+    setBranchId(defaultBranch);
     setShiftType("general");
     setStartTime("09:00");
     setEndTime("18:00");
@@ -104,11 +113,15 @@ export function CreateShiftDrawer({
     setWeeklyOff("sunday");
     setDescription("");
     setStatus("active");
-  }, [open, initial]);
+  }, [open, initial, directory]);
 
   async function submit() {
     if (!shiftName.trim()) {
       toast("Shift name required", "error");
+      return;
+    }
+    if (!isEdit && !branchId) {
+      toast("Select a branch that belongs to a company", "error");
       return;
     }
     setSaving(true);
@@ -142,17 +155,19 @@ export function CreateShiftDrawer({
         await updateShift(initial, { ...body, status });
         toast("Shift updated", "success");
       } else {
+        const branch = directory?.options.branches.find((b) => b.id === branchId);
         await createShift({
           ...body,
           shiftCode,
-          branchId: directory?.options.branches[0]?.id,
+          branchId,
+          companyId: branch?.companyId,
         });
         toast("Shift created", "success");
       }
       onSaved();
       onClose();
-    } catch {
-      toast(isEdit ? "Update failed" : "Create failed", "error");
+    } catch (err) {
+      toast(formatApiError(err, isEdit ? "Update failed" : "Create failed"), "error");
     } finally {
       setSaving(false);
     }
@@ -201,6 +216,23 @@ export function CreateShiftDrawer({
         <SetupField label="Shift name" required>
           <SetupInput value={shiftName} onChange={(e) => setShiftName(e.target.value)} />
         </SetupField>
+        {!isEdit ? (
+          <SetupField
+            label="Branch"
+            required
+            hint="Company is taken from the selected branch"
+          >
+            <SetupSelect value={branchId} onChange={(e) => setBranchId(e.target.value)}>
+              <option value="">Select</option>
+              {(directory?.options.branches ?? []).map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.label}
+                  {b.companyId ? "" : " (no company)"}
+                </option>
+              ))}
+            </SetupSelect>
+          </SetupField>
+        ) : null}
         <SetupField label="Shift type">
           <SetupSelect value={shiftType} onChange={(e) => setShiftType(e.target.value as ShiftTypeCode)}>
             {Object.entries(SHIFT_TYPE_LABELS).map(([k, v]) => (

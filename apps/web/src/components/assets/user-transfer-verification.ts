@@ -1,25 +1,20 @@
 import type { ReturnCondition } from "@/components/assets/assignment-wizard/wizard-types";
 
-/** Reuse assignment return-condition vocabulary for physical condition. */
+/** Pre-transfer physical condition — working / outdated only (no disposal path here). */
 export const USER_TRANSFER_PHYSICAL_CONDITIONS: Array<{
-  value: ReturnCondition;
+  value: Extract<ReturnCondition, "good" | "outdated">;
   label: string;
   description: string;
 }> = [
   {
     value: "good",
     label: "Good",
-    description: "Asset is in working order for the next lifecycle step.",
+    description: "Ready for the next custody step.",
   },
   {
     value: "outdated",
     label: "Outdated",
-    description: "Asset is outdated / should not be re-issued as-is.",
-  },
-  {
-    value: "dead",
-    label: "Not working",
-    description: "Asset is non-functional / pending disposal path.",
+    description: "Should not be re-issued as-is.",
   },
 ];
 
@@ -46,6 +41,7 @@ export function isUserTransferVerificationComplete(
   if (!state.dataBackupVerified) return false;
   if (!state.qcCompleted) return false;
   if (!state.physicalCondition) return false;
+  if (state.physicalCondition === "dead") return false;
   if (issuedComponentIds.length === 0) return true;
   const verified = new Set(state.verifiedComponentIds);
   return issuedComponentIds.every((id) => verified.has(id));

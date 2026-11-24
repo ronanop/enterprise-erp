@@ -17,7 +17,7 @@ from shared.schemas import APIResponse
 
 ticket_options_router = APIRouter(
     prefix="/ticket-options",
-    tags=["Service - Ticket Options"],
+    tags=["Service — Ticket Options"],
 )
 
 
@@ -32,6 +32,8 @@ def list_ticket_options(
     items = TicketOptionService(db).list(
         ctx, option_type=option_type, company_id=company_id, active_only=active_only
     )
+    # Persist auto-seeded Issue/Resolution masters (list used to flush without commit).
+    db.commit()
     return APIResponse(message="OK", data=items)
 
 

@@ -79,6 +79,9 @@ CRM_PERMISSIONS: list[tuple[str, str, str, str]] = [
     ("crm.attachment:delete", "crm.attachment", "delete", "crm"),
     ("crm.blueprint:read", "crm.blueprint", "read", "crm"),
     ("crm.blueprint:act", "crm.blueprint", "act", "crm"),
+    # ERP-admin only at service layer; codes exist for RBAC catalog / require_permission.
+    ("crm.settings:read", "crm.settings", "read", "crm"),
+    ("crm.settings:update", "crm.settings", "update", "crm"),
 ]
 
 CRM_SALES_REP_PERMISSIONS = [
@@ -210,4 +213,7 @@ CRM_MARKETING_PERMISSIONS = [
     "crm.report:export",
 ]
 
-CRM_ADMIN_PERMISSIONS = [p[0] for p in CRM_PERMISSIONS]
+# Module CRM admins get all CRM codes except Settings (ERP-admin only).
+CRM_ADMIN_PERMISSIONS = [
+    p[0] for p in CRM_PERMISSIONS if not p[0].startswith("crm.settings:")
+]

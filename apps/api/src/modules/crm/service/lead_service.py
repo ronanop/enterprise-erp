@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID
@@ -39,6 +40,53 @@ from modules.foundation.models.security import SecUser
 from modules.platform.compat.audit_facade import PlatformAuditFacade
 from modules.master_data.published import EmployeeCommands, EmployeeRead
 from modules.master_data.repository.employee_repository import EmployeeRepository
+
+
+def _lead_product_types(lead: CrmLead) -> list[str]:
+    raw = (lead.product_type or "").replace("&", ",")
+    out: list[str] = []
+    for part in raw.split(","):
+        name = part.strip()
+        if not name or name in out:
+            continue
+        out.append(name)
+    return out
+
+
+def _parse_presales_by_product(raw: str | None) -> dict[str, dict]:
+    if not (raw or "").strip():
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    out: dict[str, dict] = {}
+    for key, value in parsed.items():
+        product = str(key or "").strip()
+        if not product or not isinstance(value, dict):
+            continue
+        aligned = value.get("aligned")
+        if aligned is not True and aligned is not False:
+            aligned = None
+        out[product] = {
+            "aligned": aligned,
+            "contact_name": str(value.get("contact_name") or "").strip(),
+        }
+    return out
+
+
+def _presales_ready_from_map(product_types: list[str], by_product: dict[str, dict]) -> bool:
+    if not product_types:
+        return False
+    for product in product_types:
+        entry = by_product.get(product) or {}
+        if entry.get("aligned") is not True:
+            return False
+        if not str(entry.get("contact_name") or "").strip():
+            return False
+    return True
 
 
 class LeadSourceService:
@@ -381,9 +429,15 @@ class LeadService:
         self._db.flush()
         return employee_id
 
-    def peek_next_dr_number(self, ctx: TenantContext, company_id: UUID | None = None) -> str:
+    def peek_next_dr_number(
+        self,
+        ctx: TenantContext,
+        company_id: UUID | None = None,
+        *,
+        entity_name: str | None = None,
+    ) -> str:
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._numbers.next_deal_reg_number(cid)
+        return self._numbers.next_deal_reg_number(cid, entity_name=entity_name)
 
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
@@ -395,16 +449,16 @@ class LeadService:
         fields.pop("new_dr_number", None)
         is_sales_lead = fields.get("company_account_id") is not None
         if is_sales_lead:
-            code = self._numbers.next_deal_reg_number(cid)
+            code = self._numbers.next_deal_reg_number(
+                cid, entity_name=fields.get("entity_name")
+            )
             fields["dr_number"] = code
         else:
             code = self._numbers.generate(CrmEntityType.LEAD, cid, CrmLead, "lead_code")
         fields.setdefault("document_date", date.today())
         fields.setdefault("status", LeadStatus.NEW.value)
         row = self._repo.create(ctx, company_id=cid, branch_id=branch_id, lead_code=code, **fields)
-        if self._boq_sow_mandatory(row):
-            row.requires_boq = True
-            row.requires_sow = True
+        if self._apply_sales_doc_requirements(ctx, row):
             self._db.flush()
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
@@ -447,11 +501,55 @@ class LeadService:
         # DR number is assigned at create and is the lead's unique ID - do not overwrite.
         fields.pop("dr_number", None)
         fields.pop("lead_code", None)
-        if self._boq_sow_mandatory(lead):
-            # Technical team is always looped in on hardware/services leads.
+        if "custom_fields" in fields:
+            from modules.crm.service.crm_settings_service import CrmSettingsService
+
+            effective = CrmSettingsService(self._db).get_effective(ctx, require_erp_admin=False)
+            fields["custom_fields"] = CrmSettingsService.sanitize_custom_fields(
+                effective, "lead", fields.get("custom_fields")
+            )
+        # BOQ/SOW flags are derived from product mix after save — ignore client overrides.
+        if self._boq_sow_mandatory(lead) or "product_type" in fields:
             fields.pop("requires_boq", None)
             fields.pop("requires_sow", None)
-        if "presales_call_aligned" in fields or "presales_call_contact_name" in fields:
+        if "presales_call_by_product" in fields:
+            raw_map = fields.get("presales_call_by_product")
+            by_product = _parse_presales_by_product(
+                str(raw_map) if raw_map is not None else None
+            )
+            product_types = _lead_product_types(lead)
+            for product in product_types:
+                entry = by_product.get(product) or {}
+                aligned = entry.get("aligned")
+                contact = str(entry.get("contact_name") or "").strip()
+                if aligned is not True and aligned is not False:
+                    raise ConflictException(
+                        f"Select Yes or No for PreSales call alignment on {product}"
+                    )
+                if aligned is True and not contact:
+                    raise ConflictException(
+                        f"PreSales contact person is required for {product} when Call aligned is Yes"
+                    )
+            fields["presales_call_by_product"] = (
+                json.dumps(by_product, separators=(",", ":")) if by_product else None
+            )
+            all_yes = bool(product_types) and all(
+                (by_product.get(product) or {}).get("aligned") is True
+                for product in product_types
+            )
+            any_no = any(
+                (by_product.get(product) or {}).get("aligned") is False
+                for product in product_types
+            )
+            contacts = [
+                str((by_product.get(product) or {}).get("contact_name") or "").strip()
+                for product in product_types
+                if (by_product.get(product) or {}).get("aligned") is True
+                and str((by_product.get(product) or {}).get("contact_name") or "").strip()
+            ]
+            fields["presales_call_aligned"] = True if all_yes else False if any_no else None
+            fields["presales_call_contact_name"] = "; ".join(contacts) if contacts else None
+        elif "presales_call_aligned" in fields or "presales_call_contact_name" in fields:
             aligned = fields.get("presales_call_aligned", lead.presales_call_aligned)
             contact = fields.get(
                 "presales_call_contact_name",
@@ -473,12 +571,10 @@ class LeadService:
         if fields.get("requires_sow") is False:
             fields["sow_attached"] = False
         row = self._repo.update(ctx, lead_id, **fields)
-        if self._boq_sow_mandatory(row) and not (row.requires_boq and row.requires_sow):
-            row.requires_boq = True
-            row.requires_sow = True
-            self._db.flush()
         if row is None:
             raise NotFoundException("Lead not found")
+        if self._apply_sales_doc_requirements(ctx, row):
+            self._db.flush()
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name="crm_lead",
@@ -538,16 +634,68 @@ class LeadService:
 
     @staticmethod
     def _boq_sow_mandatory(lead: CrmLead | None) -> bool:
-        """Sales-process leads always need BOQ + SOW, except the cloud consumption flow."""
+        """Sales-process leads need technical docs, except the cloud consumption flow."""
         if lead is None or lead.company_account_id is None:
             return False
         return cloud_variant_from_lead(lead) is None
 
+    def _apply_sales_doc_requirements(self, ctx: TenantContext, lead: CrmLead | None) -> bool:
+        """Derive BOQ/SOW requirements from product mix + tenant CRM Settings.
+
+        - Non-cloud sales leads always require BOQ.
+        - SOW is required when Services is in product_type and
+          policies.sow_required_when_services (default True).
+        Returns True when flags changed.
+        """
+        from modules.crm.domain.product_types import product_type_includes_services
+        from modules.crm.service.crm_settings_service import CrmSettingsService
+
+        if lead is None:
+            return False
+        if not LeadService._boq_sow_mandatory(lead):
+            changed = bool(lead.requires_boq) or bool(lead.requires_sow)
+            if lead.requires_boq:
+                lead.requires_boq = False
+            if lead.requires_sow:
+                lead.requires_sow = False
+                lead.sow_attached = False
+            return changed
+
+        effective = CrmSettingsService(self._db).get_effective(ctx, require_erp_admin=False)
+        want_boq = True
+        services = product_type_includes_services(lead.product_type)
+        policy_sow = CrmSettingsService.policy_flag(effective, "sow_required_when_services", True)
+        want_sow = bool(
+            services
+            and policy_sow
+            and CrmSettingsService.attachment_required(
+                effective,
+                "sow",
+                product_type=lead.product_type,
+                default=True,
+            )
+        )
+        changed = False
+        if bool(lead.requires_boq) != want_boq:
+            lead.requires_boq = want_boq
+            changed = True
+        if bool(lead.requires_sow) != want_sow:
+            lead.requires_sow = want_sow
+            if not want_sow:
+                lead.sow_attached = False
+            changed = True
+        return changed
+
     @staticmethod
     def _presales_call_ready(lead: CrmLead) -> bool:
-        """BOQ/SOW My Jobs unlock only after a Yes call with contact person name."""
+        """BOQ/SOW My Jobs unlock only after Yes + contact for every product type."""
         if not LeadService._boq_sow_mandatory(lead):
             return True
+        product_types = _lead_product_types(lead)
+        by_product = _parse_presales_by_product(getattr(lead, "presales_call_by_product", None))
+        if product_types and by_product:
+            return _presales_ready_from_map(product_types, by_product)
+        # Legacy single-field fallback for older leads.
         return bool(lead.presales_call_aligned) and bool(
             (lead.presales_call_contact_name or "").strip()
         )
@@ -587,8 +735,10 @@ class LeadService:
         )
         if by_lead is not None:
             return by_lead
+        from modules.crm.service.document_number_service import is_deal_reg_number
+
         dr_number = (lead.dr_number or lead.lead_code or "").strip()
-        if not dr_number.startswith("DR-"):
+        if not is_deal_reg_number(dr_number):
             return None
         return (
             self._db.query(CrmOpportunity)
@@ -643,13 +793,47 @@ class LeadService:
                 return
             if action in pending_actions:
                 return
-            user_ids = owners.list_user_ids(ctx, step_key) or tasks._admin_recipient_ids(ctx)
-            if not user_ids:
-                raise ConflictException(
-                    f"No default owners configured for {step_key.replace('_', ' ')}. "
-                    "Assign owners under CRM → Users → Default task owners before requiring this document."
+            # Services leads: SOW attach/approve My Jobs go only to the lead owner
+            # when policies.sow_route_to_owner_when_services is enabled (default).
+            from modules.crm.domain.product_types import product_type_includes_services
+            from modules.crm.service.crm_notification_service import resolve_employee_user_id
+            from modules.crm.service.crm_settings_service import CrmSettingsService
+
+            settings = CrmSettingsService(self._db).get_effective(ctx, require_erp_admin=False)
+            route_sow_to_owner = CrmSettingsService.policy_flag(
+                settings, "sow_route_to_owner_when_services", True
+            )
+            if (
+                action == "provide_sow_attachment"
+                and product_type_includes_services(lead.product_type)
+                and route_sow_to_owner
+            ):
+                owner_uid = resolve_employee_user_id(
+                    self._db, ctx.tenant_id, lead.owner_employee_id
                 )
-            team_role = APPROVAL_STEP_CATALOG[step_key][1]
+                if owner_uid is None:
+                    raise ConflictException(
+                        "Lead owner must have a user login to receive SOW attachment "
+                        "when Services is selected."
+                    )
+                user_ids = [owner_uid]
+                remarks = (
+                    "Required — Services lead: SOW attachment assigned to lead owner only"
+                )
+            else:
+                user_ids = owners.list_user_ids(ctx, step_key) or tasks._admin_recipient_ids(ctx)
+                if not user_ids:
+                    raise ConflictException(
+                        f"No default owners configured for {step_key.replace('_', ' ')}. "
+                        "Assign owners under CRM → Users → Default task owners before requiring this document."
+                    )
+                remarks = (
+                    "Required — lead converts to an opportunity when documents are attached"
+                )
+            from modules.crm.service.crm_settings_service import CrmSettingsService
+
+            effective = CrmSettingsService(self._db).get_effective(ctx, require_erp_admin=False)
+            _, team_role = CrmSettingsService.approval_step_meta(effective, step_key)
             tasks.route_approval(
                 ctx,
                 assigned_user_ids=user_ids,
@@ -660,7 +844,7 @@ class LeadService:
                 action=action,
                 company_id=lead.company_id,
                 branch_id=lead.branch_id,
-                remarks="Required — lead converts to an opportunity when documents are attached",
+                remarks=remarks,
             )
 
         call_ready = self._presales_call_ready(lead)
@@ -785,18 +969,32 @@ class LeadService:
                 file_path=row.file_path,
                 content_type=row.content_type,
             )
-        flags = {}
+        flags: dict = {}
         if lead.boq_attached:
             flags["boq_attached"] = True
-            # Lead My Jobs attach is equivalent to opportunity provide_* (sets approved).
-            flags["boq_approved"] = True
+            flags["boq_approved"] = False
         if lead.sow_attached:
             flags["sow_attached"] = True
-            flags["sow_approved"] = True
+            flags["sow_approved"] = False
         if flags:
-            # DR is assigned on lead create — skip Deal Registration and land on OEM.
-            flags["blueprint_state"] = "oem_pending"
+            # After lead attach, opportunity must go through BOQ/SOW approval My Jobs
+            # (same path as opportunity provide_* → _auto_raise_doc_approval).
+            if lead.boq_attached:
+                flags["blueprint_state"] = "boq_approval"
+            else:
+                flags["blueprint_state"] = "sow_approval"
+            flags["locked"] = True
             OpportunityRepository(self._db).update(ctx, opportunity_id, **flags)
+            from modules.crm.models.opportunity import CrmOpportunity
+            from modules.crm.service.blueprint_service import OpportunityBlueprintService
+
+            opp = self._db.get(CrmOpportunity, opportunity_id)
+            if opp is not None:
+                blueprint = OpportunityBlueprintService(self._db)
+                if lead.boq_attached:
+                    blueprint._auto_raise_doc_approval(ctx, opp, doc="boq")
+                if lead.sow_attached:
+                    blueprint._auto_raise_doc_approval(ctx, opp, doc="sow")
 
     def delete(self, ctx: TenantContext, lead_id: UUID) -> None:
         self._crm_admin.ensure_admin(ctx)
@@ -955,16 +1153,43 @@ class LeadService:
                 opp_fields["purchase_model"] = purchase_model
             # One number from lead create to closure: reuse the lead's DR as the
             # opportunity number; quotes / OVF / tracking hang off that same code.
+            from modules.crm.service.document_number_service import is_deal_reg_number
+
             dr_number = (lead.dr_number or lead.lead_code or "").strip()
-            if not dr_number.startswith("DR-"):
-                dr_number = self._numbers.next_deal_reg_number(lead.company_id)
+            if not is_deal_reg_number(dr_number):
+                dr_number = self._numbers.next_deal_reg_number(
+                    lead.company_id, entity_name=lead.entity_name
+                )
                 self._repo.update(ctx, lead_id, dr_number=dr_number)
             opp_fields["opportunity_code"] = dr_number
             opp_fields["deal_reg_number"] = dr_number
+            opp_fields["product_type"] = lead.product_type
+            product_tokens = {
+                part.strip().lower()
+                for part in (lead.product_type or "").replace("&", ",").split(",")
+                if part.strip()
+            }
+            opp_fields["has_services"] = "services" in product_tokens
+            opp_fields["has_software"] = "software" in product_tokens
+            opp_fields["has_hardware"] = bool(
+                product_tokens
+                & {"hardware", "networking", "cybersecurity", "ai", "cloud", "others"}
+            ) or (
+                bool(product_tokens)
+                and not opp_fields["has_services"]
+                and not opp_fields["has_software"]
+            )
+            if opp_fields["has_services"]:
+                from modules.crm.domain.lead_sourcing_channels import (
+                    parse_service_sourcing_channel,
+                )
+
+                channel = parse_service_sourcing_channel(lead.deal_type)
+                if channel:
+                    opp_fields["service_sourcing_channel"] = channel
             cloud_variant = cloud_variant_from_lead(lead)
             if cloud_variant:
                 opp_fields["cloud_blueprint_variant"] = cloud_variant
-                opp_fields["product_type"] = lead.product_type
                 opp_fields["cloud_sub_product"] = cloud_sub_product_label(lead)
                 opp_fields["distributor_discount_percent"] = DEFAULT_DISTRIBUTOR_DISCOUNT_PERCENT
                 opp_fields["distributor_discount_locked"] = True

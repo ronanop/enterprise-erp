@@ -8,7 +8,16 @@ import { buildReportingManagerOptions } from "@/lib/hr/reporting-managers";
 import { resourceService } from "@/services/api-client";
 import { formatInr as formatInrBase } from "@/services/recruitment-service";
 
-export type NamedOption = { id: string; name: string };
+export type NamedOption = {
+  id: string;
+  name: string;
+  companyId?: string;
+  branchId?: string;
+  departmentId?: string;
+  email?: string;
+  /** People-role / reporting manager flag when known */
+  isManager?: boolean;
+};
 
 export type AtsLookupSource = "live" | "employees" | "demo";
 
@@ -47,9 +56,18 @@ function rowName(row: Record<string, unknown>): string {
 function namedFromEmployee(row: Record<string, unknown>): NamedOption {
   const name = rowName(row);
   const code = String(row.employee_code ?? "").trim();
+  const email = String(row.email ?? row.work_email ?? "").trim();
+  const departmentId = String(row.department_id ?? row.departmentId ?? "").trim();
+  const isManager =
+    row.is_manager === true ||
+    row.is_hiring_manager === true ||
+    row.isManager === true;
   return {
     id: String(row.id ?? crypto.randomUUID()),
     name: code && !name.includes(code) ? `${name} (${code})` : name,
+    ...(email ? { email } : {}),
+    ...(departmentId ? { departmentId } : {}),
+    ...(isManager ? { isManager: true } : {}),
   };
 }
 
@@ -69,6 +87,27 @@ function looksLikeRecruiterRole(row: Record<string, unknown>): boolean {
     blob.includes("staffing") ||
     /\bhr\b/.test(blob) ||
     blob.includes("human resource")
+  );
+}
+
+function looksLikeHrRole(row: Record<string, unknown>): boolean {
+  if (row.is_hr === true) return true;
+  const blob = [
+    row.designation,
+    row.job_title,
+    row.display_name,
+    row.department,
+    row.department_name,
+  ]
+    .map((v) => String(v ?? "").toLowerCase())
+    .join(" ");
+  return (
+    /\bhr\b/.test(blob) ||
+    blob.includes("human resource") ||
+    blob.includes("people ops") ||
+    blob.includes("people operations") ||
+    blob.includes("talent acquisition") ||
+    blob.includes("recruiter")
   );
 }
 
@@ -119,18 +158,34 @@ export function hiringManagerSourceHint(source: AtsLookupSource): string {
   return "Demo names — employee directory did not load. Type a name to search.";
 }
 
+const HR_FALLBACK: NamedOption[] = [
+  { id: "emp-hr-lead", name: "Priya Sharma" },
+  { id: "emp-hr-bp", name: "Rahul Mehta" },
+];
+
 export async function loadAtsLookups(): Promise<{
   employees: NamedOption[];
+  /** Employees flagged HR (or HR-like role) — used for Negotiation Round participants */
+  hrEmployees: NamedOption[];
+  /** Job-opening hiring managers (People roles → Hiring manager) */
   hiringManagers: NamedOption[];
+  /** Line / normal managers (People roles → Manager) for meeting participants */
+  managers: NamedOption[];
   branches: NamedOption[];
+  departments: NamedOption[];
+  designations: NamedOption[];
   recruiters: NamedOption[];
   recruiterSource: AtsLookupSource;
   managerSource: AtsLookupSource;
 }> {
   let employees = EMPLOYEE_FALLBACK;
+  let hrEmployees = HR_FALLBACK;
   let hiringManagers = EMPLOYEE_FALLBACK;
+  let managers = EMPLOYEE_FALLBACK;
   let managerSource: AtsLookupSource = "demo";
   let branches = BRANCH_FALLBACK;
+  let departments: NamedOption[] = [];
+  let designations: NamedOption[] = [];
   let recruiters = RECRUITER_FALLBACK;
   let recruiterSource: AtsLookupSource = "demo";
   let empRows: Record<string, unknown>[] = [];
@@ -140,12 +195,30 @@ export async function loadAtsLookups(): Promise<{
     empRows = normalizeList(empRes.data);
     if (empRows.length) {
       employees = empRows.map(namedFromEmployee);
-      const flaggedManagers = empRows.filter((r) => r.is_hiring_manager === true);
-      if (flaggedManagers.length) {
-        hiringManagers = flaggedManagers.map(namedFromEmployee);
+      const flaggedHr = empRows.filter((r) => r.is_hr === true);
+      if (flaggedHr.length) {
+        hrEmployees = flaggedHr.map(namedFromEmployee);
+      } else {
+        const inferredHr = empRows.filter(looksLikeHrRole).map(namedFromEmployee);
+        hrEmployees = inferredHr.length ? inferredHr : employees;
+      }
+      const flaggedHiring = empRows.filter((r) => r.is_hiring_manager === true);
+      if (flaggedHiring.length) {
+        hiringManagers = flaggedHiring.map(namedFromEmployee);
         managerSource = "live";
       } else {
-        const managers = buildReportingManagerOptions(
+        hiringManagers = [];
+        managerSource = "employees";
+      }
+
+      const flaggedLineManagers = empRows.filter(
+        (r) => r.is_manager === true || r.is_hiring_manager === true,
+      );
+      if (flaggedLineManagers.length) {
+        managers = flaggedLineManagers.map(namedFromEmployee);
+        if (managerSource !== "live") managerSource = "live";
+      } else {
+        const inferred = buildReportingManagerOptions(
           empRows.map((r) => ({
             id: String(r.id ?? ""),
             employee_code: String(r.employee_code ?? ""),
@@ -155,16 +228,26 @@ export async function loadAtsLookups(): Promise<{
             job_title: String(r.job_title ?? ""),
             display_name: rowName(r),
             reporting_manager_id: r.reporting_manager_id ? String(r.reporting_manager_id) : null,
+            is_manager: r.is_manager === true,
+            is_hiring_manager: r.is_hiring_manager === true,
             is_deleted: Boolean(r.is_deleted),
             status: String(r.status ?? "active"),
           })),
         );
-        if (managers.length) {
-          hiringManagers = managers.map((m) => ({ id: m.id, name: m.label }));
-          managerSource = "employees";
-        } else {
-          hiringManagers = [];
-          managerSource = "employees";
+        managers = inferred.length
+          ? inferred.map((m) => {
+              const emp = employees.find((e) => e.id === m.id);
+              return {
+                id: m.id,
+                name: m.label,
+                email: emp?.email,
+                departmentId: emp?.departmentId,
+                isManager: true as const,
+              };
+            })
+          : employees;
+        if (!flaggedHiring.length && inferred.length) {
+          hiringManagers = managers;
         }
       }
     }
@@ -173,27 +256,17 @@ export async function loadAtsLookups(): Promise<{
   }
 
   try {
-    const brRes = await resourceService.list("/organization/branches", { page_size: 100 });
+    const brRes = await resourceService.list("/branches", { page_size: 100 });
     const brRows = normalizeList(brRes.data);
     if (brRows.length) {
       branches = brRows.map((r) => ({
         id: String(r.id ?? crypto.randomUUID()),
         name: String(r.branch_name ?? r.name ?? r.code ?? "Branch"),
+        companyId: r.company_id ? String(r.company_id) : undefined,
       }));
     }
   } catch {
-    try {
-      const brRes2 = await resourceService.list("/branches", { page_size: 100 });
-      const brRows2 = normalizeList(brRes2.data);
-      if (brRows2.length) {
-        branches = brRows2.map((r) => ({
-          id: String(r.id ?? crypto.randomUUID()),
-          name: String(r.branch_name ?? r.name ?? "Branch"),
-        }));
-      }
-    } catch {
-      /* fallback */
-    }
+    /* optional lookup */
   }
 
   try {
@@ -225,7 +298,107 @@ export async function loadAtsLookups(): Promise<{
     }
   }
 
-  return { employees, hiringManagers, branches, recruiters, recruiterSource, managerSource };
+  const companyIdFromBranch = branches.find((b) => b.companyId)?.companyId;
+
+  // Prefer recruitment lookups (HRMS org departments + HR designations) so ATS
+  // users with requisition:read get the same masters as Org Setup / HR Setup.
+  try {
+    const lookupRes = await resourceService.list("/recruitment/lookups/job-form", {
+      ...(companyIdFromBranch ? { company_id: companyIdFromBranch } : {}),
+    });
+    const payload =
+      lookupRes.data && typeof lookupRes.data === "object" && !Array.isArray(lookupRes.data)
+        ? (lookupRes.data as Record<string, unknown>)
+        : {};
+    const deptRows = normalizeList(payload.departments);
+    const desigRows = normalizeList(payload.designations);
+    if (deptRows.length) {
+      departments = deptRows
+        .map((r) => ({
+          id: String(r.id ?? ""),
+          name: String(r.name ?? r.department_name ?? "Department"),
+          companyId: r.company_id ? String(r.company_id) : undefined,
+          branchId: r.branch_id ? String(r.branch_id) : undefined,
+        }))
+        .filter((d) => d.id)
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }
+    if (desigRows.length) {
+      designations = desigRows
+        .map((r) => ({
+          id: String(r.id ?? ""),
+          name: String(r.name ?? r.designation_name ?? "Designation"),
+          companyId: r.company_id ? String(r.company_id) : undefined,
+        }))
+        .filter((d) => d.id)
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }
+  } catch {
+    /* fall through to direct org/HR masters */
+  }
+
+  if (!departments.length) {
+    try {
+      // Org departments API uses `limit`, not page_size (max 100).
+      const deptRes = await resourceService.list("/departments", { limit: 100 });
+      const deptRows = normalizeList(deptRes.data).filter((r) => {
+        const status = String(r.status ?? "active").toLowerCase();
+        return !r.is_deleted && status !== "inactive" && status !== "deleted";
+      });
+      if (deptRows.length) {
+        departments = deptRows
+          .map((r) => ({
+            id: String(r.id ?? ""),
+            name: String(r.department_name ?? r.name ?? "Department"),
+            companyId: r.company_id ? String(r.company_id) : undefined,
+            branchId: r.branch_id ? String(r.branch_id) : undefined,
+          }))
+          .filter((d) => d.id)
+          .sort((a, b) => a.name.localeCompare(b.name));
+      }
+    } catch {
+      /* optional */
+    }
+  }
+
+  if (!designations.length) {
+    try {
+      const desigRes = await resourceService.list("/hr/designations", {
+        page_size: 200,
+        page: 1,
+        ...(companyIdFromBranch ? { company_id: companyIdFromBranch } : {}),
+      });
+      const desigRows = normalizeList(desigRes.data).filter((r) => {
+        const status = String(r.status ?? "active").toLowerCase();
+        return !r.is_deleted && status !== "inactive" && status !== "deleted";
+      });
+      if (desigRows.length) {
+        designations = desigRows
+          .map((r) => ({
+            id: String(r.id ?? ""),
+            name: String(r.designation_name ?? r.name ?? "Designation"),
+            companyId: r.company_id ? String(r.company_id) : undefined,
+          }))
+          .filter((d) => d.id)
+          .sort((a, b) => a.name.localeCompare(b.name));
+      }
+    } catch {
+      /* optional */
+    }
+  }
+
+  return {
+    employees,
+    hrEmployees,
+    hiringManagers,
+    managers,
+    branches,
+    departments,
+    designations,
+    recruiters,
+    recruiterSource,
+    managerSource,
+  };
 }
 
 export const INDIAN_STATES = [

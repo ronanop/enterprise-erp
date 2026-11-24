@@ -27,7 +27,7 @@ const sampleRow = {
   serialNumber: "SN-1",
   manufacturer: "Dell",
   model: "XPS",
-  configuration: "Processor: Intel Core i7\nRAM: 16 GB\nStorage: 512 GB SSD",
+  configuration: "i7 16/512GB",
   chargerCode: "CHG-001",
   currentHolder: "Rohan Mehta",
   employeeId: "EMP-002",
@@ -86,12 +86,14 @@ function renderWorkspace(overrides: Partial<ComponentProps<typeof AssetInventory
 afterEach(() => cleanup());
 
 describe("AssetInventoryWorkspace", () => {
-  it("renders header and status filter dropdown", () => {
+  it("renders header and search without status preset pills", () => {
     renderWorkspace();
-    expect(screen.getByText("IT Asset Inventory")).toBeInTheDocument();
-    expect(screen.getByTestId("inventory-status-filter")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "All Assets" })).toBeInTheDocument();
+    expect(
+      screen.queryByText("Search, filter, and manage the enterprise IT asset register."),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("inventory-status-filter")).not.toBeInTheDocument();
     expect(screen.getByTestId("inventory-search-filter-row")).toBeInTheDocument();
-    expect(screen.queryByTestId("inventory-preset-tabs")).not.toBeInTheDocument();
     expect(screen.queryByTestId("inventory-filters-trigger")).not.toBeInTheDocument();
   });
 
@@ -105,13 +107,12 @@ describe("AssetInventoryWorkspace", () => {
     expect(within(table).queryByText("AST-1")).not.toBeInTheDocument();
   });
 
-  it("renders Configuration with Processor/RAM/Storage and separate Charger code", () => {
+  it("renders Configuration in compact IT style and separate Charger code", () => {
     renderWorkspace();
     const table = screen.getByTestId("inventory-table");
     const config = within(table).getByTestId("inventory-configuration-cell");
-    expect(config).toHaveTextContent("Processor: Intel Core i7");
-    expect(config).toHaveTextContent("RAM: 16 GB");
-    expect(config).toHaveTextContent("Storage: 512 GB SSD");
+    expect(config).toHaveTextContent("i7 16/512GB");
+    expect(config).not.toHaveTextContent("Processor:");
     expect(config).not.toHaveTextContent("CHG-001");
 
     const charger = within(table).getByTestId("inventory-charger-cell");
@@ -119,7 +120,7 @@ describe("AssetInventoryWorkspace", () => {
     expect(charger.textContent).toBe("CHG-001");
   });
 
-  it("keeps Charger cell completely blank when no charger code", () => {
+  it("shows an em dash in Charger when no charger code", () => {
     renderWorkspace({
       rows: [
         {
@@ -131,10 +132,7 @@ describe("AssetInventoryWorkspace", () => {
       ],
     });
     const charger = screen.getByTestId("inventory-charger-cell");
-    expect(charger.textContent).toBe("");
-    expect(charger).not.toHaveTextContent("—");
-    expect(charger).not.toHaveTextContent("No");
-    expect(charger).not.toHaveTextContent("N/A");
+    expect(charger.textContent).toBe("—");
   });
 
   it("shows the actual employee name in Assignee", () => {
@@ -144,20 +142,35 @@ describe("AssetInventoryWorkspace", () => {
     expect(assignee).not.toHaveTextContent("Assigned");
   });
 
+  it("shows an em dash in Assignee when the asset has no holder", () => {
+    renderWorkspace({
+      rows: [
+        {
+          ...sampleRow,
+          id: "3",
+          currentHolder: "",
+          employeeId: "—",
+        },
+      ],
+    });
+    expect(screen.getByTestId("inventory-assignee-cell").textContent).toBe("—");
+  });
+
   it("renders action menu in table", () => {
     renderWorkspace();
     const table = screen.getByTestId("inventory-table");
-    expect(within(table).getByRole("button", { name: /View/ })).toBeInTheDocument();
+    expect(within(table).queryByRole("button", { name: /^View$/ })).not.toBeInTheDocument();
     expect(within(table).getByRole("button", { name: "More actions" })).toBeInTheDocument();
   });
 
-  it("calls onViewRow when View clicked", async () => {
+  it("does not offer View Details or QR Code in the row menu", async () => {
     const user = userEvent.setup();
-    const onViewRow = vi.fn();
-    renderWorkspace({ onViewRow });
+    renderWorkspace();
     const table = screen.getByTestId("inventory-table");
-    await user.click(within(table).getByRole("button", { name: /View/ }));
-    expect(onViewRow).toHaveBeenCalledWith(sampleRow);
+    await user.click(within(table).getByRole("button", { name: "More actions" }));
+    expect(screen.queryByRole("menuitem", { name: "View Details" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "QR Code" })).not.toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Edit" })).toBeInTheDocument();
   });
 
   it("opens drawer when drawerOpen", () => {
@@ -189,12 +202,11 @@ describe("AssetInventoryWorkspace", () => {
     expect(within(table).getByText("No ready assets")).toBeInTheDocument();
   });
 
-  it("calls onPresetChange from the status dropdown", async () => {
-    const user = userEvent.setup();
+  it("does not expose status preset pills for onPresetChange", () => {
     const onPresetChange = vi.fn();
     renderWorkspace({ onPresetChange });
-    await user.selectOptions(screen.getByTestId("inventory-status-filter"), "disposed");
-    expect(onPresetChange).toHaveBeenCalledWith("disposed");
+    expect(screen.queryByTestId("inventory-status-filter")).not.toBeInTheDocument();
+    expect(onPresetChange).not.toHaveBeenCalled();
   });
 
   it("does not render an inline row-expand control", () => {

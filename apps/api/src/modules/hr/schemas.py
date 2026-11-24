@@ -1336,6 +1336,9 @@ class BiometricDeviceCreate(BaseModel):
     device_model: str = "fingerprint_k40_timelabs"
     ip_address: str | None = None
     port: int | None = None
+    subnet_mask: str | None = None
+    gateway: str | None = None
+    comm_password: str | None = None
     location_text: str | None = None
     status: str = "active"
     generate_api_key: bool = True
@@ -1350,6 +1353,9 @@ class BiometricDeviceResponse(OrmModel):
     device_model: str
     ip_address: str | None = None
     port: int | None = None
+    subnet_mask: str | None = None
+    gateway: str | None = None
+    comm_password: str | None = None
     location_text: str | None = None
     status: str
     version: int
@@ -1404,6 +1410,10 @@ class DeviceSyncResponse(BaseModel):
     updated: int
     skipped: int
     total: int
+
+
+class BiometricDownloadResponse(DeviceSyncResponse):
+    logs_read: int
 
 
 class ShiftRotationCreate(BaseModel):
@@ -1625,8 +1635,7 @@ class ExitAgreementResponse(OrmModel):
 
 
 class ReportSummaryResponse(BaseModel):
-    # None when the caller has module/tenant-wide list scope (all companies).
-    company_id: UUID | None = None
+    company_id: UUID
     attendance_count: int
     leave_request_count: int
     approved_leave_count: int
@@ -1761,18 +1770,18 @@ class HrAdminRecord(BaseModel):
     user_id: UUID
     login_created: bool = False
     temporary_password: str | None = None
+    email_sent: bool = False
     company_ids: list[UUID] = []
     nav_keys: list[str] = []
     nav_unrestricted: bool = True
-    # True when MODULE_ROLE_ADMIN was granted from Organization → Users
-    is_org_module_admin: bool = False
 
 
 class HrAdminPasswordResponse(BaseModel):
     employee_id: UUID
     display_name: str
     email: str
-    temporary_password: str
+    temporary_password: str | None = None
+    email_sent: bool = False
 
 
 class HrActivityLogRecord(BaseModel):
@@ -1818,6 +1827,7 @@ class LeaveAdjustRevertRequest(BaseModel):
 
 class PeopleRoleUpdate(BaseModel):
     is_hiring_manager: bool | None = None
+    is_manager: bool | None = None
     is_recruiter: bool | None = None
     is_hr: bool | None = None
     reporting_manager_id: UUID | None = None
@@ -1837,6 +1847,7 @@ class PeopleRoleResponse(BaseModel):
     reporting_manager_code: str | None = None
     reports_count: int = 0
     is_hiring_manager: bool = False
+    is_manager: bool = False
     is_recruiter: bool = False
     is_hr: bool = False
     has_login: bool = False

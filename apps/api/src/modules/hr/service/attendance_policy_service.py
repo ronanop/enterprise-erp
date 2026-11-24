@@ -43,7 +43,7 @@ class WeeklyOffPolicyService:
         self._holidays = HolidayCalendarRepository(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
-        cid = self._scope.resolve_list_company_id(ctx, company_id)
+        cid = self._scope.resolve_company_id(ctx, company_id)
         return self._repo.list_rows(ctx, cid)
 
     def get(self, ctx: TenantContext, row_id: UUID):
@@ -57,7 +57,11 @@ class WeeklyOffPolicyService:
         return self._repo.get_default(ctx, cid)
 
     def create(self, ctx: TenantContext, company_id: UUID | None = None, **fields):
-        cid = self._scope.resolve_company_id(ctx, company_id or fields.pop("company_id", None))
+        cid = self._scope.resolve_write_company_id(
+            ctx,
+            company_id=company_id or fields.pop("company_id", None),
+            branch_id=fields.pop("branch_id", None),
+        )
         rules = fields.get("rules_json") or ["sunday"]
         if not isinstance(rules, list):
             raise AppException("rules_json must be a list")
@@ -170,7 +174,7 @@ class AttendanceRuleService:
         return value
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
-        cid = self._scope.resolve_list_company_id(ctx, company_id)
+        cid = self._scope.resolve_company_id(ctx, company_id)
         return self._repo.list_rows(ctx, cid)
 
     def get(self, ctx: TenantContext, row_id: UUID):
@@ -184,7 +188,11 @@ class AttendanceRuleService:
         return self._repo.get_default(ctx, cid)
 
     def create(self, ctx: TenantContext, company_id: UUID | None = None, **fields):
-        cid = self._scope.resolve_company_id(ctx, company_id or fields.pop("company_id", None))
+        cid = self._scope.resolve_write_company_id(
+            ctx,
+            company_id=company_id or fields.pop("company_id", None),
+            branch_id=fields.pop("branch_id", None),
+        )
         fields.setdefault("rule_code", fields.pop("code", None) or "AR-001")
         name = fields.pop("name", None) or fields.get("rule_name") or "Default Attendance Rule"
         fields["rule_name"] = name

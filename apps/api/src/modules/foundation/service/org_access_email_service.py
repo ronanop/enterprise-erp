@@ -119,6 +119,32 @@ def module_display_name(module_key: str) -> str:
     return MODULE_TITLES.get(key, key.replace("-", " ").title() or "ERP")
 
 
+def modules_display_name(module_keys: list[str] | tuple[str, ...] | str | None) -> str:
+    """Single label for one or many modules (for one combined access email)."""
+    if isinstance(module_keys, str):
+        keys = [module_keys]
+    else:
+        keys = [k for k in (module_keys or []) if (k or "").strip()]
+    if not keys:
+        return "ERP"
+    if any((k or "").strip() == "*" for k in keys) or len(keys) >= len(MODULE_TITLES):
+        return "All modules"
+    names = [module_display_name(k) for k in keys]
+    # Preserve order, drop duplicates
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for name in names:
+        if name in seen:
+            continue
+        seen.add(name)
+        ordered.append(name)
+    if len(ordered) == 1:
+        return ordered[0]
+    if len(ordered) == 2:
+        return f"{ordered[0]} and {ordered[1]}"
+    return f"{', '.join(ordered[:-1])}, and {ordered[-1]}"
+
+
 def role_display_name(role: str) -> str:
     return "Admin" if role == MODULE_ROLE_ADMIN else "User"
 
@@ -182,10 +208,14 @@ class OrgAccessEmailService:
         *,
         tenant_id: UUID,
         user: SecUser,
-        module_key: str,
+        module_key: str | None = None,
+        module_keys: list[str] | None = None,
         role: str,
         created_by: UUID | None,
     ) -> bool:
+        keys = list(module_keys or [])
+        if module_key:
+            keys.append(module_key)
         return self._send(
             tenant_id=tenant_id,
             user=user,
@@ -194,7 +224,7 @@ class OrgAccessEmailService:
             payload={
                 "user_name": (user.display_name or user.email or "there").strip(),
                 "user_email": user.email,
-                "module_name": module_display_name(module_key),
+                "module_name": modules_display_name(keys),
                 "role_label": role_display_name(role),
                 "login_url": login_url(),
             },
@@ -206,11 +236,15 @@ class OrgAccessEmailService:
         *,
         tenant_id: UUID,
         user: SecUser,
-        module_key: str,
+        module_key: str | None = None,
+        module_keys: list[str] | None = None,
         role: str,
         temporary_password: str,
         created_by: UUID | None,
     ) -> bool:
+        keys = list(module_keys or [])
+        if module_key:
+            keys.append(module_key)
         return self._send(
             tenant_id=tenant_id,
             user=user,
@@ -219,7 +253,7 @@ class OrgAccessEmailService:
             payload={
                 "user_name": (user.display_name or user.email or "there").strip(),
                 "user_email": user.email,
-                "module_name": module_display_name(module_key),
+                "module_name": modules_display_name(keys),
                 "role_label": role_display_name(role),
                 "temporary_password": temporary_password or DEFAULT_TEMPORARY_PASSWORD,
                 "login_url": login_url(),

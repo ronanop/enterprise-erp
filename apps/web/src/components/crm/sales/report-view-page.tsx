@@ -17,7 +17,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { RowActionsItem, RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { cn } from "@/lib/utils";
-import { formatReportCellTitle, formatReportCellValue } from "@/lib/crm/report-amount";
+import { ReportStageAwareCell } from "@/components/crm/sales/report-stage-cell";
 import { formatApiError } from "@/services/api-client";
 import {
   cloneSavedCrmReport,
@@ -182,9 +182,8 @@ export function ReportViewPage({ reportId }: { reportId: string }) {
                       <td
                         key={col.key}
                         className="max-w-[280px] truncate px-4 py-2.5 text-muted-foreground"
-                        title={formatReportCellTitle(col.key, row[col.key])}
                       >
-                        {formatReportCellValue(col.key, row[col.key])}
+                        <ReportStageAwareCell columnKey={col.key} value={row[col.key]} />
                       </td>
                     ))}
                   </tr>

@@ -110,6 +110,9 @@ function isModuleAdminRow(row: FoundationUser): boolean {
   return !isErpAdmin(row.user_type) && (row.admin_module_keys ?? []).length > 0;
 }
 
+/** Parent Assets is assigned via IT / Non-IT submodules — hide from access tables. */
+const HIDDEN_ACCESS_MODULE_KEYS = new Set(["assets"]);
+
 function expandAdminAccessRows(users: FoundationUser[]): AccessTableRow[] {
   const seen = new Set<string>();
   const out: AccessTableRow[] = [];
@@ -123,6 +126,7 @@ function expandAdminAccessRows(users: FoundationUser[]): AccessTableRow[] {
       continue;
     }
     for (const key of keys) {
+      if (HIDDEN_ACCESS_MODULE_KEYS.has(key)) continue;
       const id = `${user.id}:${key}`;
       if (seen.has(id)) continue;
       seen.add(id);
@@ -140,6 +144,7 @@ function expandMemberAccessRows(users: FoundationUser[]): AccessTableRow[] {
       user.assigned_module_keys ?? [],
       user.admin_module_keys ?? [],
     )) {
+      if (HIDDEN_ACCESS_MODULE_KEYS.has(key)) continue;
       const id = `${user.id}:${key}`;
       if (seen.has(id)) continue;
       seen.add(id);
@@ -364,12 +369,16 @@ function AssignAccessCard({
   onError: (message: string) => void;
   cardRef: RefObject<HTMLDivElement | null>;
 }) {
-  const [moduleKey, setModuleKey] = useState("");
+  const [moduleKeys, setModuleKeys] = useState<string[]>([]);
   const [role, setRole] = useState<ModuleAccessRole>("member");
   const [jobRole, setJobRole] = useState(SERVICE_JOB_ROLES[0].value);
   const [saving, setSaving] = useState(false);
-  const allModules = moduleKey === ALL_MODULES_KEY;
+  const allModules = moduleKeys.includes(ALL_MODULES_KEY);
   const effectiveRole: ModuleAccessRole = allModules ? "admin" : role;
+  const concreteKeys = useMemo(
+    () => moduleKeys.filter((k) => k && k !== ALL_MODULES_KEY),
+    [moduleKeys],
+  );
 
   const employeeOptions = useMemo(
     () =>
@@ -380,11 +389,26 @@ function AssignAccessCard({
     [users],
   );
   const selected = users.find((u) => u.id === selectedUserId);
-  const existing = currentRole(selected, moduleKey);
-  const unchanged = existing === effectiveRole;
+  const keysNeedingGrant = useMemo(() => {
+    if (!selected || allModules) return concreteKeys;
+    return concreteKeys.filter((key) => currentRole(selected, key) !== effectiveRole);
+  }, [allModules, concreteKeys, effectiveRole, selected]);
+  const unchanged =
+    !allModules &&
+    concreteKeys.length > 0 &&
+    keysNeedingGrant.length === 0;
+
+  function modulesLabel(keys: string[]): string {
+    if (keys.length === 0) return "modules";
+    const titles = keys.map((k) => moduleTitle(k));
+    if (titles.length === 1) return titles[0];
+    if (titles.length === 2) return `${titles[0]} and ${titles[1]}`;
+    return `${titles.slice(0, -1).join(", ")}, and ${titles[titles.length - 1]}`;
+  }
 
   async function submit() {
-    if (!selected || !moduleKey || unchanged) return;
+    if (!selected || moduleKeys.length === 0) return;
+    if (!allModules && keysNeedingGrant.length === 0) return;
     setSaving(true);
     try {
       let updated: FoundationUser;
@@ -394,15 +418,18 @@ function AssignAccessCard({
       } else {
         updated = await grantModuleAccess(
           selected.id,
-          moduleKey,
+          keysNeedingGrant,
           effectiveRole,
-          moduleKey === "service" && effectiveRole === "member" ? jobRole : undefined,
+          keysNeedingGrant.includes("service") && effectiveRole === "member"
+            ? jobRole
+            : undefined,
         );
         onAssigned(
           updated,
-          `${selected.display_name} is now ${effectiveRole === "admin" ? "Admin" : "User"} of ${moduleTitle(moduleKey)}.`,
+          `${selected.display_name} is now ${effectiveRole === "admin" ? "Admin" : "User"} of ${modulesLabel(keysNeedingGrant)}.`,
         );
       }
+      setModuleKeys([]);
     } catch (err) {
       onError(formatApiError(err, "Could not update module access"));
     } finally {
@@ -447,13 +474,13 @@ function AssignAccessCard({
           />
         </FinanceField>
 
-        <FinanceField label="Module" htmlFor="assign-module" className="min-w-0">
+        <FinanceField label="Modules" htmlFor="assign-module" className="min-w-0">
           <ModuleAssignSelect
             id="assign-module"
-            value={moduleKey}
-            onChange={(key) => {
-              setModuleKey(key);
-              if (key === ALL_MODULES_KEY) setRole("admin");
+            value={moduleKeys}
+            onChange={(keys) => {
+              setModuleKeys(keys);
+              if (keys.includes(ALL_MODULES_KEY)) setRole("admin");
             }}
           />
         </FinanceField>
@@ -474,15 +501,26 @@ function AssignAccessCard({
         <Button
           type="button"
           className="h-9 cursor-pointer gap-1.5"
-          disabled={!selected || !moduleKey || saving || unchanged}
+          disabled={
+            !selected ||
+            moduleKeys.length === 0 ||
+            saving ||
+            (!allModules && unchanged)
+          }
           onClick={() => void submit()}
         >
           <UserPlus className="size-3.5" />
-          {saving ? "Saving…" : existing ? "Change role" : "Assign"}
+          {saving
+            ? "Saving…"
+            : !allModules &&
+              concreteKeys.length > 0 &&
+              keysNeedingGrant.length < concreteKeys.length
+              ? "Update access"
+              : "Assign"}
         </Button>
       </div>
 
-      {moduleKey === "service" && effectiveRole === "member" ? (
+      {concreteKeys.includes("service") && effectiveRole === "member" ? (
         <FinanceField label="Service team role" htmlFor="assign-service-role" className="mt-3 max-w-xs">
           <FinanceSelect
             id="assign-service-role"
@@ -499,13 +537,24 @@ function AssignAccessCard({
         </FinanceField>
       ) : null}
 
-      {selected && moduleKey ? (
+      {selected && moduleKeys.length > 0 ? (
         <p className="mt-3 text-xs text-muted-foreground">
-          Current access to {allModules ? "all modules" : moduleTitle(moduleKey)}:{" "}
-          <span className="font-medium text-foreground">
-            {existing === "admin" ? "Admin" : existing === "member" ? "User" : "None"}
-          </span>
-          {unchanged ? " — already has this role." : null}
+          {allModules ? (
+            <>
+              Grants <span className="font-medium text-foreground">Admin</span> on all modules
+              in one step (single welcome / access email).
+            </>
+          ) : unchanged ? (
+            <>Already has this role on {modulesLabel(concreteKeys)}.</>
+          ) : (
+            <>
+              Will assign{" "}
+              <span className="font-medium text-foreground">
+                {effectiveRole === "admin" ? "Admin" : "User"}
+              </span>{" "}
+              on {modulesLabel(keysNeedingGrant)} and send one email with those module names.
+            </>
+          )}
         </p>
       ) : null}
     </div>

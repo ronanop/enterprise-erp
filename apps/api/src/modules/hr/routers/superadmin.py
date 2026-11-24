@@ -68,15 +68,6 @@ def list_hr_admins(
     return APIResponse(message="OK", data=HrSuperadminService(db).list_admins(ctx))
 
 
-@superadmin_router.get("/org-module-admins", response_model=APIResponse[list[HrAdminRecord]])
-def list_org_hr_module_admins(
-    ctx: Annotated[TenantContext, Depends(require_hr_superadmin_access())],
-    db: Annotated[Session, Depends(get_db)],
-):
-    """Module admins assigned under Organization → Users — manage them there."""
-    return APIResponse(message="OK", data=HrSuperadminService(db).list_org_module_admins(ctx))
-
-
 @superadmin_router.get("/entities", response_model=APIResponse[list[HrAdminEntityOption]])
 def list_hr_entities(
     ctx: Annotated[TenantContext, Depends(require_hr_superadmin_access())],

@@ -406,7 +406,9 @@ class AssignmentValidator:
         )
         if pending is not None:
             raise AssignmentValidationError(
-                f"Asset already has a pending or active assignment ({pending.document_number})"
+                f"Asset already has a pending or active assignment ({pending.document_number}). "
+                f"Open that assignment and complete, return, or cancel it before issuing again. "
+                f"Operational status can still show Ready to Move until the assignment is activated."
             )
 
     def _validate_pending_transfer(self, ctx: TenantContext, asset_id: UUID) -> None:

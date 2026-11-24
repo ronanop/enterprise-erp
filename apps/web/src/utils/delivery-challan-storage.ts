@@ -55,6 +55,8 @@ export type DeliveryChallanRecord = {
   grnKind?: GrnChallanKind;
   /** Customer / cache invoice captured on billing GRNs. */
   invoiceNumber?: string;
+  /** Delivery challan this billing invoice was created from. */
+  sourceChallanId?: string;
   invoiceDate?: string;
   /** Company PO (Cache PO), when known. */
   companyPoNumber?: string;
@@ -125,6 +127,7 @@ function normalizeRecord(raw: DeliveryChallanRecord): DeliveryChallanRecord {
         : undefined,
     invoiceNumber: raw.invoiceNumber ?? "",
     invoiceDate: raw.invoiceDate ?? "",
+    sourceChallanId: (raw.sourceChallanId ?? "").trim() || undefined,
     companyPoNumber: raw.companyPoNumber ?? "",
     lines: (raw.lines || []).map((ln) => normalizeLine(ln)),
     deliveryMode: raw.deliveryMode === "RGP" ? "RGP" : "NRGP",

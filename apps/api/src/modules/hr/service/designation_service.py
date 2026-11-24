@@ -2,18 +2,15 @@
 
 from uuid import UUID
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from core.exceptions import ConflictException, NotFoundException, ValidationException
+from core.exceptions import NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.platform.compat.audit_facade import PlatformAuditFacade
 from modules.hr.models import HrDesignation
 from modules.hr.repository.designation_repository import DesignationRepository
 from modules.hr.service.engines import DesignationEngine
 from modules.hr.service.hr_scope_validator import HrScopeValidator
-
-_ALLOWED_JOB_LEVELS = frozenset({"junior", "mid", "senior", "lead", "exec"})
 
 
 class DesignationService:
@@ -22,10 +19,9 @@ class DesignationService:
         self._scope = HrScopeValidator(db)
         self._engine = DesignationEngine()
         self._audit = PlatformAuditFacade(db)
-        self._db = db
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
-        cid = self._scope.resolve_list_company_id(ctx, company_id)
+        cid = self._scope.resolve_company_id(ctx, company_id)
         return self._repo.list_rows(ctx, cid)
 
     def get(self, ctx: TenantContext, row_id: UUID) -> HrDesignation:
@@ -36,33 +32,6 @@ class DesignationService:
 
     def create(self, ctx: TenantContext, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        code = str(fields.get("designation_code") or "").strip()
-        if not code:
-            raise ValidationException("Designation code is required")
-        fields["designation_code"] = code
-
-        job_level = fields.get("job_level")
-        if job_level is not None:
-            normalized = str(job_level).strip().lower()
-            if not normalized or normalized in {"none", "null", "-"}:
-                fields["job_level"] = None
-            elif normalized not in _ALLOWED_JOB_LEVELS:
-                raise ValidationException(
-                    "Job level must be junior, mid, senior, lead, or exec"
-                )
-            else:
-                fields["job_level"] = normalized
-
-        # Unique is (company_id, designation_code) including soft-deleted rows.
-        existing = self._db.scalar(
-            select(HrDesignation.id).where(
-                HrDesignation.company_id == cid,
-                HrDesignation.designation_code == code,
-            )
-        )
-        if existing is not None:
-            raise ConflictException(f"Designation code '{code}' already exists")
-
         row = self._repo.create(ctx, company_id=cid, **fields)
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,

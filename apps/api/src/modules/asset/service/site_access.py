@@ -27,7 +27,13 @@ def ensure_site_read(ctx: TenantContext, db: Session, permission_code: str = "as
     domains = DomainMembershipService(db)
     if domains.can_access_domain(ctx, AssetDomain.IT.value) or domains.is_module_admin(ctx):
         return
-    if _has_rbac(ctx, db, permission_code) or _has_rbac(ctx, db, "asset.asset:read"):
+    # Anyone who can register/view assets needs the Location dropdown on Add/Edit.
+    if (
+        _has_rbac(ctx, db, permission_code)
+        or _has_rbac(ctx, db, "asset.asset:read")
+        or _has_rbac(ctx, db, "asset.asset:create")
+        or _has_rbac(ctx, db, "asset.asset:update")
+    ):
         return
     raise ForbiddenException(f"IT access or permission {permission_code} required")
 

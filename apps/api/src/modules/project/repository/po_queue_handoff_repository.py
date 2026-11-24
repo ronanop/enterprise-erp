@@ -56,6 +56,69 @@ class PoQueueHandoffRepository(PrjScopedRepository):
             ).all()
         )
 
+    def list_active_seed_customer_po_numbers(
+        self,
+        ctx: TenantContext,
+        company_id: UUID | None,
+        *,
+        exclude_seed_marker: str | None = None,
+    ) -> set[str]:
+        """Active seed queue PO numbers (other trackers), for upload dedupe."""
+        stmt = select(PrjPoQueueHandoff).where(
+            PrjPoQueueHandoff.tenant_id == ctx.tenant_id,
+            PrjPoQueueHandoff.is_seed.is_(True),
+            PrjPoQueueHandoff.is_deleted.is_(False),
+            PrjPoQueueHandoff.customer_po_number.isnot(None),
+        )
+        if exclude_seed_marker:
+            stmt = stmt.where(
+                (PrjPoQueueHandoff.seed_marker.is_(None))
+                | (PrjPoQueueHandoff.seed_marker != exclude_seed_marker)
+            )
+        stmt = self.apply_optional_company_filter(stmt, PrjPoQueueHandoff, company_id)
+        out: set[str] = set()
+        for row in self.db.scalars(stmt).all():
+            po = (row.customer_po_number or "").strip()
+            if po:
+                out.add(po.casefold())
+        return out
+
+    def list_by_cloud_name(
+        self,
+        ctx: TenantContext,
+        company_id: UUID | None,
+        cloud_name: str,
+        *,
+        include_deleted: bool = False,
+    ) -> list[PrjPoQueueHandoff]:
+        needle = (cloud_name or "").strip()
+        if not needle:
+            return []
+        key = needle.casefold()
+        if include_deleted:
+            # Bypass soft-delete filter so project detail can snapshot completed queue lines.
+            stmt = select(PrjPoQueueHandoff).where(
+                PrjPoQueueHandoff.tenant_id == ctx.tenant_id,
+                PrjPoQueueHandoff.is_seed.is_(True),
+                PrjPoQueueHandoff.cloud_name.isnot(None),
+            )
+            stmt = self.apply_optional_company_filter(stmt, PrjPoQueueHandoff, company_id)
+            rows = list(self.db.scalars(stmt).all())
+            return [row for row in rows if (row.cloud_name or "").strip().casefold() == key]
+
+        stmt = select(PrjPoQueueHandoff).where(
+            PrjPoQueueHandoff.is_deleted.is_(False),
+            PrjPoQueueHandoff.is_seed.is_(True),
+            PrjPoQueueHandoff.cloud_name.isnot(None),
+        )
+        stmt = self.apply_optional_company_filter(stmt, PrjPoQueueHandoff, company_id)
+        rows = list(
+            self.db.scalars(
+                self.apply_prj_filter(stmt, PrjPoQueueHandoff, ctx, branch_scoped=True)
+            ).all()
+        )
+        return [row for row in rows if (row.cloud_name or "").strip().casefold() == key]
+
     def upsert(self, ctx: TenantContext, **fields) -> PrjPoQueueHandoff:
         proc_order_id = fields.get("proc_order_id")
         if proc_order_id is not None:

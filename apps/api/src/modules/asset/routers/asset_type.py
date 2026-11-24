@@ -128,3 +128,17 @@ def reactivate_asset_type(
     row = AssetTypeService(db).reactivate(ctx, row_id)
     db.commit()
     return APIResponse(message="Reactivated", data=AssetTypeResponse(**row))
+
+
+@asset_types_router.post(
+    "/{row_id}/delete",
+    response_model=APIResponse[None],
+)
+def delete_asset_type(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_site_admin("asset.type:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    AssetTypeService(db).delete(ctx, row_id)
+    db.commit()
+    return APIResponse(message="Deleted", data=None)

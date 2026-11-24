@@ -20,6 +20,40 @@ def test_asset_registration_routes_registered() -> None:
     assert f"{base}/registration/prefill" in paths
 
 
+def test_asset_employee_directory_route_registered() -> None:
+    paths = app.openapi().get("paths", {})
+    path = "/api/v1/assets/asset-employees"
+    assert path in paths
+    assert "get" in paths[path]
+    schema = app.openapi().get("components", {}).get("schemas", {})
+    assert "AssetEmployeeDirectoryListResult" in schema
+    assert "AssetEmployeeDirectoryItem" in schema
+    props = schema["AssetEmployeeDirectoryItem"].get("properties", {})
+    for key in (
+        "id",
+        "employee_code",
+        "first_name",
+        "last_name",
+        "display_name",
+        "department_id",
+        "department_name",
+    ):
+        assert key in props
+
+
+def test_asset_department_directory_route_registered() -> None:
+    paths = app.openapi().get("paths", {})
+    path = "/api/v1/assets/asset-departments"
+    assert path in paths
+    assert "get" in paths[path]
+    schema = app.openapi().get("components", {}).get("schemas", {})
+    assert "AssetDepartmentDirectoryListResult" in schema
+    assert "AssetDepartmentDirectoryItem" in schema
+    props = schema["AssetDepartmentDirectoryItem"].get("properties", {})
+    for key in ("id", "department_code", "department_name", "status"):
+        assert key in props
+
+
 def test_asset_delete_route_requires_update_permission() -> None:
     """DELETE soft-delete is protected by asset.asset:update (same as PATCH)."""
     path = app.openapi()["paths"]["/api/v1/assets/assets/{row_id}"]["delete"]

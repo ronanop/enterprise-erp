@@ -84,6 +84,17 @@ class BiometricDeviceRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrBiometricDevice, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
 
+    def get_by_code_including_deleted(
+        self, ctx: TenantContext, company_id: UUID, device_code: str
+    ) -> HrBiometricDevice | None:
+        """Unique (company_id, device_code) is company-wide — do not branch-filter."""
+        stmt = select(HrBiometricDevice).where(
+            HrBiometricDevice.tenant_id == ctx.tenant_id,
+            HrBiometricDevice.company_id == company_id,
+            HrBiometricDevice.device_code == device_code,
+        )
+        return self.db.scalar(stmt)
+
     def create(self, ctx: TenantContext, **fields) -> HrBiometricDevice:
         row = HrBiometricDevice(
             id=uuid4(),
@@ -108,3 +119,16 @@ class BiometricDeviceRepository(HrScopedRepository):
         row.version = int(row.version or 1) + 1
         self.db.flush()
         return row
+
+    def soft_delete(self, ctx: TenantContext, row_id: UUID) -> bool:
+        row = self.get(ctx, row_id)
+        if row is None:
+            return False
+        row.is_deleted = True
+        row.deleted_at = utcnow()
+        row.deleted_by = ctx.user_id
+        row.updated_at = utcnow()
+        row.updated_by = ctx.user_id
+        row.version = int(row.version or 1) + 1
+        self.db.flush()
+        return True

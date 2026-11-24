@@ -8,7 +8,11 @@ import {
 
 export type GrnChallanStatus = "pending" | "saved";
 
-export type PendingGrnChallanSource = "grn" | "ovf_stock" | "ovf_grn_stock";
+export type PendingGrnChallanSource =
+  | "grn"
+  | "ovf_stock"
+  | "ovf_grn_stock"
+  | "po_grn_stock";
 
 export type PendingGrnChallan = {
   id: string;
@@ -29,6 +33,8 @@ export type PendingGrnChallan = {
   docDate?: string;
   /** localStorage record ID of the saved challan, for linking back. */
   savedRecordId?: string;
+  /** Delivery challan this billing row was created from. */
+  sourceChallanId?: string;
   /** GRN receipt vs OVF stock allocation (no GRN). */
   source?: PendingGrnChallanSource;
 };
@@ -70,6 +76,7 @@ function inferChallanSource(record: DeliveryChallanRecord): PendingGrnChallanSou
   const key = record.selectedGrnKeys[0] || "";
   if (key.startsWith("ovf-stock:")) return "ovf_stock";
   if (key.startsWith("ovf-grn-stock:")) return "ovf_grn_stock";
+  if (key.startsWith("po-grn-stock:")) return "po_grn_stock";
   if (record.selectedGrnNumbers.length > 0) return "grn";
   if (record.orderId && record.selectedGrnKeys.length === 0) return "ovf_grn_stock";
   return "grn";
@@ -103,6 +110,7 @@ function challanRecordToQueueRow(record: DeliveryChallanRecord): PendingGrnChall
       ? record.invoiceDate?.trim() || record.challanDate
       : record.challanDate,
     savedRecordId: record.id,
+    sourceChallanId: record.sourceChallanId,
     source,
   };
 }
@@ -239,6 +247,83 @@ export function patchPendingGrnChallan(
   writeAll(rows);
 }
 
+/** Point a billing queue row at the GRN receipt used for the My Jobs task. */
+export function rememberBillingReceiptBatch(
+  row: Pick<PendingGrnChallan, "id" | "orderId" | "batchKey" | "kind">,
+  receiptBatchId: string,
+): void {
+  const rows = readAll().map((current) => {
+    const same =
+      current.id === row.id ||
+      (current.orderId === row.orderId &&
+        current.batchKey === row.batchKey &&
+        current.kind === row.kind);
+    if (!same) return current;
+    return { ...current, batchKey: receiptBatchId };
+  });
+  writeAll(rows);
+}
+
+/** True when this delivery challan already has a billing / invoice row. */
+export function invoiceAlreadyCreatedForChallan(challan: DeliveryChallanRecord): boolean {
+  const key = `dc-invoice:${challan.id}`;
+  const summary = formatChallanItemsSummary(challan.lines)
+    .replace(/\[quote:[^\]]+\]\s*/gi, "")
+    .trim()
+    .toLowerCase();
+  const queued = listAllGrnChallansByKind("billing").some((row) => {
+    if (row.batchKey === key || row.sourceChallanId === challan.id) return true;
+    if (!summary || row.orderId !== (challan.orderId || challan.id)) return false;
+    const items = (row.itemsSummary || "")
+      .replace(/\[quote:[^\]]+\]\s*/gi, "")
+      .trim()
+      .toLowerCase();
+    return Boolean(items) && (items === summary || items.includes(summary) || summary.includes(items));
+  });
+  if (queued) return true;
+  return listDeliveryChallans().some(
+    (row) =>
+      (row.grnKind || "delivery_challan") === "billing" && row.sourceChallanId === challan.id,
+  );
+}
+
+function isDeliveryChallanNumber(value: string): boolean {
+  return /^DC\//i.test(value.trim());
+}
+
+/** Invoice number for a DC or a direct billing document. Challan numbers are not invoices. */
+export function invoiceNumberForDeliveryChallan(challan: DeliveryChallanRecord): string {
+  const own = (challan.invoiceNumber || "").trim();
+  if ((challan.grnKind || "delivery_challan") === "billing") {
+    if (own && !isDeliveryChallanNumber(own)) return own;
+    const doc = (challan.challanNumber || "").trim();
+    return doc && !isDeliveryChallanNumber(doc) ? doc : "";
+  }
+  const linked = listDeliveryChallans().find(
+    (row) =>
+      (row.grnKind || "delivery_challan") === "billing" && row.sourceChallanId === challan.id,
+  );
+  const fromLinked = (linked?.invoiceNumber || linked?.challanNumber || "").trim();
+  if (fromLinked && !isDeliveryChallanNumber(fromLinked)) return fromLinked;
+  const key = `dc-invoice:${challan.id}`;
+  const summary = formatChallanItemsSummary(challan.lines)
+    .replace(/\[quote:[^\]]+\]\s*/gi, "")
+    .trim()
+    .toLowerCase();
+  const queued = listAllGrnChallansByKind("billing").find((row) => {
+    if (row.batchKey === key || row.sourceChallanId === challan.id) return true;
+    if (!summary || row.orderId !== (challan.orderId || challan.id)) return false;
+    const items = (row.itemsSummary || "")
+      .replace(/\[quote:[^\]]+\]\s*/gi, "")
+      .trim()
+      .toLowerCase();
+    return Boolean(items) && (items === summary || items.includes(summary) || summary.includes(items));
+  });
+  const fromQueue = (queued?.docNumber || "").trim();
+  if (fromQueue && !isDeliveryChallanNumber(fromQueue)) return fromQueue;
+  return "";
+}
+
 function parseOvfIdFromBatchKey(batchKey: string): string | null {
   const stockMatch = batchKey.match(/^ovf-stock:(.+)$/);
   if (stockMatch?.[1]) return stockMatch[1];
@@ -267,6 +352,16 @@ export function pendingGrnChallanHref(row: PendingGrnChallan): string {
       returnTo: "/procurement/delivery-challan",
     });
     if (ovfId) params.set("ovfId", ovfId);
+    return `/procurement/delivery-challan/new?${params.toString()}`;
+  }
+  if (row.source === "po_grn_stock" || row.batchKey.startsWith("po-grn-stock:")) {
+    const params = new URLSearchParams({
+      source: "po_grn_stock",
+      orderId: row.orderId,
+      kind: row.kind,
+      returnTo: "/procurement/delivery-challan",
+    });
+    if (row.batchKey) params.set("batchKey", row.batchKey);
     return `/procurement/delivery-challan/new?${params.toString()}`;
   }
   const params = new URLSearchParams({

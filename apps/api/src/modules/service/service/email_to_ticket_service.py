@@ -14,7 +14,7 @@ from core.config import settings
 from core.exceptions import AppException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.models.security import SecUser
-from modules.master_data.published import CustomerRead
+from modules.master_data.models.party import MasterCustomer
 from modules.organization.models.branch import OrgBranch
 from modules.service.email_inbound_schemas import EmailToTicketResult, InboundEmailPayload
 from modules.service.models import SvcEmailIngestLog, SvcServiceCategory
@@ -66,9 +66,14 @@ class EmailToTicketService:
 
         skip_reason = skip_ticket_reason(subject=subject, from_address=from_email)
         if skip_reason:
+            skip_messages = {
+                "noise_sender": "Automated sender — no ticket created",
+                "subject_pattern_mismatch": "Subject does not match ticket patterns — no ticket created",
+                "subject_filter_required": "Subject filter required (demo mode) — no ticket created",
+            }
             return EmailToTicketResult(
                 status="skipped",
-                message="Automated sender - no ticket created",
+                message=skip_messages.get(skip_reason, f"Skipped ({skip_reason}) — no ticket created"),
             )
 
         body = (payload.body_text or "").strip()
@@ -105,6 +110,8 @@ class EmailToTicketService:
 
         try:
             parsed = parse_service_email_body(body, subject=subject)
+            extraction_meta = parsed.pop("__extraction_meta__", None)
+            log.extraction_json = extraction_meta
             # Inbound sender wins for contact email; keep parsed NOC name/phone when present
             ticket_fields = {
                 "mode_of_action": None,
@@ -121,7 +128,7 @@ class EmailToTicketService:
                 "issue_description": parsed.get("issue_description") or body[:8000],
                 "description": parsed.get("description") or body[:8000],
             }
-            for key in (
+            mail_keys = (
                 "mobile",
                 "reference_sr_number",
                 "customer_reference",
@@ -147,7 +154,9 @@ class EmailToTicketService:
                 "ip_details",
                 "mail_extra_info",
                 "company_name_from_mail",
-            ):
+                "present_type",
+            )
+            for key in mail_keys:
                 if parsed.get(key):
                     ticket_fields[key] = parsed[key]
 
@@ -161,16 +170,36 @@ class EmailToTicketService:
                 **ticket_fields,
             )
             log.request_id = ticket.id
+            self._db.flush()
             row = ticket_svc._repo.get(ctx, ticket.id)
             if row is not None:
-                # Unassigned email tickets must surface for Service Head / Manager queue.
-                ticket_svc._notify_service_heads(
-                    ctx,
-                    row,
-                    "email_ticket_created",
-                    f"New email ticket {ticket.document_number} from {from_email} - assign an engineer",
-                )
-            # Confirmation mail is optional - never block ticket creation.
+                # Notifications must never undo ticket creation (use nested try).
+                try:
+                    ticket_svc._notify_service_heads(
+                        ctx,
+                        row,
+                        "email_ticket_created",
+                        f"New email ticket {ticket.document_number} from {from_email} — assign an engineer",
+                    )
+                except Exception:
+                    pass
+                try:
+                    from modules.service.service.roster_open_reminder_service import (
+                        RosterOpenReminderService,
+                    )
+
+                    RosterOpenReminderService(self._db).notify_on_duty_roster(
+                        ctx,
+                        row,
+                        message=(
+                            f"New ticket {ticket.document_number} arrived on your shift "
+                            f"from {from_email} — open it or assign an owner"
+                        ),
+                        force=True,
+                    )
+                except Exception:
+                    pass
+            # Confirmation mail is optional — never block ticket creation.
             self._send_confirmation(from_email, contact_name, ticket.document_number, subject)
             self._db.flush()
             return EmailToTicketResult(
@@ -186,26 +215,26 @@ class EmailToTicketService:
             self._db.flush()
             raise
 
-    def _resolve_customer_and_scope(self, from_email: str) -> tuple[CustomerRead, UUID, UUID, UUID]:
+    def _resolve_customer_and_scope(self, from_email: str) -> tuple[MasterCustomer, UUID, UUID, UUID]:
         customer = self._db.scalar(
-            select(CustomerRead).where(
-                CustomerRead.is_deleted.is_(False),
-                CustomerRead.status == "active",
-                func.lower(CustomerRead.email) == from_email.lower(),
+            select(MasterCustomer).where(
+                MasterCustomer.is_deleted.is_(False),
+                MasterCustomer.status == "active",
+                func.lower(MasterCustomer.email) == from_email.lower(),
             )
         )
         if customer is None and settings.email_ticket_default_customer_id:
             customer = self._db.scalar(
-                select(CustomerRead).where(
-                    CustomerRead.id == UUID(settings.email_ticket_default_customer_id),
-                    CustomerRead.is_deleted.is_(False),
+                select(MasterCustomer).where(
+                    MasterCustomer.id == UUID(settings.email_ticket_default_customer_id),
+                    MasterCustomer.is_deleted.is_(False),
                 )
             )
         if customer is None:
             customer = self._db.scalar(
-                select(CustomerRead)
-                .where(CustomerRead.is_deleted.is_(False), CustomerRead.status == "active")
-                .order_by(CustomerRead.created_at.asc())
+                select(MasterCustomer)
+                .where(MasterCustomer.is_deleted.is_(False), MasterCustomer.status == "active")
+                .order_by(MasterCustomer.created_at.asc())
                 .limit(1)
             )
         if customer is None:
@@ -217,7 +246,7 @@ class EmailToTicketService:
         branch_id = self._resolve_branch_id(customer)
         return customer, branch_id, customer.company_id, customer.tenant_id
 
-    def _resolve_branch_id(self, customer: CustomerRead) -> UUID:
+    def _resolve_branch_id(self, customer: MasterCustomer) -> UUID:
         if settings.email_ticket_default_branch_id:
             return UUID(settings.email_ticket_default_branch_id)
         if customer.branch_id:
@@ -258,7 +287,7 @@ class EmailToTicketService:
         if host in {"", "localhost", "127.0.0.1"}:
             return
         if not settings.smtp_user and not settings.smtp_password:
-            # Host set for UI status only - skip real send until credentials are provided.
+            # Host set for UI status only — skip real send until credentials are provided.
             return
         body = (
             f"Hello {contact_name},\n\n"
@@ -266,7 +295,7 @@ class EmailToTicketService:
             f"Ticket Number: {document_number}\n"
             f"Subject: {subject}\n\n"
             f"Our team will review your request and respond shortly.\n\n"
-            f"- Support Team"
+            f"— Support Team"
         )
         try:
             send_smtp_email(

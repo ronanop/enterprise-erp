@@ -25,6 +25,13 @@ class ProcOrderReceiptBatch(Base, *ProcTransactionMixin):
         nullable=False,
         index=True,
     )
+    # Optional link to the vendor dispatch wave this GRN is for (CRM fulfillment).
+    vendor_dispatch_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("procurement.proc_vendor_dispatch.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
     grn_number: Mapped[str] = mapped_column(String(80), nullable=False)
     receipt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

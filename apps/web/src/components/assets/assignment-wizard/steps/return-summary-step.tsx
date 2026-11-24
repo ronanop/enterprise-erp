@@ -32,14 +32,7 @@ export function ReturnSummaryStep({ summary = MOCK_RETURN_SUMMARY }: ReturnSumma
           <dt className="text-xs text-muted-foreground">Allocated</dt>
           <dd>{summary.allocatedAt}</dd>
         </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Delivery ref</dt>
-          <dd>{summary.deliveryReferenceNumber}</dd>
-        </div>
       </dl>
-      <p className="text-xs text-muted-foreground">
-        {summary === MOCK_RETURN_SUMMARY ? "Demo summary — live data loads in the workflow container." : null}
-      </p>
     </div>
   );
 }

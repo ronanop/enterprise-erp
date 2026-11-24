@@ -79,3 +79,7 @@ export async function reactivateItAssetType(id: string): Promise<ItAssetType> {
   if (!res.data) throw new Error("Failed to reactivate asset type");
   return res.data;
 }
+
+export async function deleteItAssetType(id: string): Promise<void> {
+  await apiClient<null>(`${BASE}/${id}/delete`, { method: "POST" });
+}

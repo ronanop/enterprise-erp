@@ -38,13 +38,13 @@ function resolveStatusTone(application: PipelineApplication): StatusTone {
 
   switch (application.stage) {
     case "sourced":
-      return { label: "Applied", tone: "bg-[#F5F3FF] text-[#7C3AED]" };
+      return { label: "Applied", tone: "bg-primary/10 text-primary" };
     case "screening":
-      return { label: "Screening", tone: "bg-[#F5F3FF] text-[#7C3AED]" };
+      return { label: "Screening", tone: "bg-primary/10 text-primary" };
     case "interview_round_1":
     case "interview_round_2":
     case "hr_discussion":
-      return { label: "Interview", tone: "bg-[#F5F3FF] text-[#7C3AED]" };
+      return { label: "Interview", tone: "bg-primary/10 text-primary" };
     case "background_check":
       return { label: "On Hold", tone: "bg-[#FFF4E5] text-[#FF8904]" };
     case "offer_sent":
@@ -145,7 +145,7 @@ export function CandidatePipelineStatusCell({ application, onChangeStage }: Prop
                   disabled={!canChange}
                   className={cn(
                     "flex w-full cursor-pointer items-center justify-between px-2.5 py-1.5 text-left text-xs transition-colors duration-150 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50",
-                    active && "bg-[#F5F3FF] font-medium text-[#7C3AED]",
+                    active && "bg-primary/10 font-medium text-primary",
                   )}
                   onClick={() => {
                     if (s.id !== application.stage && canChange) {

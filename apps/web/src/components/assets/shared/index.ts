@@ -58,3 +58,4 @@ export {
   tableSerialHeaderClassName,
   tableSerialCellClassName,
 } from "./table-serial";
+export { formatDropdownLabel } from "./format-dropdown-label";

@@ -55,11 +55,6 @@ describe("createAssetNavigation", () => {
     nav.openQr("a1");
     expect(push).toHaveBeenCalledWith(expect.stringContaining("/assets/qr-barcode"));
 
-    nav.openTransfer("a1");
-    expect(push).toHaveBeenCalledWith(
-      expect.stringContaining("/assets/asset-transfers/new?assetId=a1"),
-    );
-
     nav.openMaintenance("a1");
     expect(push).toHaveBeenCalledWith(expect.stringContaining("/assets/asset-maintenances"));
 

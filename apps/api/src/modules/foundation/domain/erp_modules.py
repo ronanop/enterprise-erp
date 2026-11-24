@@ -18,6 +18,8 @@ ERP_MODULE_KEYS: tuple[str, ...] = (
     "recruitment",
     "projects",
     "assets",
+    "assets-it",
+    "assets-non-it",
     "service",
     "helpdesk",
     "documents",
@@ -28,6 +30,18 @@ ERP_MODULE_KEYS: tuple[str, ...] = (
     "portal",
     "marketing",
 )
+
+# Parent shell key + IT / Non-IT assignable submodules (Organization → Users).
+ASSET_MODULE_KEY = "assets"
+ASSET_IT_MODULE_KEY = "assets-it"
+ASSET_NON_IT_MODULE_KEY = "assets-non-it"
+ASSET_SUBMODULE_KEYS = frozenset({ASSET_IT_MODULE_KEY, ASSET_NON_IT_MODULE_KEY})
+ASSET_DOMAIN_BY_MODULE_KEY: dict[str, str] = {
+    ASSET_IT_MODULE_KEY: "IT",
+    ASSET_NON_IT_MODULE_KEY: "NON_IT",
+}
+# Parent is granted via sync / legacy; not offered in the Org Users module picker.
+ASSET_PARENT_HIDDEN_FROM_ASSIGN = frozenset({ASSET_MODULE_KEY})
 
 ERP_MODULE_KEY_SET = frozenset(ERP_MODULE_KEYS)
 
@@ -106,6 +120,36 @@ PERMISSION_MODULE_ALIASES: dict[str, str] = {
     "master": "master-data",
 }
 
+
+def asset_domain_for_module_key(module_key: str) -> str | None:
+    """Map assets-it / assets-non-it to IT / NON_IT domain codes."""
+    return ASSET_DOMAIN_BY_MODULE_KEY.get((module_key or "").strip().lower())
+
+
+def expand_asset_module_keys(keys: set[str], *, for_admin: bool = False) -> set[str]:
+    """Expand legacy ``assets`` and IT/Non-IT submodules for effective access.
+
+    - Legacy parent-only → both submodules (full Assets access).
+    - Member/assigned: either submodule → parent ``assets`` (shell + permission unlock).
+    - Admin: submodule admin does **not** elevate to parent admin; parent is only
+      implied when both IT and Non-IT are admin. Leftover parent+one-submodule
+      drops the parent from the effective admin set so the other domain stays closed.
+    """
+    out = {k for k in keys if k}
+    has_parent = ASSET_MODULE_KEY in out
+    has_subs = bool(out & ASSET_SUBMODULE_KEYS)
+    if has_parent and not has_subs:
+        out |= ASSET_SUBMODULE_KEYS
+    if for_admin:
+        if ASSET_SUBMODULE_KEYS.issubset(out):
+            out.add(ASSET_MODULE_KEY)
+        elif has_parent and has_subs and not ASSET_SUBMODULE_KEYS.issubset(out):
+            out.discard(ASSET_MODULE_KEY)
+        return out
+    if out & ASSET_SUBMODULE_KEYS:
+        out.add(ASSET_MODULE_KEY)
+    return out
+
 # HRMS sidebar nests Org Setup / Payroll / Hire under the `hr` module assignment.
 # Those APIs use organization.* / payroll.* / recruitment.* / master.* permission codes.
 HRMS_NESTED_MODULE_KEYS = frozenset(
@@ -139,14 +183,27 @@ def assignment_module_keys_for_permission(permission_code: str) -> list[str]:
     """``sec_user_module`` keys that unlock this permission for non-role users.
 
     Direct module key first; HRMS assignees also unlock nested workspace modules.
+    Assets Configuration → Departments manages ``organization.department:*``.
+    Asset APIs unlock for parent ``assets`` or either IT / Non-IT submodule.
     """
     key = module_key_for_permission_code(permission_code)
     if key is None:
         return []
+    keys: list[str] = [key]
     if key == "hr" or key in HRMS_NESTED_MODULE_KEYS:
         # Deduplicate while keeping stable order for tests / debugging.
-        return list(dict.fromkeys([key, "hr"]))
-    return [key]
+        keys = list(dict.fromkeys([*keys, "hr"]))
+    if key == ASSET_MODULE_KEY:
+        keys = list(
+            dict.fromkeys([*keys, ASSET_IT_MODULE_KEY, ASSET_NON_IT_MODULE_KEY])
+        )
+    if permission_code.startswith("organization.department:"):
+        keys = list(
+            dict.fromkeys(
+                [*keys, ASSET_MODULE_KEY, ASSET_IT_MODULE_KEY, ASSET_NON_IT_MODULE_KEY]
+            )
+        )
+    return keys
 
 
 def has_platform_module_access(user_type: str, role_codes: list[str] | None = None) -> bool:
@@ -182,7 +239,8 @@ def effective_module_keys(
 ) -> list[str]:
     if has_platform_module_access(user_type, role_codes):
         return list(ERP_MODULE_KEYS)
-    return sorted({k for k in assigned if k in ERP_MODULE_KEY_SET})
+    raw = {k for k in assigned if k in ERP_MODULE_KEY_SET}
+    return sorted(expand_asset_module_keys(raw, for_admin=False))
 
 
 def effective_admin_module_keys(
@@ -192,4 +250,5 @@ def effective_admin_module_keys(
 ) -> list[str]:
     if has_platform_module_access(user_type, role_codes):
         return list(ERP_MODULE_KEYS)
-    return sorted({k for k in admin_assigned if k in ERP_MODULE_KEY_SET})
+    raw = {k for k in admin_assigned if k in ERP_MODULE_KEY_SET}
+    return sorted(expand_asset_module_keys(raw, for_admin=True))

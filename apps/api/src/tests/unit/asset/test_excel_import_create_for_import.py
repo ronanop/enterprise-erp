@@ -91,10 +91,13 @@ def test_create_for_import_auto_generates_code_when_blank() -> None:
     ctx = _ctx()
     branch_id = uuid4()
     asset_id = uuid4()
+    type_id = uuid4()
     created = SimpleNamespace(id=asset_id, asset_code="AST-2026-000001")
     with (
         patch.object(svc._scope, "resolve_company_id", return_value=ctx.company_id),
         patch.object(svc._scope, "validate_branch_access"),
+        patch.object(svc, "_ensure_import_asset_type"),
+        patch.object(svc, "_apply_type_master_defaults"),
         patch.object(svc._validator, "validate_create_for_import_fields"),
         patch.object(svc._numbers, "generate", return_value="AST-2026-000001"),
         patch.object(svc._repo, "create", return_value=created) as create,
@@ -106,6 +109,7 @@ def test_create_for_import_auto_generates_code_when_blank() -> None:
             asset_code=None,
             asset_name="Laptop",
             asset_category_id=uuid4(),
+            asset_type_id=type_id,
             asset_type="fixed",
             purchase_date=date.today(),
             purchase_cost=Decimal("0"),
@@ -120,10 +124,13 @@ def test_create_for_import_persists_external_code() -> None:
     ctx = _ctx()
     branch_id = uuid4()
     asset_id = uuid4()
+    type_id = uuid4()
     created = SimpleNamespace(id=asset_id, asset_code="TAG-1")
     with (
         patch.object(svc._scope, "resolve_company_id", return_value=ctx.company_id),
         patch.object(svc._scope, "validate_branch_access"),
+        patch.object(svc, "_ensure_import_asset_type"),
+        patch.object(svc, "_apply_type_master_defaults"),
         patch.object(svc._validator, "validate_create_for_import_fields"),
         patch.object(svc._numbers, "generate", return_value="DOC-1"),
         patch.object(svc._repo, "create", return_value=created) as create,
@@ -135,6 +142,7 @@ def test_create_for_import_persists_external_code() -> None:
             asset_code=" TAG-1 ",
             asset_name="Laptop",
             asset_category_id=uuid4(),
+            asset_type_id=type_id,
             asset_type="fixed",
             purchase_date=date.today(),
             purchase_cost=Decimal("0"),
@@ -172,6 +180,51 @@ def test_create_strips_asset_code_still() -> None:
             currency_code="USD",
         )
     assert create.call_args.kwargs["asset_code"] == "DOC-9"
+
+
+def test_ensure_import_asset_type_remaps_wrong_company_id_by_name() -> None:
+    """Excel may send another company's type id; remap via asset_name for row company."""
+    svc = AssetService(MagicMock())
+    ctx = _ctx()
+    company_id = ctx.company_id
+    wrong_type_id = uuid4()
+    correct_type_id = uuid4()
+    other_company = uuid4()
+    fields = {
+        "asset_type_id": wrong_type_id,
+        "asset_name": "Laptop",
+    }
+    wrong_row = SimpleNamespace(
+        id=wrong_type_id, company_id=other_company, active=True, name="Laptop"
+    )
+    correct_row = SimpleNamespace(
+        id=correct_type_id, company_id=company_id, active=True, name="Laptop"
+    )
+    with (
+        patch(
+            "modules.asset.service.asset_type_service.AssetTypeService.ensure_defaults"
+        ),
+        patch.object(svc._types, "get", return_value=wrong_row),
+        patch.object(svc._types, "get_by_name", return_value=correct_row) as by_name,
+    ):
+        svc._ensure_import_asset_type(ctx, company_id, fields)
+    assert fields["asset_type_id"] == correct_type_id
+    by_name.assert_called_once_with(ctx, company_id, "Laptop")
+
+
+def test_ensure_import_asset_type_raises_when_missing() -> None:
+    svc = AssetService(MagicMock())
+    ctx = _ctx()
+    fields = {"asset_type_id": uuid4(), "asset_name": "Laptop"}
+    with (
+        patch(
+            "modules.asset.service.asset_type_service.AssetTypeService.ensure_defaults"
+        ),
+        patch.object(svc._types, "get", return_value=None),
+        patch.object(svc._types, "get_by_name", return_value=None),
+        pytest.raises(RegistrationValidationError, match="Asset type not found"),
+    ):
+        svc._ensure_import_asset_type(ctx, ctx.company_id, fields)
 
 
 def test_find_by_asset_code_delegates() -> None:

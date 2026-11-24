@@ -387,8 +387,9 @@ export function OvfTimelineDetailPage({ ovfId }: { ovfId: string }) {
           <div className="min-w-0 flex-1">
             <h2 className="text-sm font-semibold tracking-tight text-foreground">Procurement timeline</h2>
             <p className="text-xs text-muted-foreground">
-              Shared to SCM, vendor PO, GRN receipt, delivery challan, dispatch, delivery outcome,
-              and billing steps with actor and timestamp. Auto-refreshes every 15s.
+              Shared to SCM, vendor PO, mail sent to the vendor or customer, GRN receipt,
+              delivery challan, dispatch, delivery outcome, and billing steps with actor and
+              timestamp. Auto-refreshes every 15s.
             </p>
           </div>
           {data ? <StatusBadge status={timelineStatus} /> : null}

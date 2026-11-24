@@ -142,9 +142,29 @@ class HrmsUserSyncResultResponse(BaseModel):
 
 
 class ModuleAccessRequest(BaseModel):
-    module_key: str = Field(min_length=1, max_length=50)
+    """Grant Admin/User on one or more modules.
+
+    Prefer ``module_keys`` for multi-select (one email). ``module_key`` remains for
+    single-module callers.
+    """
+
+    module_key: str | None = Field(default=None, max_length=50)
+    module_keys: list[str] = Field(default_factory=list)
     role: Literal["admin", "member"]
     service_job_role: str | None = None
+
+    def resolved_module_keys(self) -> list[str]:
+        ordered: list[str] = []
+        seen: set[str] = set()
+        for raw in [*(self.module_keys or []), self.module_key or ""]:
+            key = (raw or "").strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            ordered.append(key)
+        if not ordered:
+            raise ValueError("At least one module_key is required")
+        return ordered
 
 
 class ModuleUserOption(BaseModel):
@@ -272,6 +292,14 @@ class NotificationSendRequest(BaseModel):
     payload_json: dict | None = None
 
 
+class EmailAttachmentPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    filename: str = Field(min_length=1, max_length=255)
+    content_base64: str = Field(min_length=1, max_length=8_000_000)
+    content_type: str = Field(default="application/octet-stream", max_length=120)
+
+
 class EmailComposeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -286,6 +314,8 @@ class EmailComposeRequest(BaseModel):
     )
     template_id: UUID | None = None
     payload_json: dict | None = None
+    # BG-check packs often include resume + portal docs (Aadhaar/PAN/etc.).
+    attachments: list[EmailAttachmentPayload] = Field(default_factory=list, max_length=10)
 
 
 class DeviceTokenRegisterRequest(BaseModel):

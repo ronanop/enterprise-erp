@@ -5,7 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import NotFoundException
+from core.exceptions import NotFoundException, ValidationException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.platform.compat.audit_facade import PlatformAuditFacade
 from modules.hr.adapters.master_data_port import HrMasterDataAdapter
@@ -25,7 +25,7 @@ class ShiftService:
         self._engine = ShiftEngine()
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
-        cid = self._scope.resolve_list_company_id(ctx, company_id)
+        cid = self._scope.resolve_company_id(ctx, company_id)
         return self._repo.list_rows(ctx, cid)
 
     def get(self, ctx: TenantContext, row_id: UUID):
@@ -35,7 +35,16 @@ class ShiftService:
         return row
 
     def create(self, ctx: TenantContext, company_id: UUID | None = None, **fields):
-        cid = self._scope.resolve_company_id(ctx, company_id)
+        # Module-wide HR admins resolve list company_id as None — creates must use
+        # branch.company_id (or an explicit/session company) so NOT NULL is satisfied.
+        branch_id = fields.get("branch_id")
+        if branch_id is None and company_id is None:
+            raise ValidationException(
+                "Company is required. Select a branch that belongs to a company and try again."
+            )
+        cid = self._scope.resolve_write_company_id(
+            ctx, company_id=company_id, branch_id=branch_id
+        )
         return self._repo.create(ctx, company_id=cid, **fields)
 
     def update(self, ctx: TenantContext, row_id: UUID, **fields):
@@ -58,7 +67,7 @@ class ShiftAssignmentService:
         self._audit = PlatformAuditFacade(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
-        cid = self._scope.resolve_list_company_id(ctx, company_id)
+        cid = self._scope.resolve_company_id(ctx, company_id)
         return self._repo.list_rows(ctx, cid)
 
     def get(self, ctx: TenantContext, row_id: UUID):
@@ -92,13 +101,19 @@ class ShiftAssignmentService:
         company_id: UUID | None = None,
         **fields,
     ):
-        cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
+        cid = self._scope.resolve_create_company_id(
+            ctx, branch_id=branch_id, company_id=company_id
+        )
         self._master.get_employee(ctx, employee_id)
         if self._shifts.get(ctx, shift_id) is None:
             raise NotFoundException("Shift not found")
         doc = self._numbers.generate(
-            HrEntityType.SHIFT_ASSIGNMENT, cid, HrShiftAssignment, "document_number"
+            HrEntityType.SHIFT_ASSIGNMENT,
+            cid,
+            HrShiftAssignment,
+            "document_number",
+            tenant_id=ctx.tenant_id,
         )
         return self._repo.create(
             ctx,
@@ -120,6 +135,7 @@ class ShiftAssignmentService:
     def approve(self, ctx: TenantContext, row_id: UUID):
         row = self.get(ctx, row_id)
         self._engine.approve(row)
+        self._engine.activate(row)
         updated = self._repo.update(ctx, row_id, status=row.status)
         try:
             from modules.hr.service.hr_notify import notify_employee

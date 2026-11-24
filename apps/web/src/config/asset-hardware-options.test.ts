@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildConfigurationString,
+  formatCompactConfigurationDisplay,
   parseConfigurationString,
 } from "@/config/asset-hardware-options";
 
@@ -73,5 +74,29 @@ describe("parseConfigurationString", () => {
       ram: "32 GB",
       storage: "1 TB",
     });
+  });
+});
+
+describe("formatCompactConfigurationDisplay", () => {
+  it("formats labeled Add Asset configuration as compact IT style", () => {
+    expect(
+      formatCompactConfigurationDisplay(
+        "Processor: Intel i5; Generation: 10th; RAM: 16 GB; Storage: 512 GB",
+      ),
+    ).toBe("i5 10th GEN 16/512GB");
+  });
+
+  it("formats Apple configs without generation", () => {
+    expect(
+      formatCompactConfigurationDisplay(
+        "Processor: Apple M1; RAM: 16 GB; Storage: 512 GB",
+      ),
+    ).toBe("M1 16/512GB");
+  });
+
+  it("keeps already-compact strings stable", () => {
+    expect(formatCompactConfigurationDisplay("i5 10th GEN 16/512GB")).toBe(
+      "i5 10th GEN 16/512GB",
+    );
   });
 });

@@ -115,8 +115,9 @@ describe("normalizeOperationalStatus", () => {
   it("accepts enum", () => {
     expect(normalizeOperationalStatus("READY_TO_MOVE")).toBe("READY_TO_MOVE");
   });
-  it("accepts Ready to Move", () => {
+  it("accepts Ready to Move and In Stock aliases", () => {
     expect(normalizeOperationalStatus("Ready to Move")).toBe("READY_TO_MOVE");
+    expect(normalizeOperationalStatus("In Stock")).toBe("READY_TO_MOVE");
   });
   it("accepts In Maintenance aliases", () => {
     expect(normalizeOperationalStatus("In Maintenance")).toBe("IN_MAINTENANCE");

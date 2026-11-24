@@ -42,7 +42,6 @@ CLOUD_UNLOCKING = frozenset({"approve_cloud_discount", "reject_cloud_discount"})
 HARDWARE_PIPELINE_ACTIONS = frozenset(
     {
         "deal_reg",
-        "oem_received",
         "attach_po",
         "send_po_approval",
         "attach_boq",

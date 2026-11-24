@@ -164,9 +164,6 @@ export function ItAssetDisposeDialog({ open, asset, onCancel, onDisposed }: Prop
               onChange={(e) => setDisposalDate(e.target.value)}
               className="cursor-pointer"
             />
-            <p className="text-xs text-muted-foreground">
-              Defaults to today. Change only when recording a past disposal.
-            </p>
           </div>
         </div>
 

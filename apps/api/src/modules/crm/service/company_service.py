@@ -82,10 +82,17 @@ class CompanyService:
         return self._numbers.generate(CrmEntityType.COMPANY, cid, CrmCompany, "account_number")
 
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields) -> CrmCompany:
+        from modules.crm.service.crm_settings_service import CrmSettingsService
+
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
         code = self._numbers.generate(CrmEntityType.COMPANY, cid, CrmCompany, "account_number")
         fields.setdefault("status", "active")
+        if "custom_fields" in fields:
+            effective = CrmSettingsService(self._db).get_effective(ctx, require_erp_admin=False)
+            fields["custom_fields"] = CrmSettingsService.sanitize_custom_fields(
+                effective, "company", fields.get("custom_fields")
+            )
         fields = self._assert_safe_fields(fields)
         row = self._repo.create(ctx, company_id=cid, branch_id=branch_id, account_number=code, **fields)
         self._audit.log_entity_change(
@@ -98,9 +105,16 @@ class CompanyService:
         return row
 
     def update(self, ctx: TenantContext, row_id: UUID, **fields) -> CrmCompany:
+        from modules.crm.service.crm_settings_service import CrmSettingsService
+
         existing = self.get(ctx, row_id)
         if existing.locked:
             raise ConflictException("Company account is locked pending approval")
+        if "custom_fields" in fields:
+            effective = CrmSettingsService(self._db).get_effective(ctx, require_erp_admin=False)
+            fields["custom_fields"] = CrmSettingsService.sanitize_custom_fields(
+                effective, "company", fields.get("custom_fields")
+            )
         fields = self._assert_safe_fields(fields)
         row = self._repo.update(ctx, row_id, **fields)
         if row is None:
@@ -201,6 +215,14 @@ class CompanyService:
         if not oem_name:
             raise AppException("OEM name is required")
         lead_fields["oem_name"] = oem_name
+
+        if "custom_fields" in lead_fields:
+            from modules.crm.service.crm_settings_service import CrmSettingsService
+
+            effective = CrmSettingsService(self._db).get_effective(ctx, require_erp_admin=False)
+            lead_fields["custom_fields"] = CrmSettingsService.sanitize_custom_fields(
+                effective, "lead", lead_fields.get("custom_fields")
+            )
 
         return LeadService(self._db).create(
             ctx,

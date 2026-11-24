@@ -1,5 +1,6 @@
 """Asset maintenance work-order validation rules for FP-ASSET-004."""
 
+from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -73,36 +74,67 @@ class MaintenanceValidator:
         row: AstAssetMaintenance,
         fields: dict,
     ) -> None:
-        if row.status != AssetMaintenanceStatus.DRAFT.value:
-            raise MaintenanceValidationError("Only draft maintenance can be updated")
         if "asset_id" in fields and fields["asset_id"] != row.asset_id:
             raise MaintenanceValidationError("asset_id cannot be changed")
         if "document_number" in fields:
             raise MaintenanceValidationError("document_number cannot be changed")
-        merged = {
-            "maintenance_type": fields.get("maintenance_type", row.maintenance_type),
-            "vendor_id": fields.get("vendor_id", row.vendor_id),
-            "technician_employee_id": fields.get(
-                "technician_employee_id", row.technician_employee_id
-            ),
-            "maintenance_plan_id": fields.get("maintenance_plan_id", row.maintenance_plan_id),
-            "scheduled_date": fields.get("scheduled_date", row.scheduled_date),
-            "cost_amount": fields.get("cost_amount", row.cost_amount),
-            "reason": fields.get("reason", row.reason),
-            "expected_duration_days": fields.get(
-                "expected_duration_days", row.expected_duration_days
-            ),
-        }
-        asset = self._assets.get(ctx, row.asset_id)
-        if asset is None:
-            raise NotFoundException("Asset not found")
-        self._validate_asset_is_serviceable(asset.status)
-        self._validate_operational_allows_maintenance(
-            getattr(asset, "operational_status", None)
+
+        service_detail_keys = frozenset(
+            {"vendor_id", "cost_amount", "technician_employee_id"}
         )
-        self._validate_no_open_assignment(ctx, row.asset_id)
-        self._validate_type_and_refs(ctx, merged, asset_id=row.asset_id)
-        self._validate_open_work_order(ctx, row.asset_id, exclude_id=row.id)
+        mutable_keys = set(fields.keys()) - {"version"}
+        structural_keys = mutable_keys - service_detail_keys
+
+        if row.status == AssetMaintenanceStatus.DRAFT.value:
+            merged = {
+                "maintenance_type": fields.get("maintenance_type", row.maintenance_type),
+                "vendor_id": fields.get("vendor_id", row.vendor_id),
+                "technician_employee_id": fields.get(
+                    "technician_employee_id", row.technician_employee_id
+                ),
+                "maintenance_plan_id": fields.get(
+                    "maintenance_plan_id", row.maintenance_plan_id
+                ),
+                "scheduled_date": fields.get("scheduled_date", row.scheduled_date),
+                "cost_amount": fields.get("cost_amount", row.cost_amount),
+                "reason": fields.get("reason", row.reason),
+                "expected_duration_days": fields.get(
+                    "expected_duration_days", row.expected_duration_days
+                ),
+            }
+            asset = self._assets.get(ctx, row.asset_id)
+            if asset is None:
+                raise NotFoundException("Asset not found")
+            self._validate_asset_is_serviceable(asset.status)
+            self._validate_operational_allows_maintenance(
+                getattr(asset, "operational_status", None)
+            )
+            self._validate_no_open_assignment(ctx, row.asset_id)
+            self._validate_type_and_refs(ctx, merged, asset_id=row.asset_id)
+            self._validate_open_work_order(ctx, row.asset_id, exclude_id=row.id)
+            self._validate_cost_amount(merged.get("cost_amount"))
+            return
+
+        if row.status not in OPEN_STATUSES:
+            raise MaintenanceValidationError(
+                "Completed or cancelled maintenance cannot be updated"
+            )
+        if structural_keys:
+            raise MaintenanceValidationError(
+                "Only cost, technician, and vendor can be updated after the work order leaves draft"
+            )
+        if not mutable_keys:
+            raise MaintenanceValidationError("No updatable fields provided")
+        self._validate_cost_amount(
+            fields["cost_amount"] if "cost_amount" in fields else row.cost_amount
+        )
+        if "vendor_id" in fields and fields["vendor_id"] is not None:
+            self._master.get_vendor(ctx, fields["vendor_id"])
+        if (
+            "technician_employee_id" in fields
+            and fields["technician_employee_id"] is not None
+        ):
+            self._master.get_employee(ctx, fields["technician_employee_id"])
 
     def validate_submit_readiness(self, ctx: TenantContext, row: AstAssetMaintenance) -> None:
         if row.status != AssetMaintenanceStatus.DRAFT.value:
@@ -204,6 +236,16 @@ class MaintenanceValidator:
                 asset_id=asset_id,
                 maintenance_plan_id=maintenance_plan_id,
             )
+
+    def _validate_cost_amount(self, cost_amount) -> None:
+        if cost_amount is None:
+            return
+        try:
+            amount = Decimal(str(cost_amount))
+        except (InvalidOperation, ValueError, TypeError) as exc:
+            raise MaintenanceValidationError("cost_amount must be a number") from exc
+        if amount < 0:
+            raise MaintenanceValidationError("cost_amount cannot be negative")
 
     def _validate_open_work_order(
         self,

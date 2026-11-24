@@ -1,5 +1,8 @@
 """CRM document numbering."""
 
+from __future__ import annotations
+
+import re
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -9,6 +12,36 @@ from sqlalchemy.orm import Session
 from modules.crm.domain.enums import CODE_PREFIXES, CrmEntityType
 from modules.crm.repository.code_sequence_repository import CodeSequenceRepository
 from modules.platform.helpers.ssot_numbering import generate_with_ssot
+
+# Legacy: DR-2026-12. New: XX-2026-12 from Cache legal entity initials.
+_DEAL_REG_NUMBER_RE = re.compile(r"^[A-Z]{2}-\d{4}-\d+$")
+
+
+def deal_reg_prefix_from_entity_name(entity_name: str | None) -> str:
+    """Build a 2-letter DR prefix from the Cache legal entity name.
+
+    Uses the first letter of the first two words when available
+    (``Cache Digitech`` → ``CD``, ``Cache Technologies`` → ``CT``);
+    otherwise the first two letters of the name. Falls back to ``DR``.
+    """
+    words = re.findall(r"[A-Za-z0-9]+", (entity_name or "").strip())
+    if len(words) >= 2:
+        return f"{words[0][0]}{words[1][0]}".upper()
+    if len(words) == 1:
+        letters = re.sub(r"[^A-Za-z]", "", words[0]).upper()
+        if len(letters) >= 2:
+            return letters[:2]
+        if len(letters) == 1:
+            return f"{letters}X"
+    return "DR"
+
+
+def is_deal_reg_number(code: str | None) -> bool:
+    """True for legacy ``DR-YYYY-N`` and entity-prefix ``XX-YYYY-N`` deal numbers."""
+    value = (code or "").strip().upper()
+    if not value:
+        return False
+    return bool(_DEAL_REG_NUMBER_RE.match(value))
 
 
 class DocumentNumberService:
@@ -53,13 +86,25 @@ class DocumentNumberService:
             return self.generate(entity, company_id, model, code_column)
         return self._seq.next_child_code(dr, tag, company_id, model, code_column)
 
-    def next_deal_reg_number(self, company_id: UUID) -> str:
-        """One DR series shared by leads and opportunities (DR-YYYY-N)."""
+    def next_deal_reg_number(
+        self,
+        company_id: UUID,
+        *,
+        entity_name: str | None = None,
+    ) -> str:
+        """Deal number shared by leads and opportunities: ``{ENTITY2}-{YYYY}-{N}``.
+
+        ``ENTITY2`` is derived from the Cache legal entity name (see
+        :func:`deal_reg_prefix_from_entity_name`). Legacy ``DR-YYYY-N`` numbers
+        remain valid for existing records.
+        """
         from modules.crm.models import CrmLead, CrmOpportunity
 
-        prefix, width = CODE_PREFIXES[CrmEntityType.DEAL_REG]
+        _, width = CODE_PREFIXES[CrmEntityType.DEAL_REG]
+        entity_prefix = deal_reg_prefix_from_entity_name(entity_name)
         year = datetime.now(timezone.utc).year
-        full_prefix = f"{prefix}{year}-"
+        full_prefix = f"{entity_prefix}-{year}-"
+
         existing: list[str] = []
         for model, column in (
             (CrmLead, CrmLead.dr_number),

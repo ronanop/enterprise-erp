@@ -84,7 +84,7 @@ class HrEssInboxService:
         company_id: UUID | None = None,
         include_decided_days: int = 14,
     ) -> list[HrEssInboxItemResponse]:
-        cid = self._scope.resolve_list_company_id(ctx, company_id)
+        cid = self._scope.resolve_company_id(ctx, company_id)
         cutoff = datetime.now(timezone.utc) - timedelta(days=include_decided_days)
         items: list[HrEssInboxItemResponse] = []
 

@@ -6,7 +6,6 @@ import {
   Download,
   FileText,
   List,
-  Plus,
   Scale,
   UserRound,
 } from "lucide-react";
@@ -17,7 +16,6 @@ import {
 import {
   AttendanceCorrectionDrawer,
 } from "@/components/hr/attendance/attendance-import-correction";
-import { MarkAttendanceDrawer } from "@/components/hr/attendance/mark-attendance-drawer";
 import { EmployeeAttendanceExplorer } from "@/components/hr/attendance/employee-attendance-explorer";
 import { LeaveAdjustPanel } from "@/components/hr/attendance/leave-adjust-panel";
 import {
@@ -35,7 +33,7 @@ import { EmsPagination, EmsSkeleton } from "@/components/hr/workforce/ems-primit
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { isAuthenticated } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import {
@@ -43,6 +41,7 @@ import {
   computeDashboardStats,
   exportAttendanceCsv,
   filterAttendanceRecords,
+  impliedAbsentRecords,
   loadAttendanceDirectory,
   todayIso,
   downloadTextFile,
@@ -70,7 +69,14 @@ const STAT_LABELS: Record<AttendanceStatBucket, string> = {
   late: "Late Arrivals",
 };
 
+function viewFromTab(tab: string | null): ViewMode {
+  if (tab === "employee" || tab === "calendar" || tab === "leave-adjust") return tab;
+  return "table";
+}
+
 export function AttendanceManagementPage() {
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
   const employeeParam = searchParams.get("employeeId") || "";
@@ -80,11 +86,8 @@ export function AttendanceManagementPage() {
   const [filters, setFilters] = useState<AttendanceFilters>(() => emptyAttendanceFilters(todayIso()));
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [view, setView] = useState<ViewMode>(() =>
-    tabParam === "leave-adjust" ? "leave-adjust" : "employee",
-  );
+  const [view, setView] = useState<ViewMode>(() => viewFromTab(tabParam));
   const [statsBucket, setStatsBucket] = useState<AttendanceStatBucket | null>(null);
-  const [markOpen, setMarkOpen] = useState(false);
   const [correctionRecord, setCorrectionRecord] = useState<AttendanceRecord | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
   const [dayDetail, setDayDetail] = useState<{ date: string; rows: AttendanceRecord[] } | null>(null);
@@ -108,8 +111,20 @@ export function AttendanceManagementPage() {
   }, [load]);
 
   useEffect(() => {
-    if (tabParam === "leave-adjust") setView("leave-adjust");
+    const next = viewFromTab(tabParam);
+    setView(next);
+    if (next === "table") setDetailRecord(null);
   }, [tabParam]);
+
+  function openView(next: ViewMode) {
+    setView(next);
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === "table") params.set("tab", "list");
+    else params.set("tab", next);
+    if (next !== "leave-adjust") params.delete("employeeId");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
 
   const records = directory?.records ?? [];
   const today = todayIso();
@@ -127,13 +142,42 @@ export function AttendanceManagementPage() {
       },
       null,
     );
-    return computeDashboardStats(orgScoped, today);
-  }, [records, filters, today]);
+    return computeDashboardStats(
+      orgScoped,
+      today,
+      directory?.options.employees ?? [],
+      {
+        departmentId: filters.departmentId,
+        employeeId: filters.employeeId,
+        designation: filters.designation,
+      },
+    );
+  }, [records, filters, today, directory?.options.employees]);
 
-  const filtered = useMemo(
-    () => filterAttendanceRecords(records, query, filters, statsBucket),
-    [records, query, filters, statsBucket],
-  );
+  const filtered = useMemo(() => {
+    if (statsBucket === "absent") {
+      const absents = impliedAbsentRecords(
+        records,
+        today,
+        directory?.options.employees ?? [],
+        filters,
+      );
+      const q = query.trim().toLowerCase();
+      if (!q) return absents;
+      return absents.filter((r) => {
+        const hay = [
+          r.extension.employeeName,
+          r.extension.employeeCode,
+          r.extension.departmentName,
+          r.status,
+        ]
+          .join(" ")
+          .toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    return filterAttendanceRecords(records, query, filters, statsBucket);
+  }, [records, query, filters, statsBucket, today, directory?.options.employees]);
   const calendarFiltered = useMemo(
     () =>
       filterAttendanceRecords(
@@ -158,10 +202,10 @@ export function AttendanceManagementPage() {
   useEffect(() => {
     if (view !== "table") return;
     setDetailRecord((cur) => {
-      if (cur && pageRows.some((r) => r.id === cur.id)) return cur;
-      return pageRows[0] ?? null;
+      if (!cur) return null;
+      return filtered.some((r) => r.id === cur.id) ? cur : null;
     });
-  }, [view, pageRows]);
+  }, [view, filtered]);
 
   const selectedRows = useMemo(
     () => records.filter((r) => selected.has(r.id)),
@@ -173,7 +217,7 @@ export function AttendanceManagementPage() {
   function selectStatCard(bucket: AttendanceStatBucket) {
     const next = statsBucket === bucket ? null : bucket;
     setStatsBucket(next);
-    setView("table");
+    openView("table");
     if (next) {
       setFilters((f) => ({
         ...f,
@@ -204,12 +248,6 @@ export function AttendanceManagementPage() {
         title="Attendance Management"
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
-            {view !== "leave-adjust" ? (
-            <Button size="sm" className="cursor-pointer" onClick={() => setMarkOpen(true)}>
-              <Plus className="size-3.5" />
-              Mark Attendance
-            </Button>
-            ) : null}
             <Button
               size="sm"
               variant="outline"
@@ -287,7 +325,7 @@ export function AttendanceManagementPage() {
               ] satisfies HrTabItem[]
             }
             value={view}
-            onChange={(id) => setView(id as typeof view)}
+            onChange={(id) => openView(id as ViewMode)}
           />
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -474,12 +512,7 @@ export function AttendanceManagementPage() {
                 {!pageRows.length ? (
                   <HrEmptyState
                     title="No attendance records"
-                    description="Mark Attendance or import a CSV to populate the register."
-                    action={
-                      <Button size="sm" className="cursor-pointer" onClick={() => setMarkOpen(true)}>
-                        Mark Attendance
-                      </Button>
-                    }
+                    description="Import a CSV or wait for biometric punches to populate the register."
                   />
                 ) : (
                   <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row">
@@ -538,9 +571,16 @@ export function AttendanceManagementPage() {
                                 <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
                                   <input
                                     type="checkbox"
-                                    className="cursor-pointer"
+                                    className="cursor-pointer disabled:cursor-not-allowed"
+                                    disabled={row.recordStatus === "implied"}
+                                    title={
+                                      row.recordStatus === "implied"
+                                        ? "No punch recorded — mark attendance to create a row"
+                                        : undefined
+                                    }
                                     checked={selected.has(row.id)}
                                     onChange={() => {
+                                      if (row.recordStatus === "implied") return;
                                       setSelected((prev) => {
                                         const next = new Set(prev);
                                         if (next.has(row.id)) next.delete(row.id);
@@ -588,13 +628,16 @@ export function AttendanceManagementPage() {
                       </div>
                       <EmsPagination page={page} pageSize={PAGE_SIZE} total={filtered.length} onPageChange={setPage} />
                     </div>
-                    <aside className="flex w-full shrink-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm lg:w-[22rem]">
-                      <AttendanceRecordAside
-                        record={detailRecord}
-                        formatTime={formatTime}
-                        onCorrect={() => detailRecord && setCorrectionRecord(detailRecord)}
-                      />
-                    </aside>
+                    {detailRecord ? (
+                      <aside className="flex w-full shrink-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm lg:w-[22rem]">
+                        <AttendanceRecordAside
+                          record={detailRecord}
+                          formatTime={formatTime}
+                          onCorrect={() => setCorrectionRecord(detailRecord)}
+                          onClose={() => setDetailRecord(null)}
+                        />
+                      </aside>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -604,12 +647,6 @@ export function AttendanceManagementPage() {
         </>
       )}
 
-      <MarkAttendanceDrawer
-        open={markOpen}
-        directory={directory}
-        onClose={() => setMarkOpen(false)}
-        onSaved={() => void load()}
-      />
       <AttendanceCorrectionDrawer
         open={Boolean(correctionRecord)}
         record={correctionRecord}
@@ -645,24 +682,28 @@ function AttendanceRecordAside({
   record,
   formatTime,
   onCorrect,
+  onClose,
 }: {
-  record: AttendanceRecord | null;
+  record: AttendanceRecord;
   formatTime: (iso: string) => string;
   onCorrect: () => void;
+  onClose: () => void;
 }) {
-  if (!record) {
-    return (
-      <div className="flex min-h-0 flex-1 items-center justify-center p-4">
-        <p className="text-center text-xs text-muted-foreground">Select a row to see details.</p>
-      </div>
-    );
-  }
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="shrink-0 border-b border-border/60 px-3 py-2">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Record</p>
-        <p className="truncate text-sm font-medium">{record.extension.employeeName}</p>
-        <p className="font-mono text-[11px] text-muted-foreground">{record.extension.employeeCode}</p>
+      <div className="flex shrink-0 items-start justify-between gap-2 border-b border-border/60 px-3 py-2">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Record</p>
+          <p className="truncate text-sm font-medium">{record.extension.employeeName}</p>
+          <p className="font-mono text-[11px] text-muted-foreground">{record.extension.employeeCode}</p>
+        </div>
+        <button
+          type="button"
+          className="cursor-pointer rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          onClick={onClose}
+        >
+          Close
+        </button>
       </div>
       <div className="erp-scroll min-h-0 flex-1 space-y-2 overflow-auto p-3 text-xs">
         <p><span className="text-muted-foreground">Date </span>{record.attendanceDate}</p>

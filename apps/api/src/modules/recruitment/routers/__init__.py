@@ -3,18 +3,27 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from database.session import get_db
+from core.exceptions import NotFoundException, ValidationException
 from modules.foundation.dependencies import require_permission
 from modules.foundation.domain.value_objects import TenantContext
+from modules.recruitment.adapters.hr_port import RecruitmentHrAdapter
+from modules.recruitment.adapters.organization_port import RecruitmentOrganizationAdapter
 from modules.recruitment.dependencies import (
     PaginationParams,
     extract_update_fields,
+    get_db,
     get_pagination,
     paginate,
 )
+from modules.recruitment.models import RecRecruitmentSource, RecResume
 from modules.recruitment.schemas import (
     ApplicationAdvanceRequest,
     ApplicationBackOutRequest,
@@ -47,6 +56,8 @@ from modules.recruitment.schemas import (
     JobPostingCreate,
     JobPostingResponse,
     JobPostingUpdate,
+    JobFormLookupOption,
+    JobFormLookupsResponse,
     JobRequisitionCreate,
     JobRequisitionResponse,
     JobRequisitionUpdate,
@@ -82,6 +93,7 @@ from modules.recruitment.schemas import (
     TalentPoolResponse,
     TalentPoolUpdate,
 )
+from modules.recruitment.service.public_bg_check_service import PublicBgCheckService
 from modules.recruitment.service import (
     ApplicationService,
     ApplicationStageService,
@@ -106,6 +118,7 @@ from modules.recruitment.service import (
 )
 from shared.schemas import APIResponse
 
+lookups_router = APIRouter(prefix="/lookups", tags=["Recruitment - Lookups"])
 job_requisitions_router = APIRouter(prefix="/job-requisitions", tags=["Recruitment - JobRequisition"])
 job_postings_router = APIRouter(prefix="/job-postings", tags=["Recruitment - JobPosting"])
 recruitment_sources_router = APIRouter(prefix="/recruitment-sources", tags=["Recruitment - RecruitmentSource"])
@@ -126,6 +139,47 @@ candidate_notes_router = APIRouter(prefix="/candidate-notes", tags=["Recruitment
 onboarding_router = APIRouter(prefix="/onboarding", tags=["Recruitment - Onboarding"])
 onboarding_tasks_router = APIRouter(prefix="/onboarding-tasks", tags=["Recruitment - OnboardingTask"])
 reports_router = APIRouter(prefix="/reports", tags=["Recruitment - RecruitmentReport"])
+
+
+@lookups_router.get("/job-form", response_model=APIResponse[JobFormLookupsResponse])
+def get_job_form_lookups(
+    ctx: Annotated[TenantContext, Depends(require_permission("recruitment.requisition:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: Annotated[UUID | None, Query()] = None,
+    branch_id: Annotated[UUID | None, Query()] = None,
+):
+    org = RecruitmentOrganizationAdapter(db)
+    hr = RecruitmentHrAdapter(db)
+    dept_rows = org.list_departments(ctx, company_id=company_id, branch_id=branch_id)
+    departments = [
+        JobFormLookupOption(
+            id=d.id,
+            name=d.department_name,
+            company_id=d.company_id,
+            branch_id=d.branch_id,
+        )
+        for d in dept_rows
+        if str(getattr(d, "status", "active") or "active").lower() == "active"
+    ]
+    departments.sort(key=lambda d: d.name.lower())
+    desig_rows = hr.list_designations(ctx, company_id)
+    designations = [
+        JobFormLookupOption(
+            id=r.id,
+            name=r.designation_name,
+            company_id=r.company_id,
+            branch_id=getattr(r, "branch_id", None),
+        )
+        for r in desig_rows
+        if str(getattr(r, "status", "active") or "active").lower() == "active"
+    ]
+    designations.sort(key=lambda d: d.name.lower())
+    return APIResponse(
+        message="OK",
+        data=JobFormLookupsResponse(departments=departments, designations=designations),
+    )
+
+
 @job_requisitions_router.get("", response_model=APIResponse[list[JobRequisitionResponse]])
 def list_job_requisitions(
     ctx: Annotated[TenantContext, Depends(require_permission("recruitment.requisition:read"))],
@@ -167,6 +221,38 @@ def approve_job_requisitions(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="Approved", data=JobRequisitionService(db).approve(ctx, row_id))
+
+@job_requisitions_router.post("/{row_id}/open", response_model=APIResponse[JobRequisitionResponse])
+def open_job_requisitions(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("recruitment.requisition:approve"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="Opened", data=JobRequisitionService(db).open(ctx, row_id))
+
+@job_requisitions_router.post(
+    "/{row_id}/approval-evidence",
+    response_model=APIResponse[JobRequisitionResponse],
+)
+async def upload_job_requisition_approval_evidence(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("recruitment.requisition:update"))],
+    db: Annotated[Session, Depends(get_db)],
+    file: Annotated[UploadFile, File(...)],
+):
+    raw = await file.read()
+    if not raw:
+        raise ValidationException("Evidence file is empty")
+    name = (file.filename or "").strip() or "approval-email.bin"
+    return APIResponse(
+        message="Evidence saved",
+        data=JobRequisitionService(db).attach_approval_evidence(
+            ctx,
+            row_id,
+            file_name=name,
+            content=raw,
+        ),
+    )
 
 @job_postings_router.get("", response_model=APIResponse[list[JobPostingResponse]])
 def list_job_postings(
@@ -254,6 +340,121 @@ def update_recruiters(
 ):
     return APIResponse(message="Updated", data=RecruiterService(db).update(ctx, row_id, **extract_update_fields(body)))
 
+def _primary_resume_profile_map(
+    db: Session, candidate_ids: list[UUID]
+) -> dict[UUID, dict]:
+    """Map candidate_id → primary resume parsed profile (careers apply fields)."""
+    if not candidate_ids:
+        return {}
+    resumes = list(
+        db.scalars(
+            select(RecResume)
+            .where(
+                RecResume.candidate_id.in_(candidate_ids),
+                RecResume.is_deleted.is_(False),
+            )
+            .order_by(RecResume.is_primary.desc(), RecResume.version_no.desc())
+        ).all()
+    )
+    out: dict[UUID, dict] = {}
+    for resume in resumes:
+        cid = resume.candidate_id
+        if cid in out:
+            continue
+        parsed = resume.parsed_skills_json if isinstance(resume.parsed_skills_json, dict) else {}
+        out[cid] = {
+            "profile": parsed,
+            "storage_uri": resume.storage_uri,
+        }
+    return out
+
+
+def _candidate_responses_with_source(db: Session, rows: list) -> list[CandidateResponse]:
+    """Attach source + careers profile fields so ATS Overview can hydrate without resume join."""
+    source_ids = {
+        r.recruitment_source_id for r in rows if getattr(r, "recruitment_source_id", None)
+    }
+    source_map: dict[UUID, RecRecruitmentSource] = {}
+    if source_ids:
+        for src in db.scalars(
+            select(RecRecruitmentSource).where(
+                RecRecruitmentSource.id.in_(list(source_ids)),
+                RecRecruitmentSource.is_deleted.is_(False),
+            )
+        ).all():
+            source_map[src.id] = src
+
+    resume_map = _primary_resume_profile_map(db, [r.id for r in rows])
+
+    out: list[CandidateResponse] = []
+    for row in rows:
+        payload = CandidateResponse.model_validate(row)
+        updates: dict = {}
+        src = source_map.get(row.recruitment_source_id) if row.recruitment_source_id else None
+        if src is not None:
+            updates["source_code"] = src.source_code
+            updates["source_name"] = src.source_name
+        # Careers portal creates candidates as system user — treat as Website when unset
+        elif str(getattr(row, "created_by", "") or "") == "00000000-0000-0000-0000-000000000001":
+            updates["source_code"] = "company_website"
+            updates["source_name"] = "Website"
+
+        resume_meta = resume_map.get(row.id) or {}
+        profile = resume_meta.get("profile") if isinstance(resume_meta, dict) else {}
+        if isinstance(profile, dict) and profile:
+            skills = profile.get("skills") if isinstance(profile.get("skills"), list) else None
+            resume_name = profile.get("resume_file_name")
+            if not resume_name and resume_meta.get("storage_uri"):
+                uri = str(resume_meta["storage_uri"])
+                resume_name = uri.replace("\\", "/").rsplit("/", 1)[-1] or None
+            expected = profile.get("expected_ctc", profile.get("expected_salary"))
+            try:
+                expected_ctc = float(expected) if expected is not None else None
+            except (TypeError, ValueError):
+                expected_ctc = None
+            try:
+                notice = (
+                    int(profile["notice_period_days"])
+                    if profile.get("notice_period_days") is not None
+                    else None
+                )
+            except (TypeError, ValueError):
+                notice = None
+            updates.update(
+                {
+                    "gender": profile.get("gender") or None,
+                    "date_of_birth": profile.get("dob") or profile.get("date_of_birth") or None,
+                    "address": profile.get("address") or None,
+                    "state": profile.get("state") or None,
+                    "pincode": profile.get("pincode") or None,
+                    "location": profile.get("location") or None,
+                    "alternate_phone": profile.get("alternate_phone") or None,
+                    "expected_ctc": expected_ctc,
+                    "notice_period_days": notice,
+                    "linkedin_url": profile.get("linkedin_url") or None,
+                    "portfolio_url": profile.get("portfolio_url") or None,
+                    "resume_name": resume_name,
+                    "skills": [str(s).strip() for s in (skills or []) if str(s).strip()] or None,
+                    "profile_json": profile,
+                }
+            )
+            # Fill employer/title/experience from profile when candidate columns are empty
+            if not (payload.current_employer or "").strip() and profile.get("current_company"):
+                updates["current_employer"] = str(profile["current_company"])[:255]
+            if not (payload.current_title or "").strip() and profile.get("current_designation"):
+                updates["current_title"] = str(profile["current_designation"])[:255]
+            if payload.total_experience_years is None and profile.get("experience_years") is not None:
+                try:
+                    updates["total_experience_years"] = profile["experience_years"]
+                except (TypeError, ValueError):
+                    pass
+
+        if updates:
+            payload = payload.model_copy(update=updates)
+        out.append(payload)
+    return out
+
+
 @candidates_router.get("", response_model=APIResponse[list[CandidateResponse]])
 def list_candidates(
     ctx: Annotated[TenantContext, Depends(require_permission("recruitment.candidate:read"))],
@@ -261,7 +462,67 @@ def list_candidates(
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
 ):
-    return APIResponse(message="OK", data=paginate(CandidateService(db).list(ctx, company_id), pagination))
+    rows = paginate(CandidateService(db).list(ctx, company_id), pagination)
+    return APIResponse(message="OK", data=_candidate_responses_with_source(db, rows))
+
+@candidates_router.get("/{row_id}/resume-file")
+def download_candidate_resume_file(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("recruitment.candidate:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Download the primary resume file stored for a candidate."""
+    CandidateService(db).get(ctx, row_id)
+    resumes = list(
+        db.scalars(
+            select(RecResume)
+            .where(
+                RecResume.candidate_id == row_id,
+                RecResume.is_deleted.is_(False),
+            )
+            .order_by(RecResume.is_primary.desc(), RecResume.version_no.desc())
+        ).all()
+    )
+    if not resumes:
+        raise NotFoundException("Resume file not found")
+
+    # apps/api and apps/api/src — cover both historical and current upload roots
+    src_root = Path(__file__).resolve().parents[3]
+    api_root = Path(__file__).resolve().parents[4]
+    path: Path | None = None
+    chosen_name = "resume.pdf"
+    for row in resumes:
+        raw = str(row.storage_uri or "").strip()
+        if not raw:
+            continue
+        uri = Path(raw)
+        candidates = [uri] if uri.is_absolute() else [api_root / uri, src_root / uri, uri]
+        for candidate_path in candidates:
+            try:
+                resolved = candidate_path.resolve()
+            except OSError:
+                continue
+            if resolved.is_file():
+                path = resolved
+                chosen_name = resolved.name
+                break
+        if path is not None:
+            break
+    if path is None:
+        raise NotFoundException("Resume file missing on disk")
+
+    suffix = path.suffix.lower()
+    media = "application/pdf" if suffix == ".pdf" else "application/octet-stream"
+    if suffix in {".doc", ".docx"}:
+        media = "application/msword" if suffix == ".doc" else (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+    return FileResponse(
+        path,
+        filename=chosen_name,
+        media_type=media,
+    )
+
 
 @candidates_router.post("", response_model=APIResponse[CandidateResponse])
 def create_candidates(
@@ -279,6 +540,15 @@ def update_candidates(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="Updated", data=CandidateService(db).update(ctx, row_id, **extract_update_fields(body)))
+
+@candidates_router.delete("/{row_id}", response_model=APIResponse[None])
+def delete_candidates(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("recruitment.candidate:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    message = CandidateService(db).delete(ctx, row_id)
+    return APIResponse(message=message, data=None)
 
 @candidate_documents_router.get("", response_model=APIResponse[list[CandidateDocumentResponse]])
 def list_candidate_documents(
@@ -415,6 +685,97 @@ def mark_backed_out_applications(
         message="Backed out",
         data=ApplicationService(db).mark_backed_out(ctx, row_id, reason=body.reason),
     )
+
+
+@applications_router.post("/{row_id}/send-bg-portal", response_model=APIResponse[dict])
+def send_bg_document_portal(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("recruitment.application:advance"))],
+    db: Annotated[Session, Depends(get_db)],
+    expiry_days: int = 7,
+    send_email: bool = True,
+):
+    """Create candidate document portal + login credentials.
+
+    When send_email=false, credentials are returned without mailing so the
+    offer letter email can include the portal link in the same send.
+    """
+    data = PublicBgCheckService(db).create_portal_invite(
+        ctx,
+        application_id=row_id,
+        expiry_days=expiry_days,
+        send_email=send_email,
+    )
+    return APIResponse(message="BG document portal created", data=data)
+
+
+class SendBgVendorBody(BaseModel):
+    partner_email: str = Field(..., min_length=3, max_length=255)
+    expiry_hours: int = Field(
+        default=24,
+        ge=1,
+        le=168,
+        description="Hours until the partner download link expires (default 24).",
+    )
+    # Deprecated: prefer expiry_hours. Kept for older clients (days × 24).
+    expiry_days: int | None = Field(default=None, ge=1, le=30)
+
+
+@applications_router.post("/{row_id}/send-bg-vendor", response_model=APIResponse[dict])
+def send_bg_vendor_pack(
+    row_id: UUID,
+    body: SendBgVendorBody,
+    ctx: Annotated[TenantContext, Depends(require_permission("recruitment.application:advance"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Create partner download portal credentials (HR emails the link separately)."""
+    hours = body.expiry_hours
+    if body.expiry_days is not None and body.expiry_hours == 24:
+        # Legacy clients that only send expiry_days.
+        hours = max(1, min(int(body.expiry_days) * 24, 168))
+    data = PublicBgCheckService(db).create_vendor_pack(
+        ctx,
+        application_id=row_id,
+        partner_email=body.partner_email,
+        expiry_hours=hours,
+    )
+    db.commit()
+    return APIResponse(message="BG vendor download pack created", data=data)
+
+
+@applications_router.get("/{row_id}/bg-portal-attachments", response_model=APIResponse[list[dict]])
+def list_bg_portal_attachments(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("recruitment.application:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    data = PublicBgCheckService(db).list_attachments_for_application(ctx, row_id)
+    return APIResponse(message="OK", data=data)
+
+
+@applications_router.get("/{row_id}/bg-portal-status", response_model=APIResponse[dict | None])
+def get_bg_portal_status(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("recruitment.application:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    data = PublicBgCheckService(db).get_portal_status_for_application(ctx, row_id)
+    return APIResponse(message="OK", data=data)
+
+
+@applications_router.post("/{row_id}/bg-portal-review", response_model=APIResponse[dict])
+def review_bg_portal(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("recruitment.application:update"))],
+    db: Annotated[Session, Depends(get_db)],
+    decision: str = "verified",
+):
+    """HR marks BG document portal as verified (cleared) or rejected (failed)."""
+    data = PublicBgCheckService(db).review_portal_for_application(
+        ctx, row_id, decision=decision
+    )
+    return APIResponse(message="BG review saved", data=data)
+
 
 @application_stages_router.get("", response_model=APIResponse[list[ApplicationStageResponse]])
 def list_application_stages(

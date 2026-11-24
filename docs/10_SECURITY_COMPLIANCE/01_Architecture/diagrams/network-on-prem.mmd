@@ -1,0 +1,51 @@
+%%{init: {"theme": "base", "themeVariables": {"fontFamily": "Segoe UI, Arial, sans-serif", "fontSize": "13px", "primaryColor": "#e2e8f0", "primaryTextColor": "#0f172a", "primaryBorderColor": "#1e3a5f", "lineColor": "#334155"}}}%%
+flowchart TB
+  subgraph EXT["Untrusted / Internet"]
+    RU["Remote user device"]
+  end
+
+  subgraph VPNZ["VPN zone"]
+    VPNC["VPN concentrator<br/>Cache Digitech"]
+  end
+
+  subgraph PREM["Cache Digitech premises"]
+    subgraph USRZ["User / office VLAN"]
+      OU["Office workstations"]
+    end
+    subgraph DMZ["App access VLAN"]
+      NGX["Reverse proxy / nginx<br/>TLS · :8443"]
+    end
+    subgraph APPZ["Application host · internal server"]
+      WEB["erp-web :3000"]
+      ESS["employee-app :3001"]
+      API["erp-api :8000"]
+      WRK["celery worker / beat"]
+    end
+    subgraph DATAZ["Data VLAN / same host volumes"]
+      PG[("PostgreSQL")]
+      RD[("Redis")]
+      RMQ[["RabbitMQ"]]
+      MIN[("MinIO")]
+    end
+    subgraph ADM["Admin access path"]
+      ADM1["Privileged admin<br/>LAN or VPN + MFA"]
+    end
+  end
+
+  RU -->|encrypted VPN tunnel| VPNC
+  VPNC --> USRZ
+  OU --> NGX
+  VPNC --> NGX
+  NGX --> WEB
+  NGX --> ESS
+  NGX --> API
+  WEB --> API
+  ESS --> API
+  API --> PG
+  API --> RD
+  API --> RMQ
+  API --> MIN
+  WRK --> RMQ
+  WRK --> PG
+  ADM1 --> NGX
+  ADM1 -.->|break-glass / jump| APPZ

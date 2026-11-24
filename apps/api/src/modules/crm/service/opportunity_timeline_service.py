@@ -1,7 +1,10 @@
 """Aggregate opportunity activity into a chronological timeline.
 
 Timeline cards use the same Current State labels as BlueprintActions:
-Lead Open → … → Deal Won.
+Lead Open → … → Deal Won → Customer PO → OVF Shared to SCM.
+
+Sales leads issue the DR number at lead create; that value is shown on the
+Lead Open card (not as a later Deal Registration step).
 """
 
 from __future__ import annotations
@@ -109,14 +112,15 @@ _ACTION_MILESTONE: dict[str, str] = {
     "send_sow_approval": "SOW Sent for Approval",
     "approve_boq": "BOQ Attached",
     "approve_sow": "SOW Attached",
-    "deal_reg": "Deal Registration Submitted",
+    # Single DR milestone — DR number is the primary tracking id (summary carries the value).
+    "deal_reg": "Deal Registration",
     "oem_received": "Vendor Quotation Received",
-    "attach_oem_quote": "Vendor Quote Attached",
+    "attach_oem_quote": "Vendor Quotation Attached",
     "create_quote": "Quote Created",
     "send_for_approval": "Quote Sent for Approval",  # quote/ovf disambiguated by entity
     "approve_internally": "Quote Approved",
     "send_to_customer": "Quote Sent",
-    "negotiate": "Quote Sent",
+    "negotiate": "Quote Negotiation (new revision)",
     "follow_up": "Quote Sent",
     "accept": "Quote Accepted",
     "quote_accepted": "Quote Accepted",
@@ -145,9 +149,9 @@ _TO_STATE_MILESTONE: dict[str, dict[str, str]] = {
         "sow_approval": "SOW Sent for Approval",
         "boq_approval": "BOQ Sent for Approval",
         "deal_reg": "Deal Registration",
-        "oem_pending": "Deal Registration Submitted",
-        "oem_attached": "Vendor Quotation Received",
-        "quote_ready": "Vendor Quote Attached",
+        "oem_pending": "Attach Vendor Quotation",
+        "oem_attached": "Attach Vendor Quotation",
+        "quote_ready": "Vendor Quotation Attached",
         "quote_in_progress": "Quote Created",
         "po_pending": "Quote Accepted",
         "po_approval": "Customer PO Sent for Approval",
@@ -166,7 +170,7 @@ _TO_STATE_MILESTONE: dict[str, dict[str, str]] = {
         "lost": "Lost Deal",
     },
     "ovf": {
-        "draft": "OVF Created · Draft",
+        "draft": "OVF Created",
         "approval": "OVF Sent for Approval",
         "approved": "OVF Approved",
         "shared_scm": "OVF Shared to SCM",
@@ -489,6 +493,18 @@ class OpportunityTimelineService:
             )
 
         # ── Hardware happy-path Current State milestones ─────────────────
+        # Sales leads receive their DR number at lead create — surface it on
+        # Lead Open and do not invent a later "Deal Registration" card.
+        from modules.crm.service.document_number_service import is_deal_reg_number
+
+        lead_dr = ""
+        if lead is not None:
+            lead_dr = (
+                getattr(lead, "dr_number", None) or getattr(lead, "lead_code", None) or ""
+            ).strip()
+            if not is_deal_reg_number(lead_dr):
+                lead_dr = ""
+
         if lead is not None:
             add_milestone(
                 "Lead Open",
@@ -496,7 +512,7 @@ class OpportunityTimelineService:
                 entity_type="lead",
                 entity_id=lead.id,
                 event_type="created",
-                summary=getattr(lead, "lead_code", None),
+                summary=lead_dr or getattr(lead, "lead_code", None),
                 action="create",
                 to_state="open",
                 actor_id=lead.created_by,
@@ -509,7 +525,7 @@ class OpportunityTimelineService:
                     or opp.created_at,
                     entity_type="lead",
                     entity_id=lead.id,
-                    summary=opp.opportunity_code,
+                    summary=opp.opportunity_code or lead_dr or None,
                     action="convert",
                     to_state="converted",
                     actor_id=lead.updated_by or lead.created_by,
@@ -670,65 +686,26 @@ class OpportunityTimelineService:
                 action="approve_boq",
                 to_state="deal_reg",
             )
-        if opp.boq_approved or opp.sow_approved or (opp.blueprint_state or "") in {
-            "deal_reg",
-            "oem_pending",
-            "oem_attached",
-            "quote_ready",
-            "quote_in_progress",
-            "po_pending",
-            "po_approval",
-            "ovf_ready",
-            "won",
-        }:
-            if opp.boq_approved or opp.sow_approved:
-                add_milestone(
-                    "Deal Registration",
-                    occurred_at=hist_to_state("deal_reg")
-                    or hist_time("approve_boq", "approve_sow")
-                    or bump(opp.updated_at, 3),
-                    entity_type="opportunity",
-                    entity_id=opp.id,
-                    action="approve_boq",
-                    to_state="deal_reg",
-                )
-
-        if (
-            opp.blueprint_state
-            in {
-                "oem_pending",
-                "oem_attached",
-                "quote_ready",
-                "quote_in_progress",
-                "po_pending",
-                "po_approval",
-                "ovf_ready",
-                "won",
-            }
-            or hist_time("deal_reg")
-            or opp.deal_reg_number
-        ):
+        # Deal Registration card only for legacy deals that got a DR later via
+        # the deal_reg action — not when the number was already issued on lead create.
+        if not lead_dr and hist_time("deal_reg"):
+            opp_dr = (opp.deal_reg_number or opp.opportunity_code or "").strip()
             add_milestone(
-                "Deal Registration Submitted",
+                "Deal Registration",
                 occurred_at=hist_time("deal_reg")
-                or hist_to_state("oem_pending")
-                or bump(opp.updated_at, 4),
+                or hist_to_state("deal_reg")
+                or bump(opp.updated_at, 3),
                 entity_type="opportunity",
                 entity_id=opp.id,
                 action="deal_reg",
-                to_state="oem_pending",
-                summary=opp.deal_reg_number,
+                to_state="deal_reg",
+                summary=opp.deal_reg_number
+                or (opp_dr if is_deal_reg_number(opp_dr) else None),
+                actor_actions=("deal_reg",),
             )
 
-        if opp.oem_quotation_received or opp.blueprint_state in {
-            "oem_attached",
-            "quote_ready",
-            "quote_in_progress",
-            "po_pending",
-            "po_approval",
-            "ovf_ready",
-            "won",
-        }:
+        # Legacy acknowledgement click only — new flow attaches the quotation directly.
+        if hist_time("oem_received"):
             add_milestone(
                 "Vendor Quotation Received",
                 occurred_at=hist_time("oem_received")
@@ -749,7 +726,7 @@ class OpportunityTimelineService:
             "won",
         }:
             add_milestone(
-                "Vendor Quote Attached",
+                "Vendor Quotation Attached",
                 occurred_at=hist_time("attach_oem_quote")
                 or hist_to_state("quote_ready")
                 or bump(opp.updated_at, 6),
@@ -852,7 +829,7 @@ class OpportunityTimelineService:
         if ovf is not None:
             oid = ovf.id
             ovf_stage = (ovf.blueprint_state or "draft").lower()
-            created_title = "OVF Created · Draft" if ovf_stage == "draft" else "OVF Created"
+            created_title = "OVF Created"
             add_milestone(
                 created_title,
                 occurred_at=ovf.created_at or hist_time("create_ovf"),

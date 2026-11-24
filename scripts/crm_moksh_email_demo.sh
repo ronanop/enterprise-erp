@@ -2,7 +2,7 @@
 # End-to-end CRM demo as moksh@cachedigitech.com — verifies SMTP CRM emails.
 set -euo pipefail
 
-BASE="${BASE:-https://172.16.200.30:8443/api/v1}"
+BASE="${BASE:-https://erp.iconnectplus.in/api/v1}"
 EMAIL="${EMAIL:-moksh@cachedigitech.com}"
 PASS="${PASS:-Cache@123}"
 DEMO_TAG="Email Demo $(date -u +%Y%m%d-%H%M%S)"

@@ -39,9 +39,10 @@ function subscribeNarrowViewport(onChange: () => void): () => void {
 }
 
 /**
- * Collapse state shared by every left sidebar. The layout spacer (`layoutCollapsed`)
- * flips once at click so charts resize once; the rail animates on its own layer.
- * Follows the viewport (collapsed on phone widths) until the user toggles it.
+ * Collapse state shared by every left sidebar. Spacer and rail share the same width
+ * transition so the workspace does not flash an empty gap while the rail animates.
+ * `erp-sidebar-animating` freezes chart thrash for the duration. Follows the viewport
+ * (collapsed on phone widths) until the user toggles it.
  */
 export function useSidebarCollapse() {
   const narrow = useSyncExternalStore(
@@ -144,7 +145,11 @@ export function SidebarRail({
     <>
       <div
         aria-hidden
-        className={cn("h-dvh shrink-0", layoutCollapsed ? "w-[72px]" : "w-[260px]")}
+        data-erp-sidebar-spacer
+        className={cn(
+          "h-dvh shrink-0 transition-[width] duration-[320ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
+          layoutCollapsed ? "w-[72px]" : "w-[260px]",
+        )}
       />
       <aside
         data-erp-primary-sidebar

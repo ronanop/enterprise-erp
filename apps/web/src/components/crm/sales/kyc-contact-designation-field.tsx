@@ -10,6 +10,8 @@ import {
   isKycContactDesignationPreset,
   kycContactDesignationPresetLabel,
 } from "@/lib/crm/kyc-form-data";
+import { useCrmSettingsEffective } from "@/hooks/use-crm-settings";
+import { catalogOptionLabels } from "@/services/crm-settings-service";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 
@@ -25,6 +27,12 @@ type MenuCoords = {
 };
 
 export function KycContactDesignationField({ value, onChange }: KycContactDesignationFieldProps) {
+  const { settings } = useCrmSettingsEffective();
+  const designationOptions = useMemo(
+    () =>
+      catalogOptionLabels(settings, "kyc_contact_designations", [...KYC_CONTACT_DESIGNATION_OPTIONS]),
+    [settings],
+  );
   const triggerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLUListElement>(null);
   const [mounted, setMounted] = useState(false);
@@ -41,9 +49,9 @@ export function KycContactDesignationField({ value, onChange }: KycContactDesign
 
   const filteredOptions = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return [...KYC_CONTACT_DESIGNATION_OPTIONS];
-    return KYC_CONTACT_DESIGNATION_OPTIONS.filter((option) => option.toLowerCase().includes(q));
-  }, [search]);
+    if (!q) return designationOptions;
+    return designationOptions.filter((option) => option.toLowerCase().includes(q));
+  }, [search, designationOptions]);
 
   const displayValue = open
     ? search

@@ -134,6 +134,8 @@ export type ServiceRequestTicket = {
   amc_end_date?: string | null;
   asset_status?: string | null;
   asset_confirmed_at?: string | null;
+  asset_confirmed_by?: string | null;
+  asset_confirmed_by_name?: string | null;
   amc_mail_sent?: boolean;
   remote_engineer_name?: string | null;
   remote_engineer_contact?: string | null;
@@ -166,6 +168,158 @@ export type ServiceRequestTicket = {
   co_owners?: TicketCoOwner[];
   stakeholders?: TicketStakeholder[];
   access?: TicketAccessInfo | null;
+  /** Human-readable status from API (preferred over raw status when present). */
+  status_label?: string | null;
+  issue_reported_code?: string | null;
+  resolution_comment_code?: string | null;
+  other_remarks?: string | null;
+  /** Present Type (extracted from email, editable). */
+  present_type?: string | null;
+  /** Flags for extracted fields manually edited by a user, e.g. { ckt_id: true }. */
+  field_manual_overrides?: Record<string, boolean> | null;
+  sla_target_minutes?: number | null;
+  sla_elapsed_minutes?: number | null;
+  sla_remaining_minutes?: number | null;
+  sla_breached?: boolean | null;
+  sla_paused_at?: string | null;
+  sla_paused_total_minutes?: number | null;
+  sla_is_paused?: boolean | null;
+  sla_pauses?: TicketSlaPauseItem[];
+  sla_policy_snapshot?: Record<string, unknown> | null;
+  reopen_request?: TicketReopenRequest | null;
+  pending_reopen_request?: TicketReopenRequest | null;
+};
+
+export type TicketSlaPauseItem = {
+  id: string;
+  request_id: string;
+  paused_at: string;
+  resumed_at?: string | null;
+  reason: string;
+  resume_reason?: string | null;
+  paused_by?: string | null;
+  resumed_by?: string | null;
+  duration_minutes?: number | null;
+  is_active?: boolean;
+};
+
+export type TicketReopenRequest = {
+  id: string;
+  request_id?: string;
+  status: "pending" | "approved" | "rejected" | string;
+  reason?: string | null;
+  requested_by?: string | null;
+  requested_by_name?: string | null;
+  requested_at?: string | null;
+  decided_by?: string | null;
+  decided_at?: string | null;
+  decision_reason?: string | null;
+};
+
+export type CircuitHistoryItem = {
+  id: string;
+  document_number: string;
+  created_at: string | null;
+  issue_reported?: string | null;
+  issue_reported_code?: string | null;
+  resolution_comment?: string | null;
+  resolution_comment_code?: string | null;
+  status: string;
+  status_label?: string | null;
+  subject?: string | null;
+};
+
+export type CircuitHistory = {
+  count: number;
+  last_ticket_at: string | null;
+  items: CircuitHistoryItem[];
+  ckt_id?: string | null;
+};
+
+export type AssignmentHistoryItem = {
+  id: string;
+  request_id?: string;
+  change_type?: string;
+  old_owner_employee_id?: string | null;
+  new_owner_employee_id?: string | null;
+  old_owner_name?: string | null;
+  new_owner_name?: string | null;
+  reason?: string | null;
+  changed_by?: string | null;
+  changed_at: string;
+  /** Legacy aliases (older API builds). */
+  from_employee_name?: string | null;
+  to_employee_name?: string | null;
+  assigned_at?: string;
+};
+
+export type CustomerPrioritySla = {
+  id: string;
+  company_id?: string;
+  customer_id: string;
+  customer_name?: string | null;
+  priority: string;
+  duration_minutes: number;
+  calendar_type?: string;
+  effective_from?: string | null;
+  effective_to?: string | null;
+  escalation_json?: Record<string, unknown> | unknown[] | null;
+  sla_id?: string | null;
+  is_active: boolean;
+  version?: number;
+  created_at?: string;
+};
+
+export type CustomerPrioritySlaPayload = {
+  customer_id: string;
+  priority: string;
+  duration_minutes: number;
+  calendar_type?: string;
+  effective_from?: string | null;
+  effective_to?: string | null;
+  sla_id?: string | null;
+  is_active?: boolean;
+};
+
+export type DashboardCountItem = { key: string; label: string; count: number };
+
+export type ServiceDashboardSummary = {
+  total_tickets: number;
+  open_tickets: number;
+  unassigned_tickets: number;
+  pending_reopen_requests: number;
+  by_status: DashboardCountItem[];
+  by_priority: DashboardCountItem[];
+  by_customer: {
+    customer_id: string;
+    customer_name?: string | null;
+    total: number;
+    open: number;
+  }[];
+  engineer_workload: {
+    owner_employee_id: string;
+    owner_name?: string | null;
+    open_tickets: number;
+    breached_tickets: number;
+  }[];
+  repeated_circuits: {
+    ckt_id: string;
+    customer_id?: string | null;
+    customer_name?: string | null;
+    ticket_count: number;
+    last_ticket_at?: string | null;
+  }[];
+  trend: { period_start: string; created: number; resolved: number; closed: number }[];
+  trend_granularity?: string;
+  sla: SlaComplianceSummary;
+  date_from?: string | null;
+  date_to?: string | null;
+};
+
+export type PendingReopenQueueItem = TicketReopenRequest & {
+  request_id: string;
+  document_number?: string | null;
+  subject?: string | null;
 };
 
 export type TicketCoOwner = {
@@ -198,6 +352,13 @@ export type TicketAccessInfo = {
   can_open: boolean;
   is_opened: boolean;
   can_resume?: boolean;
+  can_pause_sla?: boolean;
+  can_resume_sla?: boolean;
+  is_on_duty?: boolean;
+  roster_visibility_enabled?: boolean;
+  can_close?: boolean;
+  can_request_reopen?: boolean;
+  can_approve_reopen?: boolean;
   employee_id: string | null;
 };
 
@@ -231,6 +392,11 @@ export type FieldEngineerVisit = {
   carrying_spares?: boolean;
   visit_date?: string | null;
   hw_replacement?: string | null;
+  hardware_repair?: boolean | string | null;
+  hardware_replacement?: boolean | null;
+  hardware_replacement_yn?: string | null;
+  new_device_serial?: string | null;
+  other_charges?: number | null;
   transport_mode?: string | null;
   movement_charges?: number | null;
   visit_charges?: number | null;
@@ -266,6 +432,8 @@ export type TimelineItem = {
   description?: string | null;
   actor_id?: string | null;
   occurred_at: string;
+  from_status?: string | null;
+  to_status?: string | null;
 };
 
 export type TicketListQuery = {
@@ -295,10 +463,13 @@ export type SlaTrackerItem = {
   elapsed_minutes: number;
   remaining_minutes: number | null;
   is_breached: boolean;
+  is_paused?: boolean;
+  created_at?: string | null;
 };
 
 export type SlaComplianceSummary = {
   active_breached: number;
+  active_paused?: number;
   closed_within_sla: number;
   closed_after_breach: number;
 };
@@ -315,6 +486,8 @@ export type ResolvedTicketItem = {
   closed_at: string | null;
   due_at?: string | null;
   closed_within_sla?: boolean | null;
+  status_label?: string | null;
+  reopen_request_status?: string | null;
   owner_employee_id: string | null;
   owner_name: string | null;
 };
@@ -340,11 +513,18 @@ export async function listServiceRequestTickets(query?: TicketListQuery): Promis
   return Array.isArray(data) ? data : [];
 }
 
-export async function listSlaTracker(opts?: { page_size?: number; mine?: boolean }): Promise<SlaTrackerItem[]> {
+export async function listSlaTracker(opts?: { mine?: boolean }): Promise<SlaTrackerItem[]> {
   const res = await apiClient<SlaTrackerItem[]>(`${API}/sla-tracker`, {
-    query: { page_size: opts?.page_size ?? 200, mine: opts?.mine ? true : undefined },
+    query: { mine: opts?.mine ? true : undefined },
   });
-  return Array.isArray(res.data) ? res.data : [];
+  const rows = Array.isArray(res.data) ? res.data : [];
+  // Newest first (API already orders this way; keep a stable client sort).
+  return [...rows].sort((a, b) => {
+    const aTs = Date.parse(a.created_at || a.sla_started_at || "") || 0;
+    const bTs = Date.parse(b.created_at || b.sla_started_at || "") || 0;
+    if (bTs !== aTs) return bTs - aTs;
+    return (b.document_number || "").localeCompare(a.document_number || "", undefined, { numeric: true });
+  });
 }
 
 export async function getSlaComplianceSummary(opts?: { mine?: boolean }): Promise<SlaComplianceSummary> {
@@ -353,30 +533,44 @@ export async function getSlaComplianceSummary(opts?: { mine?: boolean }): Promis
   });
   const summary = (res.data ?? {
     active_breached: 0,
+    active_paused: 0,
     closed_within_sla: 0,
     closed_after_breach: 0,
   }) as SlaComplianceSummary;
 
   if (typeof summary.active_breached === "number") {
-    return summary;
+    if (typeof summary.active_paused === "number") return summary;
+    const tracker = await listSlaTracker({ mine: opts?.mine });
+    return {
+      ...summary,
+      active_paused: tracker.filter((row) => row.is_paused).length,
+    };
   }
 
-  // Older API builds only return closed-ticket counts - derive active breaches from SLA tracker.
+  // Older API builds only return closed-ticket counts — derive active counts from SLA tracker.
   const tracker = await listSlaTracker({ mine: opts?.mine });
   return {
     ...summary,
     active_breached: tracker.filter((row) => row.is_breached).length,
+    active_paused: tracker.filter((row) => row.is_paused).length,
   };
 }
 
 export async function listResolvedTickets(query?: {
   q?: string;
-  page_size?: number;
   sla_outcome?: "within" | "breach";
   mine?: boolean;
 }): Promise<ResolvedTicketItem[]> {
   const res = await apiClient<ResolvedTicketItem[]>(`${API}/resolved-tickets`, { query });
-  return Array.isArray(res.data) ? res.data : [];
+  const rows = Array.isArray(res.data) ? res.data : [];
+  // Newest first by ticket number / resolve-close timestamps.
+  return [...rows].sort((a, b) => {
+    const docCmp = (b.document_number || "").localeCompare(a.document_number || "", undefined, { numeric: true });
+    if (docCmp !== 0) return docCmp;
+    const aTs = Date.parse(a.resolved_at || a.closed_at || "") || 0;
+    const bTs = Date.parse(b.resolved_at || b.closed_at || "") || 0;
+    return bTs - aTs;
+  });
 }
 
 export async function listServiceHeadNotifications(page_size = 15): Promise<ServiceNotification[]> {
@@ -385,7 +579,13 @@ export async function listServiceHeadNotifications(page_size = 15): Promise<Serv
   });
   const rows = Array.isArray(res.data) ? res.data : [];
   return rows.filter((n) =>
-    ["ticket_opened", "ticket_resolved", "ticket_assigned"].includes(n.notification_type),
+    [
+      "ticket_opened",
+      "ticket_resolved",
+      "ticket_assigned",
+      "roster_open_reminder",
+      "email_ticket_created",
+    ].includes(n.notification_type),
   );
 }
 
@@ -444,17 +644,162 @@ export async function assignTicketOwner(id: string, ownerEmployeeId: string): Pr
   return unwrap(res.data);
 }
 
-export async function resolveTicket(
-  id: string,
-  payload: { solution_type: string; solution_summary: string; reason?: string },
-): Promise<ServiceRequestTicket> {
+export type ResolveTicketPayload = {
+  solution_type?: string;
+  solution_summary?: string;
+  reason?: string;
+  mode_of_action?: string;
+  ticket_category?: string;
+  issue_reported_code?: string;
+  resolution_comment_code?: string;
+  other_remarks?: string | null;
+};
+
+export async function resolveTicket(id: string, payload: ResolveTicketPayload): Promise<ServiceRequestTicket> {
   const res = await resourceService.action<ServiceRequestTicket>(API, id, "resolve", payload);
   return unwrap(res.data);
+}
+
+/** Close a resolved ticket (validated by the API). */
+export async function closeTicket(id: string, payload?: { reason?: string }): Promise<ServiceRequestTicket> {
+  const res = await resourceService.action<ServiceRequestTicket>(API, id, "close", payload ?? {});
+  return unwrap(res.data);
+}
+
+/** Confirm asset details (POST .../confirm-asset). */
+export async function confirmAssetDetails(id: string): Promise<ServiceRequestTicket> {
+  const res = await resourceService.action<ServiceRequestTicket>(API, id, "confirm-asset", {});
+  return unwrap(res.data);
+}
+
+export async function getCircuitHistory(id: string): Promise<CircuitHistory> {
+  const res = await apiClient<CircuitHistory | CircuitHistoryItem[]>(`${API}/${id}/circuit-history`);
+  const data = res.data;
+  if (Array.isArray(data)) {
+    return { count: data.length, last_ticket_at: data[0]?.created_at ?? null, items: data, ckt_id: null };
+  }
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return {
+    count: typeof data?.count === "number" ? data.count : items.length,
+    last_ticket_at: data?.last_ticket_at ?? null,
+    items,
+    ckt_id: data?.ckt_id ?? null,
+  };
+}
+
+export async function getAssignmentHistory(id: string): Promise<AssignmentHistoryItem[]> {
+  const res = await apiClient<AssignmentHistoryItem[]>(`${API}/${id}/assignment-history`);
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function requestReopen(id: string, reason: string): Promise<TicketReopenRequest> {
+  const res = await resourceService.action<TicketReopenRequest>(API, id, "reopen-request", { reason });
+  return unwrap(res.data);
+}
+
+export async function approveReopenRequest(requestId: string): Promise<ServiceRequestTicket> {
+  const res = await apiClient<ServiceRequestTicket>(`${API}/reopen-requests/${requestId}/approve`, {
+    method: "POST",
+    body: {},
+  });
+  return unwrap(res.data);
+}
+
+export async function rejectReopenRequest(requestId: string, reason?: string): Promise<ServiceRequestTicket> {
+  const res = await apiClient<ServiceRequestTicket>(`${API}/reopen-requests/${requestId}/reject`, {
+    method: "POST",
+    body: reason ? { rejection_reason: reason } : {},
+  });
+  return unwrap(res.data);
+}
+
+export async function listPendingReopenRequests(): Promise<PendingReopenQueueItem[]> {
+  const res = await apiClient<PendingReopenQueueItem[]>(`${API}/reopen-requests/pending`);
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function getServiceDashboardSummary(opts?: { mine?: boolean }): Promise<ServiceDashboardSummary> {
+  const res = await apiClient<ServiceDashboardSummary>(`${API}/dashboard-summary`, {
+    query: { mine: opts?.mine ? true : undefined },
+  });
+  const data = (res.data ?? {}) as Partial<ServiceDashboardSummary>;
+  return {
+    total_tickets: data.total_tickets ?? 0,
+    open_tickets: data.open_tickets ?? 0,
+    unassigned_tickets: data.unassigned_tickets ?? 0,
+    pending_reopen_requests: data.pending_reopen_requests ?? 0,
+    by_status: data.by_status ?? [],
+    by_priority: data.by_priority ?? [],
+    by_customer: data.by_customer ?? [],
+    engineer_workload: data.engineer_workload ?? [],
+    repeated_circuits: data.repeated_circuits ?? [],
+    trend: data.trend ?? [],
+    trend_granularity: data.trend_granularity,
+    sla: data.sla ?? { active_breached: 0, active_paused: 0, closed_within_sla: 0, closed_after_breach: 0 },
+    date_from: data.date_from,
+    date_to: data.date_to,
+  };
+}
+
+const CUSTOMER_PRIORITY_SLA_API = "/service/customer-priority-slas";
+
+export async function listCustomerPrioritySlas(): Promise<CustomerPrioritySla[]> {
+  const res = await resourceService.list<CustomerPrioritySla>(CUSTOMER_PRIORITY_SLA_API, { page_size: 200 });
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function createCustomerPrioritySla(payload: CustomerPrioritySlaPayload): Promise<CustomerPrioritySla> {
+  const res = await resourceService.create<CustomerPrioritySla>(CUSTOMER_PRIORITY_SLA_API, payload);
+  return unwrap(res.data);
+}
+
+export async function updateCustomerPrioritySla(
+  id: string,
+  payload: Partial<CustomerPrioritySlaPayload> & { version?: number },
+): Promise<CustomerPrioritySla> {
+  const res = await resourceService.update<CustomerPrioritySla>(CUSTOMER_PRIORITY_SLA_API, id, payload);
+  return unwrap(res.data);
+}
+
+export async function deleteCustomerPrioritySla(id: string): Promise<void> {
+  await resourceService.delete(CUSTOMER_PRIORITY_SLA_API, id);
+}
+
+/** Display label for ticket status: prefer API status_label. */
+export function ticketStatusLabel(ticket: { status: string; status_label?: string | null }): string {
+  return ticket.status_label?.trim() || formatStatus(ticket.status);
+}
+
+export function formatInr(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(value);
 }
 
 export async function resumeTicket(id: string, reason?: string): Promise<ServiceRequestTicket> {
   const res = await resourceService.action<ServiceRequestTicket>(API, id, "resume", reason ? { reason } : {});
   return unwrap(res.data);
+}
+
+/** Pause the SLA clock on a ticket. Reason is mandatory. */
+export async function pauseTicketSla(id: string, reason: string): Promise<ServiceRequestTicket> {
+  const res = await resourceService.action<ServiceRequestTicket>(API, id, "sla/pause", { reason });
+  return unwrap(res.data);
+}
+
+/** Resume a paused SLA clock. */
+export async function resumeTicketSla(id: string, reason?: string): Promise<ServiceRequestTicket> {
+  const res = await resourceService.action<ServiceRequestTicket>(
+    API,
+    id,
+    "sla/resume",
+    reason ? { reason } : {},
+  );
+  return unwrap(res.data);
+}
+
+export async function listTicketSlaPauses(id: string): Promise<TicketSlaPauseItem[]> {
+  const res = await apiClient<TicketSlaPauseItem[]>(`${API}/${id}/sla-pauses`);
+  return Array.isArray(res.data) ? res.data : [];
 }
 
 export async function markAwaitingAssignment(id: string, reason?: string): Promise<ServiceRequestTicket> {
@@ -536,7 +881,7 @@ export async function addTicketFieldEngineer(
   ticketId: string,
   payload: {
     engineer_name: string;
-    engineer_email: string;
+    engineer_email?: string;
     engineer_contact?: string;
     assigned_date?: string;
     work_brief?: string;
@@ -607,7 +952,12 @@ export type TicketOption = {
   status: string;
 };
 
-export async function listTicketOptions(option_type?: "mode" | "category"): Promise<LookupOption[]> {
+export type TicketOptionType = "mode" | "category" | "issue_reported" | "resolution_comment";
+
+/** Ticket categories allowed in the UI (Hardware / Software / Network only). */
+export const ALLOWED_TICKET_CATEGORIES = ["hardware", "software", "network"] as const;
+
+export async function listTicketOptions(option_type?: TicketOptionType): Promise<LookupOption[]> {
   const res = await apiClient<TicketOption[]>("/service/ticket-options", {
     query: option_type ? { option_type, active_only: true } : { active_only: true },
   });
@@ -700,6 +1050,30 @@ export function attachmentDownloadUrl(ticketId: string, attachmentId: string): s
   return `${base}${API}/${ticketId}/attachments/${attachmentId}/content`;
 }
 
+/** Open attachment content with Bearer auth (plain href has no token → 401 JSON). */
+export async function openTicketAttachment(ticketId: string, attachmentId: string): Promise<void> {
+  const { getAccessToken } = await import("@/lib/auth");
+  const { env } = await import("@/utils/env");
+  const token = getAccessToken();
+  if (!token) {
+    throw new ApiClientError("Missing authentication token", 401);
+  }
+  const res = await fetch(`${env.apiUrl}${API}/${ticketId}/attachments/${attachmentId}/content`, {
+    headers: {
+      Accept: "*/*",
+      Authorization: `Bearer ${token}`,
+    },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new ApiClientError(`Failed to open attachment (${res.status})`, res.status);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank", "noopener,noreferrer");
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 export async function getTicketTimeline(id: string): Promise<TimelineItem[]> {
   const res = await apiClient<TimelineItem[]>(`${API}/${id}/timeline`);
   return Array.isArray(res.data) ? res.data : [];
@@ -752,11 +1126,14 @@ export type EmailAutomationStatus = {
   enabled: boolean;
   smtp_configured: boolean;
   imap_configured: boolean;
+  graph_configured?: boolean;
+  mailapi_configured?: boolean;
   mailbox?: string | null;
   webhook_path: string;
   recent_ingests: number;
   subject_patterns?: string[];
   auto_ticket_enabled?: boolean;
+  accept_all?: boolean;
 };
 
 export async function getEmailAutomationStatus(): Promise<EmailAutomationStatus> {
@@ -772,8 +1149,7 @@ export async function pollSupportMailbox(): Promise<Record<string, unknown>> {
 }
 
 export type MailboxMessageItem = {
-  /** IMAP UID of the message in the support mailbox. */
-  mailbox_id: string;
+  graph_id: string;
   message_id: string;
   internet_message_id?: string | null;
   from_address: string;
@@ -802,18 +1178,24 @@ export type MailboxMessagesResult = {
   total: number;
   subject_patterns: string[];
   messages: MailboxMessageItem[];
+  offline_warning?: string | null;
+  poll_summary?: string | null;
 };
 
-export async function listMailboxMessages(top = 50): Promise<MailboxMessagesResult> {
+export async function listMailboxMessages(
+  top = 50,
+  opts?: { poll?: boolean },
+): Promise<MailboxMessagesResult> {
+  const poll = opts?.poll ? "&poll=true" : "";
   const res = await apiClient<MailboxMessagesResult>(
-    `/service/email-inbound/mailbox-messages?top=${top}`,
+    `/service/email-inbound/mailbox-messages?top=${top}${poll}`,
   );
   return res.data as MailboxMessagesResult;
 }
 
-export async function getMailboxMessage(mailboxId: string): Promise<MailboxMessageDetail> {
+export async function getMailboxMessage(graphId: string): Promise<MailboxMessageDetail> {
   const res = await apiClient<MailboxMessageDetail>(
-    `/service/email-inbound/mailbox-messages/${encodeURIComponent(mailboxId)}`,
+    `/service/email-inbound/mailbox-messages/${encodeURIComponent(graphId)}`,
   );
   return res.data as MailboxMessageDetail;
 }
@@ -846,6 +1228,8 @@ export async function loadTicketFormLookups(): Promise<{
   products: LookupOption[];
   modes: LookupOption[];
   ticketCategories: LookupOption[];
+  issueReportedOptions: LookupOption[];
+  resolutionCommentOptions: LookupOption[];
   errors: string[];
 }> {
   const PAGE = 200; // API max page_size per PaginationParams
@@ -857,6 +1241,8 @@ export async function loadTicketFormLookups(): Promise<{
     { key: "products", call: () => resourceService.list("/products", { page_size: PAGE }) },
     { key: "modes", call: () => listTicketOptions("mode") },
     { key: "ticketCategories", call: () => listTicketOptions("category") },
+    { key: "issueReported", call: () => listTicketOptions("issue_reported") },
+    { key: "resolutionComment", call: () => listTicketOptions("resolution_comment") },
   ] as const;
 
   const settled = await Promise.allSettled(requests.map((r) => r.call()));
@@ -866,7 +1252,9 @@ export async function loadTicketFormLookups(): Promise<{
   settled.forEach((result, i) => {
     const key = requests[i].key;
     if (result.status === "fulfilled") {
-      dataByKey[key] = key === "modes" || key === "ticketCategories" ? result.value : result.value.data;
+      dataByKey[key] = ["modes", "ticketCategories", "issueReported", "resolutionComment"].includes(key)
+        ? result.value
+        : (result.value as { data?: unknown }).data;
     } else {
       const msg =
         result.reason instanceof ApiClientError
@@ -878,8 +1266,15 @@ export async function loadTicketFormLookups(): Promise<{
   });
 
   const modes = Array.isArray(dataByKey.modes) ? (dataByKey.modes as LookupOption[]) : [];
-  const ticketCategories = Array.isArray(dataByKey.ticketCategories)
-    ? (dataByKey.ticketCategories as LookupOption[])
+  const allowedCategories = new Set<string>(ALLOWED_TICKET_CATEGORIES);
+  const ticketCategories = (
+    Array.isArray(dataByKey.ticketCategories) ? (dataByKey.ticketCategories as LookupOption[]) : []
+  ).filter((c) => allowedCategories.has(String(c.value).toLowerCase()));
+  const issueReportedOptions = Array.isArray(dataByKey.issueReported)
+    ? (dataByKey.issueReported as LookupOption[])
+    : [];
+  const resolutionCommentOptions = Array.isArray(dataByKey.resolutionComment)
+    ? (dataByKey.resolutionComment as LookupOption[])
     : [];
 
   return {
@@ -905,6 +1300,8 @@ export async function loadTicketFormLookups(): Promise<{
           { value: "software", label: "Software" },
           { value: "network", label: "Network" },
         ],
+    issueReportedOptions,
+    resolutionCommentOptions,
     errors,
   };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Save } from "lucide-react";
@@ -138,22 +138,22 @@ const emptyForm = (): Record<string, string> => ({
   site_instructions: "",
   link_type: "",
   bandwidth: "",
-  ports_in_use: "",
   previous_fe_notes: "",
-  ip_details: "",
+  present_type: "",
   mail_extra_info: "",
   company_name_from_mail: "",
   fe_engineer_name: "",
   fe_engineer_contact: "",
-  fe_distance: "",
-  fe_visits_count: "",
   fe_carrying_spares: "false",
   fe_visit_date: "",
   fe_hw_replacement: "",
+  fe_hardware_repair: "false",
+  fe_hardware_replacement: "false",
+  fe_new_device_serial: "",
+  fe_other_charges: "",
   fe_transport_mode: "",
   fe_movement_charges: "",
   fe_visit_charges: "",
-  fe_total_charges: "",
   fe_remarks: "",
   fe_payment_approval: "",
   oem_name: "",
@@ -166,6 +166,30 @@ const emptyForm = (): Record<string, string> => ({
   oem_status: "open",
   oem_last_checked_at: "",
 });
+
+/** Email-extracted fields; manual edits are flagged via field_manual_overrides. */
+const EXTRACTED_FIELDS = [
+  "reference_sr_number",
+  "ckt_id",
+  "lsi",
+  "company_name_from_mail",
+  "customer_reference",
+  "end_customer_name",
+  "end_customer_email",
+  "coordinator_name",
+  "coordinator_phone",
+  "end_customer_street",
+  "end_customer_state",
+  "end_customer_city",
+  "end_customer_postal_code",
+  "site_availability",
+  "site_instructions",
+  "link_type",
+  "bandwidth",
+  "previous_fe_notes",
+  "mail_extra_info",
+  "present_type",
+] as const;
 
 export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }) {
   const router = useRouter();
@@ -183,8 +207,9 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [modeLocked, setModeLocked] = useState(false);
-  const [categoryLocked, setCategoryLocked] = useState(false);
+  const [assetConfirmed, setAssetConfirmed] = useState(false);
+  const initialFormRef = useRef<Record<string, string> | null>(null);
+  const existingOverridesRef = useRef<Record<string, boolean> | null>(null);
 
   const set = (name: string, value: string) => setForm((f) => ({ ...f, [name]: value }));
 
@@ -222,9 +247,9 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
       setLoading(true);
       try {
         const t = await getServiceRequestTicket(ticketId);
-        setModeLocked(Boolean(t.mode_of_action?.trim()));
-        setCategoryLocked(Boolean(t.ticket_category?.trim()));
-        setForm({
+        setAssetConfirmed(Boolean(t.asset_confirmed_at));
+        existingOverridesRef.current = t.field_manual_overrides ?? null;
+        const loaded = {
           ...emptyForm(),
           mode_of_action: t.mode_of_action ?? "",
           service_type: t.service_type ?? "managed_services",
@@ -281,22 +306,31 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
           site_instructions: t.site_instructions ?? "",
           link_type: t.link_type ?? "",
           bandwidth: t.bandwidth ?? "",
-          ports_in_use: t.ports_in_use ?? "",
           previous_fe_notes: t.previous_fe_notes ?? "",
-          ip_details: t.ip_details ?? "",
+          present_type: t.present_type ?? "",
           mail_extra_info: t.mail_extra_info ?? "",
           company_name_from_mail: t.company_name_from_mail ?? "",
           fe_engineer_name: t.field_engineer?.engineer_name ?? "",
           fe_engineer_contact: t.field_engineer?.engineer_contact ?? "",
-          fe_distance: t.field_engineer?.distance ?? "",
-          fe_visits_count: t.field_engineer?.visits_count != null ? String(t.field_engineer.visits_count) : "",
           fe_carrying_spares: String(t.field_engineer?.carrying_spares ?? false),
           fe_visit_date: t.field_engineer?.visit_date?.slice(0, 10) ?? "",
           fe_hw_replacement: t.field_engineer?.hw_replacement ?? "",
+          fe_hardware_repair: String(t.field_engineer?.hardware_repair ?? false),
+          fe_hardware_replacement: (() => {
+            const replaced =
+              Boolean(t.field_engineer?.hardware_replacement) ||
+              t.field_engineer?.hardware_replacement_yn?.toLowerCase() === "yes";
+            const detail = (t.field_engineer?.hw_replacement || "").toLowerCase();
+            if (!replaced) return "false";
+            if (detail.includes("software")) return "software";
+            if (detail.includes("device")) return "device";
+            return "hardware";
+          })(),
+          fe_new_device_serial: t.field_engineer?.new_device_serial ?? "",
+          fe_other_charges: t.field_engineer?.other_charges != null ? String(t.field_engineer.other_charges) : "",
           fe_transport_mode: t.field_engineer?.transport_mode ?? "",
           fe_movement_charges: t.field_engineer?.movement_charges != null ? String(t.field_engineer.movement_charges) : "",
           fe_visit_charges: t.field_engineer?.visit_charges != null ? String(t.field_engineer.visit_charges) : "",
-          fe_total_charges: t.field_engineer?.total_charges != null ? String(t.field_engineer.total_charges) : "",
           fe_remarks: t.field_engineer?.remarks ?? "",
           fe_payment_approval: t.field_engineer?.payment_approval ?? "",
           oem_name: t.oem_support?.oem_name ?? "",
@@ -308,7 +342,9 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
           oem_tac_resolution: t.oem_support?.tac_resolution ?? "",
           oem_status: t.oem_support?.oem_status ?? "",
           oem_last_checked_at: t.oem_support?.last_checked_at?.slice(0, 16) ?? "",
-        });
+        };
+        initialFormRef.current = loaded;
+        setForm(loaded);
       } catch (err) {
         setError(err instanceof ApiClientError ? err.message : "Failed to load ticket");
       } finally {
@@ -317,7 +353,14 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
     })();
   }, [ticketId]);
 
-  const showFe = form.mode_of_action === "onsite_support" || form.mode_of_action === "oem_support";
+  // Field Engineer Visit only applies to Onsite Support once asset details are confirmed.
+  const showFe = form.mode_of_action === "onsite_support" && assetConfirmed;
+  const feTotal = useMemo(() => {
+    if (!form.fe_visit_charges && !form.fe_movement_charges && !form.fe_other_charges) return null;
+    return [form.fe_visit_charges, form.fe_movement_charges, form.fe_other_charges]
+      .map((v) => Number(v))
+      .reduce((sum, n) => sum + (Number.isFinite(n) ? n : 0), 0);
+  }, [form.fe_visit_charges, form.fe_movement_charges, form.fe_other_charges]);
   const showOem = form.oem_support_enabled === "true";
 
   const buildPayload = useCallback(() => {
@@ -374,9 +417,8 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
       site_instructions: nullIfEmpty(form.site_instructions),
       link_type: nullIfEmpty(form.link_type),
       bandwidth: nullIfEmpty(form.bandwidth),
-      ports_in_use: nullIfEmpty(form.ports_in_use),
       previous_fe_notes: nullIfEmpty(form.previous_fe_notes),
-      ip_details: nullIfEmpty(form.ip_details),
+      present_type: nullIfEmpty(form.present_type),
       mail_extra_info: nullIfEmpty(form.mail_extra_info),
       company_name_from_mail: nullIfEmpty(form.company_name_from_mail),
     };
@@ -384,19 +426,42 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
     const productId = nullIfEmpty(form.product_id);
     if (ownerId) payload.owner_employee_id = ownerId;
     if (productId) payload.product_id = productId;
+    if (isEdit) {
+      const initial = initialFormRef.current;
+      const overrides: Record<string, boolean> = {};
+      for (const key of EXTRACTED_FIELDS) {
+        if (initial && (form[key] ?? "").trim() !== (initial[key] ?? "").trim()) overrides[key] = true;
+      }
+      if (Object.keys(overrides).length > 0) {
+        payload.field_manual_overrides = { ...(existingOverridesRef.current ?? {}), ...overrides };
+      }
+    }
     if (showFe) {
+      const replaced = form.fe_hardware_replacement !== "false";
+      const typeLabel =
+        form.fe_hardware_replacement === "software"
+          ? "Software replaced"
+          : form.fe_hardware_replacement === "device"
+            ? "Device replaced"
+            : form.fe_hardware_replacement === "hardware"
+              ? "Hardware replaced"
+              : null;
       payload.field_engineer = {
         engineer_name: nullIfEmpty(form.fe_engineer_name),
         engineer_contact: nullIfEmpty(form.fe_engineer_contact),
-        distance: nullIfEmpty(form.fe_distance),
-        visits_count: form.fe_visits_count ? Number(form.fe_visits_count) : null,
         carrying_spares: form.fe_carrying_spares === "true",
         visit_date: nullIfEmpty(form.fe_visit_date),
-        hw_replacement: nullIfEmpty(form.fe_hw_replacement),
+        hw_replacement: replaced
+          ? [typeLabel, form.fe_hw_replacement.trim()].filter(Boolean).join(" — ") || typeLabel
+          : nullIfEmpty(form.fe_hw_replacement),
+        hardware_repair: form.fe_hardware_repair === "true" ? "yes" : "no",
+        hardware_replacement_yn: replaced ? "yes" : "no",
+        new_device_serial: replaced ? nullIfEmpty(form.fe_new_device_serial) : null,
         transport_mode: nullIfEmpty(form.fe_transport_mode),
         movement_charges: form.fe_movement_charges ? Number(form.fe_movement_charges) : null,
         visit_charges: form.fe_visit_charges ? Number(form.fe_visit_charges) : null,
-        total_charges: form.fe_total_charges ? Number(form.fe_total_charges) : null,
+        other_charges: form.fe_other_charges ? Number(form.fe_other_charges) : null,
+        total_charges: feTotal,
         remarks: nullIfEmpty(form.fe_remarks),
         payment_approval: nullIfEmpty(form.fe_payment_approval),
       };
@@ -415,12 +480,17 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
       };
     }
     return payload;
-  }, [form, showFe, showOem]);
+  }, [form, showFe, showOem, feTotal, isEdit]);
 
   const onSave = async () => {
     setSaving(true);
     setError(null);
     try {
+      if (showFe && form.fe_hardware_replacement !== "false" && !form.fe_new_device_serial.trim()) {
+        setError("Enter New Device SR No. when hardware / software / device is replaced.");
+        setSaving(false);
+        return;
+      }
       const payload = buildPayload();
       if (!payload.branch_id || !payload.category_id || !payload.customer_id) {
         setError("Branch, category, and customer are required. Wait for dropdowns to load or refresh the page.");
@@ -490,8 +560,8 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
       ) : null}
 
       <div className="space-y-4">
-        <Section title="Section 1 - Basic Information">
-          <Field label="Mode of Action">
+        <Section title="Section 1 — Basic Information">
+          <Field label="Resolution Mode">
             <select className={selectCls} value={form.mode_of_action} disabled>
               <option value="">Assigned engineer chooses after opening the ticket…</option>
               {modes.map((m) => (
@@ -499,9 +569,7 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
               ))}
             </select>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              {modeLocked
-                ? "Fixed after engineer selection."
-                : "Set from the ticket detail page after Open Ticket."}
+              Set from the ticket detail page after Open Ticket. Can be changed until the ticket is resolved.
             </p>
           </Field>
           <Field label="Service Request Type" required>
@@ -565,7 +633,7 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
           </Field>
         </Section>
 
-        <Section title="Section 3 - Asset Details">
+        <Section title="Section 3 — Asset Details">
           <div className="sm:col-span-2 rounded-md border border-dashed border-border/60 bg-muted/20 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
             Asset name and serial are filled automatically from the inbound email when the ticket is created.
             After opening the ticket, review and confirm them on the ticket page (fix missing fields or changes there).
@@ -601,7 +669,7 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
           </Field>
         </Section>
 
-        <Section title="Section 4 - Ticket Information">
+        <Section title="Section 4 — Ticket Information">
           <Field label="Category of Ticket">
             <select className={selectCls} value={form.ticket_category} disabled>
               <option value="">Assigned engineer chooses after opening the ticket…</option>
@@ -610,9 +678,7 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
               ))}
             </select>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              {categoryLocked
-                ? "Fixed after engineer selection."
-                : "Set from the ticket detail page after Open Ticket."}
+              Hardware, Software or Network. Set from the ticket detail page after Open Ticket.
             </p>
           </Field>
           <Field label="SLA Status" required>
@@ -623,6 +689,7 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
             </select>
           </Field>
           <Field label="Software Version"><Input value={form.software_version} onChange={(e) => set("software_version", e.target.value)} /></Field>
+          <Field label="Present Type"><Input value={form.present_type} placeholder="NA" onChange={(e) => set("present_type", e.target.value)} /></Field>
           <div className="sm:col-span-2">
             <Field label="Issue Description" required>
               <textarea className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={form.issue_description} onChange={(e) => set("issue_description", e.target.value)} />
@@ -630,7 +697,7 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
           </div>
         </Section>
 
-        <Section title="Section 5 - Reference Information">
+        <Section title="Section 5 — Reference Information">
           <Field label="Service Request Number"><Input value={form.reference_sr_number} onChange={(e) => set("reference_sr_number", e.target.value)} /></Field>
           <Field label="CKT ID"><Input value={form.ckt_id} onChange={(e) => set("ckt_id", e.target.value)} /></Field>
           <Field label="Customer Reference / LSI"><Input value={form.lsi} onChange={(e) => set("lsi", e.target.value)} /></Field>
@@ -638,7 +705,7 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
           <Field label="Customer Reference"><Input value={form.customer_reference} onChange={(e) => set("customer_reference", e.target.value)} /></Field>
         </Section>
 
-        <Section title="Section 6 - End Customer Details">
+        <Section title="Section 6 — End Customer Details">
           <Field label="Customer Name"><Input value={form.end_customer_name} onChange={(e) => set("end_customer_name", e.target.value)} /></Field>
           <Field label="Email"><Input value={form.end_customer_email} onChange={(e) => set("end_customer_email", e.target.value)} /></Field>
           <Field label="Coordinator"><Input value={form.coordinator_name} onChange={(e) => set("coordinator_name", e.target.value)} /></Field>
@@ -654,19 +721,13 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
           <Field label="Site Availability"><Input value={form.site_availability} onChange={(e) => set("site_availability", e.target.value)} /></Field>
           <Field label="Link Type"><Input value={form.link_type} onChange={(e) => set("link_type", e.target.value)} /></Field>
           <Field label="Bandwidth"><Input value={form.bandwidth} onChange={(e) => set("bandwidth", e.target.value)} /></Field>
-          <Field label="Ports in Use"><Input value={form.ports_in_use} onChange={(e) => set("ports_in_use", e.target.value)} /></Field>
           <div className="sm:col-span-2">
             <Field label="Site Instructions (photos / RTR snaps)">
               <textarea className="min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={form.site_instructions} onChange={(e) => set("site_instructions", e.target.value)} />
             </Field>
           </div>
           <div className="sm:col-span-2">
-            <Field label="IP / Credentials Notes">
-              <textarea className="min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={form.ip_details} onChange={(e) => set("ip_details", e.target.value)} />
-            </Field>
-          </div>
-          <div className="sm:col-span-2">
-            <Field label="Previous FE Notes">
+            <Field label="Previous Ticket">
               <textarea className="min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={form.previous_fe_notes} onChange={(e) => set("previous_fe_notes", e.target.value)} />
             </Field>
           </div>
@@ -677,7 +738,7 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
           </div>
         </Section>
 
-        <Section title="Section 7 - Additional Information">
+        <Section title="Section 7 — Additional Information">
           <Field label="Start Work Date"><Input type="datetime-local" value={form.start_work_date} onChange={(e) => set("start_work_date", e.target.value)} /></Field>
           <Field label="Due Date"><Input type="datetime-local" value={form.due_at} onChange={(e) => set("due_at", e.target.value)} /></Field>
           <Field label="Channel" required>
@@ -716,11 +777,9 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
         </Section>
 
         {showFe ? (
-          <Section title="Section 9 - Field Engineer Visit">
+          <Section title="Section 9 — Field Engineer Visit">
             <Field label="Field Engineer Name"><Input value={form.fe_engineer_name} onChange={(e) => set("fe_engineer_name", e.target.value)} /></Field>
             <Field label="Contact Number"><Input value={form.fe_engineer_contact} onChange={(e) => set("fe_engineer_contact", e.target.value)} /></Field>
-            <Field label="Distance from FE Location"><Input value={form.fe_distance} onChange={(e) => set("fe_distance", e.target.value)} /></Field>
-            <Field label="Number of Visits"><Input type="number" value={form.fe_visits_count} onChange={(e) => set("fe_visits_count", e.target.value)} /></Field>
             <Field label="Engineer Carrying spares tools">
               <select className={selectCls} value={form.fe_carrying_spares} onChange={(e) => set("fe_carrying_spares", e.target.value)}>
                 <option value="false">No</option>
@@ -728,11 +787,37 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
               </select>
             </Field>
             <Field label="Site Visit Date"><Input type="date" value={form.fe_visit_date} onChange={(e) => set("fe_visit_date", e.target.value)} /></Field>
-            <Field label="HW Replacement"><Input value={form.fe_hw_replacement} onChange={(e) => set("fe_hw_replacement", e.target.value)} placeholder="-None-" /></Field>
+            <Field label="Hardware Repair">
+              <select className={selectCls} value={form.fe_hardware_repair} onChange={(e) => set("fe_hardware_repair", e.target.value)}>
+                <option value="false">No</option>
+                <option value="true">Yes</option>
+              </select>
+            </Field>
+            <Field label="Replaced (Hardware / Software / Device)">
+              <select className={selectCls} value={form.fe_hardware_replacement} onChange={(e) => set("fe_hardware_replacement", e.target.value)}>
+                <option value="false">No</option>
+                <option value="hardware">Hardware replaced</option>
+                <option value="software">Software replaced</option>
+                <option value="device">Device replaced</option>
+              </select>
+            </Field>
+            {form.fe_hardware_replacement !== "false" ? (
+              <>
+                <Field label="New Device SR No. *"><Input value={form.fe_new_device_serial} onChange={(e) => set("fe_new_device_serial", e.target.value)} placeholder="Required for replacement" required /></Field>
+                <Field label="Replacement Details"><Input value={form.fe_hw_replacement} onChange={(e) => set("fe_hw_replacement", e.target.value)} placeholder="-None-" /></Field>
+              </>
+            ) : null}
             <Field label="Mode of Transport"><Input value={form.fe_transport_mode} onChange={(e) => set("fe_transport_mode", e.target.value)} /></Field>
             <Field label="Movement Charges"><Input type="number" value={form.fe_movement_charges} onChange={(e) => set("fe_movement_charges", e.target.value)} /></Field>
             <Field label="Visit Charges"><Input type="number" value={form.fe_visit_charges} onChange={(e) => set("fe_visit_charges", e.target.value)} /></Field>
-            <Field label="Total Charges"><Input type="number" value={form.fe_total_charges} onChange={(e) => set("fe_total_charges", e.target.value)} /></Field>
+            <Field label="Other Charges"><Input type="number" value={form.fe_other_charges} onChange={(e) => set("fe_other_charges", e.target.value)} /></Field>
+            <Field label="Total Charges (Visit + Movement + Other)">
+              <Input
+                readOnly
+                value={feTotal != null ? new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(feTotal) : ""}
+                placeholder="—"
+              />
+            </Field>
             <div className="sm:col-span-2">
               <Field label="Remarks"><textarea className="min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={form.fe_remarks} onChange={(e) => set("fe_remarks", e.target.value)} /></Field>
             </div>
@@ -740,7 +825,7 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
         ) : null}
 
         {showOem ? (
-          <Section title="Section 10 - OEM Support">
+          <Section title="Section 10 — OEM Support">
             <Field label="OEM Name"><Input value={form.oem_name} onChange={(e) => set("oem_name", e.target.value)} /></Field>
             <Field label="OEM Ticket Number"><Input value={form.oem_ticket_number} onChange={(e) => set("oem_ticket_number", e.target.value)} /></Field>
             <Field label="Ticket Type">

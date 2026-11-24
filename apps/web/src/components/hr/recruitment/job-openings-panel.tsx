@@ -176,7 +176,7 @@ export function JobOpeningsPanel({
           <button
             type="button"
             onClick={resetFilters}
-            className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium text-[#7C3AED] hover:bg-[#F4EDFB]"
+            className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium text-primary hover:bg-primary/10"
           >
             <RotateCcw className="size-3.5" strokeWidth={1.75} />
             Reset
@@ -184,7 +184,7 @@ export function JobOpeningsPanel({
           <Button
             type="button"
             size="sm"
-            className="h-9 cursor-pointer rounded-full bg-[#7C3AED] px-3.5 text-[12px] text-white hover:bg-[#6D28D9]"
+            className="h-9 cursor-pointer rounded-full bg-primary px-3.5 text-[12px] text-primary-foreground hover:bg-primary/90"
             onClick={applyFilters}
           >
             Apply Filters
@@ -196,7 +196,7 @@ export function JobOpeningsPanel({
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center gap-3 px-4 py-12 text-center">
             <p className="text-sm text-muted-foreground">No job openings match these filters</p>
-            <Button size="sm" className="cursor-pointer bg-[#7C3AED] text-white hover:bg-[#6D28D9]" onClick={onCreate}>
+            <Button size="sm" className="cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90" onClick={onCreate}>
               Create Job Opening
             </Button>
           </div>
@@ -225,6 +225,7 @@ export function JobOpeningsPanel({
                     </th>
                     <SortTh label="Job ID" active={sortKey === "jobCode"} dir={sortDir} onClick={() => toggleSort("jobCode")} />
                     <SortTh label="Title" active={sortKey === "title"} dir={sortDir} onClick={() => toggleSort("title")} />
+                    <th className="px-3 py-3 font-medium">Audience</th>
                     <th className="px-3 py-3 font-medium">Department</th>
                     <th className="px-3 py-3 font-medium">Location</th>
                     <th className="px-3 py-3 font-medium">Positions</th>
@@ -244,9 +245,22 @@ export function JobOpeningsPanel({
                   {pageRows.map((j) => (
                     <tr
                       key={j.id}
-                      className="border-b border-[#F8F8FA] text-[12px] text-[#374151] last:border-0 transition-colors duration-150 hover:bg-[#FAFAFC]"
+                      role="link"
+                      tabIndex={0}
+                      onClick={() => onView(j)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onView(j);
+                        }
+                      }}
+                      className="cursor-pointer border-b border-[#F8F8FA] text-[12px] text-[#374151] last:border-0 transition-colors duration-150 hover:bg-[#FAFAFC]"
                     >
-                      <td className="px-3 py-3">
+                      <td
+                        className="px-3 py-3"
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      >
                         <input
                           type="checkbox"
                           className="cursor-pointer accent-primary"
@@ -263,6 +277,17 @@ export function JobOpeningsPanel({
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap text-[#6B7280]">{j.jobCode}</td>
                       <td className="px-3 py-3 font-semibold whitespace-nowrap text-[#111827]">{j.title}</td>
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <span
+                          className={
+                            j.postingAudience === "internal"
+                              ? "rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900"
+                              : "rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-900"
+                          }
+                        >
+                          {j.postingAudience === "internal" ? "Internal" : "External"}
+                        </span>
+                      </td>
                       <td className="px-3 py-3 whitespace-nowrap">{j.department || "—"}</td>
                       <td className="px-3 py-3 whitespace-nowrap">{j.location || "—"}</td>
                       <td className="px-3 py-3 whitespace-nowrap">
@@ -280,7 +305,11 @@ export function JobOpeningsPanel({
                       <td className="px-3 py-3 whitespace-nowrap text-[#6B7280]">
                         {formatPostedOn(j.createdAt)}
                       </td>
-                      <td className="px-3 py-3">
+                      <td
+                        className="px-3 py-3"
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      >
                         <VerticalKebab
                           items={[
                             { label: "View", onClick: () => onView(j) },

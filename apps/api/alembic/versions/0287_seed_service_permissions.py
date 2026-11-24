@@ -117,23 +117,21 @@ def _grant(conn, now, tenant_id, role_id, perm_id):
     )
 
 
-def _resolve_perm_id(conn, now, perm_ids: dict[str, str], perm_code: str) -> str | None:
-    if perm_code in perm_ids:
-        return perm_ids[perm_code]
+def _resolve_permission_id(conn, now, code: str, perm_ids: dict[str, str]) -> str:
+    if code in perm_ids:
+        return perm_ids[code]
     exists = conn.execute(
         sa.text("SELECT id FROM foundation.sec_permission WHERE permission_code = :code"),
-        {"code": perm_code},
+        {"code": code},
     ).first()
     if exists:
-        perm_ids[perm_code] = str(exists[0])
-        return perm_ids[perm_code]
-    # Cross-module lookup perms (e.g. master.customer:read) — create if missing.
-    if ":" in perm_code:
-        resource, action = perm_code.rsplit(":", 1)
-        module = resource.split(".", 1)[0]
-        perm_ids[perm_code] = _ensure_permission(conn, now, perm_code, resource, action, module)
-        return perm_ids[perm_code]
-    return None
+        perm_ids[code] = str(exists[0])
+        return perm_ids[code]
+    # Cross-module lookups (e.g. master.customer:read) — create a stub if missing.
+    resource, _, action = code.partition(":")
+    module = resource.split(".", 1)[0] if "." in resource else "service"
+    perm_ids[code] = _ensure_permission(conn, now, code, resource, action or "read", module)
+    return perm_ids[code]
 
 
 def upgrade() -> None:
@@ -150,10 +148,7 @@ def upgrade() -> None:
         for role_code, role_name, perms in ROLE_SPECS:
             role_id = _ensure_role(conn, now, tid, role_code, role_name)
             for perm_code in perms:
-                pid = _resolve_perm_id(conn, now, perm_ids, perm_code)
-                if pid is None:
-                    continue
-                _grant(conn, now, tid, role_id, pid)
+                _grant(conn, now, tid, role_id, _resolve_permission_id(conn, now, perm_code, perm_ids))
 
 
 def downgrade() -> None:

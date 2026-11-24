@@ -225,7 +225,7 @@ export function importReceiptSerialsFromExcel(
         if (activeExpected.length === 0) {
           resolve({
             ok: false,
-            message: "No receive quantities on this PO. Enter Receive now values before importing.",
+            message: "No receive quantities on this PO. Enter GRN qty values before importing.",
           });
           return;
         }

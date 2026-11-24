@@ -59,18 +59,9 @@ export type UserTransferDestinationPanelProps = {
 const EMPLOYEE_MODES: Array<{
   value: UserTransferEmployeeSource;
   label: string;
-  hint: string;
 }> = [
-  {
-    value: "MASTER_DATA",
-    label: "Existing Employee",
-    hint: "Select from the employee directory.",
-  },
-  {
-    value: "MANUAL_ENTRY",
-    label: "Manual Entry",
-    hint: "Enter details when the person is not in the directory.",
-  },
+  { value: "MASTER_DATA", label: "Existing Employee" },
+  { value: "MANUAL_ENTRY", label: "Manual Entry" },
 ];
 
 function componentLabel(
@@ -158,13 +149,6 @@ export function UserTransferDestinationPanel({
 
   return (
     <div className="space-y-4" data-testid="user-transfer-destination">
-      <p className="text-sm text-muted-foreground">
-        Verification reference{" "}
-        <span className="font-mono text-xs text-foreground">
-          {verificationResult.verification_id}
-        </span>
-      </p>
-
       <div className="grid gap-4 lg:grid-cols-2">
         <Card
           className={cn(
@@ -175,15 +159,12 @@ export function UserTransferDestinationPanel({
           onClick={() => onModeChange("assign")}
           data-testid="destination-assign-card"
         >
-          <CardHeader className="border-b border-border/60 pb-3">
+          <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2 text-base font-semibold">
               <ArrowLeftRight className="size-4 text-primary" aria-hidden />
               Assign to new user
             </CardTitle>
           </CardHeader>
-          <CardContent className="pt-4 text-sm text-muted-foreground">
-            Transfer custody to another employee. Asset stays assigned.
-          </CardContent>
         </Card>
 
         <Card
@@ -195,15 +176,12 @@ export function UserTransferDestinationPanel({
           onClick={() => onModeChange("return")}
           data-testid="destination-return-card"
         >
-          <CardHeader className="border-b border-border/60 pb-3">
+          <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2 text-base font-semibold">
               <Package className="size-4 text-primary" aria-hidden />
               Return to stock
             </CardTitle>
           </CardHeader>
-          <CardContent className="pt-4 text-sm text-muted-foreground">
-            Close the assignment and set the asset to Ready to Move.
-          </CardContent>
         </Card>
       </div>
 
@@ -219,37 +197,31 @@ export function UserTransferDestinationPanel({
               </p>
             ) : null}
 
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">How is the new user identified?</p>
-              <div
-                className="grid grid-cols-1 gap-1.5 sm:grid-cols-2"
-                role="group"
-                aria-label="New user source"
-                data-testid="ut-employee-source"
-              >
-                {EMPLOYEE_MODES.map((m) => {
-                  const active = assignForm.employeeSource === m.value;
-                  return (
-                    <button
-                      key={m.value}
-                      type="button"
-                      data-testid={`ut-source-${m.value}`}
-                      onClick={() => switchEmployeeSource(m.value)}
-                      className={cn(
-                        "cursor-pointer rounded-lg border px-3 py-2.5 text-left transition-colors duration-200",
-                        active
-                          ? "border-primary bg-primary/10 shadow-sm"
-                          : "border-border/80 hover:bg-muted/40",
-                      )}
-                    >
-                      <span className="block text-sm font-medium text-foreground">{m.label}</span>
-                      <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
-                        {m.hint}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+            <div
+              className="grid grid-cols-1 gap-1.5 sm:grid-cols-2"
+              role="group"
+              aria-label="New user source"
+              data-testid="ut-employee-source"
+            >
+              {EMPLOYEE_MODES.map((m) => {
+                const active = assignForm.employeeSource === m.value;
+                return (
+                  <button
+                    key={m.value}
+                    type="button"
+                    data-testid={`ut-source-${m.value}`}
+                    onClick={() => switchEmployeeSource(m.value)}
+                    className={cn(
+                      "cursor-pointer rounded-lg border px-3 py-2.5 text-left text-sm font-medium transition-colors duration-200",
+                      active
+                        ? "border-primary bg-primary/10 text-foreground shadow-sm"
+                        : "border-border/80 text-foreground hover:bg-muted/40",
+                    )}
+                  >
+                    {m.label}
+                  </button>
+                );
+              })}
             </div>
 
             {assignForm.employeeSource === "MASTER_DATA" ? (
@@ -378,8 +350,8 @@ export function UserTransferDestinationPanel({
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="ut-bldg">Building *</Label>
-                <Select
+                <Label htmlFor="ut-bldg">Office *</Label>
+                  <Select
                   value={assignForm.toBuildingId || undefined}
                   onValueChange={(v) => onAssignFormChange({ toBuildingId: v })}
                   disabled={!assignForm.toLocationId}
@@ -387,7 +359,7 @@ export function UserTransferDestinationPanel({
                   <SelectTrigger id="ut-bldg" className="cursor-pointer" data-testid="ut-building-select">
                     <SelectValue
                       placeholder={
-                        assignForm.toLocationId ? "Select building" : "Select location first"
+                        assignForm.toLocationId ? "Select office" : "Select location first"
                       }
                     />
                   </SelectTrigger>
@@ -481,7 +453,7 @@ export function UserTransferDestinationPanel({
                 value={returnForm.reason}
                 onChange={(e) => onReturnFormChange({ reason: e.target.value })}
                 maxLength={500}
-                placeholder="Short audit reason"
+                placeholder=""
                 data-testid="return-reason"
               />
             </div>

@@ -86,7 +86,7 @@ export function ReinstateConfirmDialog({
             {opsLabel}
           </p>
           <p id="reinstate-desc" className="pt-2 text-muted-foreground">
-            This will return the asset to Ready to Move. It can then be assigned again. Make sure
+            This will return the asset to In Stock. It can then be assigned again. Make sure
             the asset has been inspected and is fit for use.
           </p>
           {error ? (

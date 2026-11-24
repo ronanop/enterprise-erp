@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>iConnect Plus — Asset Management Training Manual</title>
+<style>
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap");
+:root{
+  --ink:#1c2430;--muted:#5b6b7c;--line:#d5dde5;--card:#fff;
+  --brand:#2a5f6e;--brand-dark:#1e4a56;--brand-soft:#e8f3f5;
+  --warn:#b45309;--warn-bg:#fffbeb;--ok:#047857;--ok-bg:#ecfdf5;--radius:10px;
+}
+*{box-sizing:border-box}
+@page{size:A4;margin:14mm 12mm 16mm 12mm}
+html{font-size:10.5pt}
+body{
+  margin:0;color:var(--ink);
+  font-family:"Plus Jakarta Sans","Segoe UI",Calibri,Arial,sans-serif;
+  line-height:1.5;background:#fff;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact;
+}
+.page{max-width:190mm;margin:0 auto}
+h1,h2,h3,h4{
+  font-family:"Plus Jakarta Sans","Segoe UI",sans-serif;
+  color:var(--brand-dark);line-height:1.25;font-weight:700;
+  break-after:avoid;page-break-after:avoid;
+}
+h1{font-size:1.85rem;margin:0 0 .4rem;letter-spacing:-.02em}
+h2{
+  font-size:1.15rem;margin:1.1rem 0 .4rem;padding:.3rem 0 .3rem .65rem;
+  border-left:4px solid var(--brand);border-bottom:1px solid var(--line);
+  background:linear-gradient(90deg,var(--brand-soft) 0%,transparent 72%);
+}
+h3{font-size:1.02rem;margin:.85rem 0 .3rem;color:var(--ink);font-weight:650}
+p{margin:.25rem 0 .45rem}
+ul,ol{margin:.2rem 0 .55rem;padding-left:1.2rem}
+li{margin:.12rem 0}
+.muted{color:var(--muted)}
+code{font-family:ui-monospace,Consolas,monospace;font-size:.88em;background:var(--brand-soft);padding:.05rem .3rem;border-radius:4px;color:var(--brand-dark)}
+.cover{
+  position:relative;min-height:250mm;display:flex;flex-direction:column;justify-content:center;
+  padding:36px 40px 40px 48px;
+  background:linear-gradient(165deg,#1a2836 0%,#243746 38%,#2a5f6e 100%);
+  color:#f8fafc;break-after:page;page-break-after:always;overflow:hidden;
+}
+.cover::before{content:"";position:absolute;right:-40px;top:-40px;width:220px;height:220px;border-radius:50%;background:rgba(255,255,255,.06)}
+.cover::after{content:"";position:absolute;left:0;bottom:0;right:0;height:8px;background:linear-gradient(90deg,#3d7a8a,#7dd3c7,#3d7a8a)}
+.cover-kicker{letter-spacing:.16em;text-transform:uppercase;font-size:.72rem;color:#7dd3c7;font-weight:700;margin-bottom:.9rem}
+.cover h1{font-size:2.2rem;margin-bottom:.45rem;color:#fff}
+.cover .subtitle{font-size:1.05rem;color:#c5d4de;margin-bottom:1.2rem;max-width:34rem}
+.cover .muted{color:#9fb0bd}
+.meta-box{border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);padding:14px 16px;margin-top:1.2rem;width:fit-content;min-width:300px;border-radius:var(--radius)}
+.meta-box table{border-collapse:collapse;width:100%}
+.meta-box td{padding:5px 10px 5px 0;vertical-align:top;color:#e8eef2;font-size:.92rem}
+.meta-box td:first-child{color:#7dd3c7;width:130px;font-weight:600}
+.badge-row{margin-top:1rem;display:flex;gap:8px;flex-wrap:wrap}
+.badge{display:inline-block;border:1px solid rgba(125,211,199,.55);color:#e8fffb;background:rgba(125,211,199,.12);padding:4px 11px;border-radius:999px;font-size:.72rem;font-weight:600}
+.toc{break-after:page;page-break-after:always;padding-top:.35rem}
+.toc ol{padding-left:1.3rem}
+.toc li{margin:.32rem 0}
+.keep,.table-block,.callout,.role-grid,.module-card{break-inside:avoid;page-break-inside:avoid}
+.role-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:.55rem 0 .8rem}
+.role-grid.three{grid-template-columns:1fr 1fr 1fr}
+.role-card,.module-card{border:1px solid var(--line);padding:12px 14px;background:var(--brand-soft);border-radius:var(--radius)}
+.role-card h3,.module-card h3{margin-top:0;margin-bottom:.3rem;color:var(--brand-dark);font-size:.98rem}
+.role-card ul,.module-card ul{margin-bottom:0;font-size:.9rem}
+.table-block{margin:.4rem 0 .8rem;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:#fff}
+.table-block>.table-heading{padding:.5rem .7rem .15rem;margin:0;background:linear-gradient(90deg,var(--brand-soft) 0%,transparent 80%);border-left:4px solid var(--brand)}
+.table-block>p{margin:.3rem .7rem .4rem}
+table.data{width:100%;border-collapse:collapse;margin:0;font-size:.84rem}
+table.data th,table.data td{border:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top}
+table.data th{background:var(--brand-dark);color:#f8fafc;font-weight:600;font-size:.7rem;letter-spacing:.04em;text-transform:uppercase}
+table.data tr:nth-child(even) td{background:#f7fafb}
+.callout{border-left:4px solid var(--brand);background:var(--brand-soft);padding:10px 12px;margin:.5rem 0 .7rem;border-radius:0 var(--radius) var(--radius) 0;font-size:.92rem}
+.callout.warn{border-left-color:var(--warn);background:var(--warn-bg)}
+.callout.ok{border-left-color:var(--ok);background:var(--ok-bg)}
+.steps{counter-reset:step;list-style:none;padding-left:0}
+.steps li{counter-increment:step;position:relative;padding-left:2rem;margin:.3rem 0}
+.steps li::before{content:counter(step);position:absolute;left:0;top:.05rem;width:1.3rem;height:1.3rem;border-radius:50%;background:var(--brand);color:#fff;font-size:.68rem;font-weight:700;line-height:1.3rem;text-align:center}
+.checklist{list-style:none;padding-left:0}
+.checklist li{padding-left:1.5rem;position:relative;margin:.28rem 0}
+.checklist li::before{content:"☐";position:absolute;left:0;color:var(--brand);font-weight:700}
+.footer-note{margin-top:1.1rem;padding:.75rem .85rem;border-top:2px solid var(--brand);background:var(--brand-soft);border-radius:0 0 var(--radius) var(--radius);font-size:.76rem;color:var(--muted)}
+.mod-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:.5rem 0 .8rem}
+@media print{
+  .cover{break-after:page;page-break-after:always}
+  h2,h3{break-after:avoid;page-break-after:avoid}
+  .keep,.table-block,.callout,.role-grid,.role-card,.module-card{break-inside:avoid!important;page-break-inside:avoid!important}
+  table.data,tr{break-inside:avoid;page-break-inside:avoid}
+  thead{display:table-header-group}
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<section class="cover">
+  <div class="cover-kicker">iConnect Plus / CACHE Digitech</div>
+  <h1>Asset Management<br/>Training Manual</h1>
+  <p class="subtitle">Hands-on guide for trainees — from login and masters to inventory, assignment, returns, and end-of-life</p>
+  <div class="badge-row">
+    <span class="badge">Classroom ready</span>
+    <span class="badge">IT Assets</span>
+    <span class="badge">Day-1 workflows</span>
+  </div>
+  <div class="meta-box">
+    <table>
+      <tr><td>Product</td><td>iConnect Plus ERP</td></tr>
+      <tr><td>Module</td><td>Asset Management</td></tr>
+      <tr><td>Document</td><td>Training Manual v1.1</td></tr>
+      <tr><td>Audience</td><td>New Asset operators &amp; admins</td></tr>
+      <tr><td>Session length</td><td>~90–120 minutes</td></tr>
+      <tr><td>Date</td><td>18 November 2026</td></tr>
+    </table>
+  </div>
+  <p class="muted" style="margin-top:2rem;">Use this booklet during live training. Complete the practice checklist at the end.</p>
+</section>
+
+<section class="toc">
+  <h2>Training agenda</h2>
+  <ol>
+    <li>Learning goals &amp; how to sign in</li>
+    <li>Where things live (sidebar map)</li>
+    <li>Masters first — Types, Locations, Departments</li>
+    <li>Add assets &amp; Excel upload</li>
+    <li>All Assets — search, status, detail</li>
+    <li>Asset Assignments — issue, list, detail</li>
+    <li>Return assets to stock</li>
+    <li>DC Challan, Transfers, Maintenance, Disposal</li>
+    <li>Components &amp; Documents</li>
+    <li>Common mistakes &amp; FAQ</li>
+    <li>Practice checklist (trainer sign-off)</li>
+  </ol>
+</section>
+
+<h2>1. Learning goals</h2>
+<p>By the end of this session, you should be able to:</p>
+<ul>
+  <li>Open Asset Management and find the correct screen</li>
+  <li>Create Locations (and addresses) before bulk upload</li>
+  <li>Register an asset (form or Excel) and find it in <strong>All Assets</strong></li>
+  <li>Issue an asset to an employee and read the assignment list</li>
+  <li>Return an asset (<strong>Good — Return To Stock</strong> / <strong>Outdated — Retire</strong>)</li>
+  <li>Know when to use DC Challan, Transfer, Maintenance, and Disposal</li>
+</ul>
+<div class="callout warn">
+  <strong>Access:</strong> You need Asset domain membership (IT and/or Non-IT). If Asset Management is missing from the module hub, ask a Superadmin. Sign in with your company account (Entra SSO or local admin credentials provided by the trainer).
+</div>
+
+<h2>2. Where things live (sidebar map)</h2>
+<div class="mod-grid">
+  <div class="module-card">
+    <h3>Inventory</h3>
+    <ul>
+      <li>Dashboard</li>
+      <li>All Assets</li>
+      <li>Incoming Assets / QC</li>
+      <li>Pending Registration</li>
+      <li>Add Asset / Upload</li>
+    </ul>
+  </div>
+  <div class="module-card">
+    <h3>Configuration</h3>
+    <ul>
+      <li>Asset Types</li>
+      <li>Locations (+ Addresses / Buildings)</li>
+      <li>Departments</li>
+      <li>Users (domain membership)</li>
+    </ul>
+  </div>
+  <div class="module-card">
+    <h3>Custody &amp; movement</h3>
+    <ul>
+      <li>Asset Assignments</li>
+      <li>DC Challan</li>
+      <li>Transfers</li>
+    </ul>
+  </div>
+  <div class="module-card">
+    <h3>Lifecycle</h3>
+    <ul>
+      <li>Maintenance</li>
+      <li>Disposal</li>
+      <li>Components</li>
+      <li>Documents / Reports</li>
+    </ul>
+  </div>
+</div>
+
+<div class="table-block keep">
+  <h2 class="table-heading">Operational status (All Assets)</h2>
+  <p>Statuses you will see most often:</p>
+  <table class="data">
+    <tr><th>Status</th><th>Meaning</th><th>Typical next action</th></tr>
+    <tr><td><strong>In Stock</strong></td><td>Available in inventory (not with an employee)</td><td>Assign / Transfer</td></tr>
+    <tr><td><strong>Assigned</strong></td><td>Issued to an employee</td><td>Return / DC / Maintenance</td></tr>
+    <tr><td><strong>Maintenance</strong></td><td>Under a work order</td><td>Complete maintenance</td></tr>
+    <tr><td><strong>Disposed</strong></td><td>Retired from active use</td><td>Reinstate only if policy allows</td></tr>
+  </table>
+</div>
+
+<h2>3. Masters first — Types, Locations, Departments</h2>
+<p>Always configure masters before large uploads.</p>
+<ol class="steps">
+  <li>Open <strong>Asset Types</strong> and confirm types you need (Laptop, Desktop, Monitor, etc.).</li>
+  <li>Open <strong>Locations</strong>. Add a site (e.g. Greater Kailash, New Delhi). Optionally mark Head Office (only one per company).</li>
+  <li>Select the location and add <strong>Addresses</strong> / buildings (e.g. Building A, CRC2).</li>
+  <li>Open <strong>Departments</strong> if your process uses department ownership.</li>
+</ol>
+<div class="callout warn">
+  <strong>Important — Excel upload:</strong> Upload Asset List does <em>not</em> create locations. It only matches an existing location name. If the name is missing, import fails — add the location under <strong>Assets → Locations</strong> first, then use the same spelling in Excel.
+</div>
+
+<h2>4. Add assets &amp; Excel upload</h2>
+<h3>4.1 Add one asset (form)</h3>
+<ol class="steps">
+  <li>Go to <strong>Add Asset</strong> (or + Add from All Assets).</li>
+  <li>Enter name, type, serial / tag, make, model, configuration.</li>
+  <li>Pick location / address when prompted.</li>
+  <li>Save — confirm the asset appears in <strong>All Assets</strong> as <strong>In Stock</strong>.</li>
+</ol>
+
+<h3>4.2 Bulk upload (Excel)</h3>
+<ol class="steps">
+  <li>Prepare Excel with columns such as asset tag, name, serial, make, model, type, and <strong>location</strong> (exact site name).</li>
+  <li>Open the import / upload dialog from inventory.</li>
+  <li>Map columns, review validation errors, then confirm import.</li>
+  <li>Fix any “Location not found” rows by creating the location, then re-import.</li>
+</ol>
+<div class="callout ok">Tip: Start with 2–3 test rows before uploading a full sheet during training.</div>
+
+<h2>5. All Assets — search, filters, detail</h2>
+<ol class="steps">
+  <li>Open <strong>All Assets</strong>.</li>
+  <li>Search by tag, serial, name, or assignee.</li>
+  <li>Use status chips / filters (In Stock, Assigned, Disposed, etc.).</li>
+  <li>Open a row to view detail (overview, assignment history, location, accessories).</li>
+  <li>From the row menu you can Assign, Return, Maintenance, Disposal, Portal, and more (by permission).</li>
+</ol>
+
+<h2>6. Asset Assignments — issue an asset</h2>
+<p>Screen title: <strong>Asset Assignments</strong>. Card title: <strong>Assigned Assets</strong>.</p>
+<ol class="steps">
+  <li>Open <strong>Asset Assignments</strong> (or start Assign from All Assets).</li>
+  <li>Click <strong>Add assignment</strong> / start the issue wizard.</li>
+  <li>Select employee (Deployed-to), then asset(s) that are <strong>In Stock</strong>.</li>
+  <li>Complete delivery / review steps and submit.</li>
+  <li>Confirm the list shows Asset, Assigned, Employee ID, Assignment Date, Status, and DC Challan actions.</li>
+</ol>
+<div class="callout">
+  Assignment detail shows Asset, Assigned, Employee ID, Location, Assignment Date, and Status. Create DC from the list or detail when required by your process.
+</div>
+<div class="callout warn">
+  An open transfer (Draft / Submitted / Approved) can block assign or return on that asset. Cancel or complete the transfer first.
+</div>
+
+<h2>7. Return assets to stock</h2>
+<ol class="steps">
+  <li>From All Assets or Assignments, start <strong>Return</strong> for an assigned asset.</li>
+  <li>Select return condition:
+    <ul>
+      <li><strong>Good — Return To Stock</strong> → asset becomes available again (In Stock).</li>
+      <li><strong>Outdated — Retire</strong> → route toward retirement / disposal process.</li>
+    </ul>
+  </li>
+  <li>Review and confirm. Verify status on All Assets.</li>
+</ol>
+
+<h2>8. DC Challan, Transfers, Maintenance, Disposal</h2>
+<div class="table-block keep">
+  <h2 class="table-heading">When to use which screen</h2>
+  <table class="data">
+    <tr><th>Screen</th><th>Use when…</th><th>Trainee action</th></tr>
+    <tr><td>DC Challan</td><td>Physical delivery proof is required for an assignment</td><td>Create DC → track Pending → Signed / Received</td></tr>
+    <tr><td>Transfers</td><td>Moving asset between sites / locations (not employee issue)</td><td>Draft → Submit → Approve → Complete</td></tr>
+    <tr><td>Maintenance</td><td>Repair / service work order</td><td>Start WO → update → close / return</td></tr>
+    <tr><td>Disposal</td><td>Asset is end-of-life</td><td>Start disposal → reason → approval → disposed</td></tr>
+  </table>
+</div>
+
+<h2>9. Components &amp; Documents</h2>
+<ul>
+  <li><strong>Components</strong> — chargers, batteries, accessories linked to a parent asset. Register shows Type, Parent asset, Status, Actions.</li>
+  <li><strong>Documents</strong> — attach warranties, invoices, photos against an asset.</li>
+</ul>
+
+<h2>10. Common mistakes &amp; FAQ</h2>
+<div class="table-block keep">
+  <h2 class="table-heading">FAQ for trainees</h2>
+  <table class="data">
+    <tr><th>Question</th><th>Answer</th></tr>
+    <tr><td>Upload failed: location not found</td><td>Create the location under Locations first; match the Excel name exactly.</td></tr>
+    <tr><td>Cannot assign this asset</td><td>Must be In Stock. Check for open transfer or active assignment.</td></tr>
+    <tr><td>Employee missing in Deployed-to</td><td>Employee must exist in HR / employee directory for the company.</td></tr>
+    <tr><td>Only a few assets visible</td><td>Confirm company filter / domain (IT vs Non-IT) and that you are on the correct environment.</td></tr>
+    <tr><td>What is “In Stock”?</td><td>Available inventory — previously labelled Ready to Move in older materials.</td></tr>
+    <tr><td>Where is Office column?</td><td>Removed from the assignment list; use Location in detail when needed.</td></tr>
+  </table>
+</div>
+
+<h2>11. Practice checklist (trainer sign-off)</h2>
+<p>Trainee completes each item with the trainer watching:</p>
+<ul class="checklist">
+  <li>Sign in and open Asset Management (IT domain)</li>
+  <li>Add or verify one Location + one Address</li>
+  <li>Add one asset via form OR upload a 2-row Excel</li>
+  <li>Find the asset in All Assets (In Stock)</li>
+  <li>Assign the asset to a demo employee</li>
+  <li>Open assignment detail and confirm key fields</li>
+  <li>Return the asset with <strong>Good — Return To Stock</strong></li>
+  <li>(Optional) Create a DC Challan or open Maintenance once</li>
+</ul>
+
+<div class="role-grid" style="margin-top:1rem">
+  <div class="role-card">
+    <h3>Trainee</h3>
+    <p>Name: ________________________</p>
+    <p>Date: ________________________</p>
+    <p>Signature: ___________________</p>
+  </div>
+  <div class="role-card">
+    <h3>Trainer</h3>
+    <p>Name: ________________________</p>
+    <p>Result: Pass / Needs retrain</p>
+    <p>Signature: ___________________</p>
+  </div>
+</div>
+
+<div class="footer-note">
+  <p><strong>Document control</strong> — iConnect Plus Asset Management Training Manual v1.1 — for classroom and onboarding use.</p>
+  <p>Companion reference with screenshots: <code>Assets-Module-User-Manual.pdf</code> (full module walkthrough). Regenerate PDF via Chrome print from this HTML (see README).</p>
+</div>
+</div>
+</body>
+</html>

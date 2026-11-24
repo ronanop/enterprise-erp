@@ -22,8 +22,6 @@ export const assetNavigationPaths = {
   discovery: (assetId: string) =>
     `/assets/information-portal/${encodeURIComponent(assetId)}`,
   qr: (assetId: string) => `/assets/qr-barcode?assetId=${encodeURIComponent(assetId)}`,
-  transfer: (assetId: string) =>
-    `/assets/asset-transfers/new?assetId=${encodeURIComponent(assetId)}`,
   maintenance: (assetId: string) =>
     `/assets/asset-maintenances?assetId=${encodeURIComponent(assetId)}`,
   disposal: (assetId?: string) =>
@@ -48,7 +46,6 @@ export type AssetNavigation = {
   openPortal: (assetId: string) => void;
   openDiscovery: (assetId: string) => void;
   openQr: (assetId: string) => void;
-  openTransfer: (assetId: string) => void;
   openMaintenance: (assetId: string) => void;
   openDisposal: (assetId?: string) => void;
   openHistory: (assetId: string) => void;
@@ -65,7 +62,6 @@ export function createAssetNavigation(push: AssetNavigateFn): AssetNavigation {
     openPortal: (assetId) => push(assetNavigationPaths.informationPortal(assetId)),
     openDiscovery: (assetId) => push(assetNavigationPaths.discovery(assetId)),
     openQr: (assetId) => push(assetNavigationPaths.qr(assetId)),
-    openTransfer: (assetId) => push(assetNavigationPaths.transfer(assetId)),
     openMaintenance: (assetId) => push(assetNavigationPaths.maintenance(assetId)),
     openDisposal: (assetId) => push(assetNavigationPaths.disposal(assetId)),
     openHistory: (assetId) => push(assetNavigationPaths.history(assetId)),
@@ -106,7 +102,7 @@ export function dispatchInventoryMenuAction(
       navigation.openQr(assetId);
       break;
     case "transfer":
-      navigation.openTransfer(assetId);
+      // User Transfer page removed from inventory — no navigation.
       break;
     case "maintenance":
       navigation.openMaintenance(assetId);

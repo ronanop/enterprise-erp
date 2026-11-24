@@ -4,8 +4,10 @@ import {
   applyClientInventoryFilters,
   buildInventoryListQuery,
   formatConfigurationColumn,
+  formatInventoryLocationColumn,
   indexActiveAssignments,
   mapAssetToInventoryRow,
+  resolveAccessorySerialDisplay,
   resolveInventoryChargerCode,
   resolveOperationalStatusForQuery,
 } from "@/components/assets/inventory.mapper";
@@ -349,13 +351,13 @@ describe("mapAssetToInventoryRow", () => {
     );
     expect(row.manufacturer).toBe("Lenovo");
     expect(row.model).toBe("T14");
-    expect(row.configuration).toBe("i7 · 32GB");
+    expect(row.configuration).toBe("i7 32GB");
     expect(row.chargerCode).toBe("");
     expect(row.serialNumber).toBe("SN-99");
     expect(row.location).toBe("Rack A-12");
   });
 
-  it("formats labeled configuration to Processor/RAM/Storage only", () => {
+  it("formats labeled configuration to compact IT style", () => {
     const row = mapAssetToInventoryRow(
       {
         id: "asset-cfg",
@@ -372,10 +374,8 @@ describe("mapAssetToInventoryRow", () => {
         assignmentsByAssetId: new Map(),
       },
     );
-    expect(row.configuration).toBe(
-      "Processor: Intel Core i5\nRAM: 16 GB\nStorage: 512 GB SSD",
-    );
-    expect(row.configuration).not.toContain("Generation");
+    expect(row.configuration).toBe("i5 12th GEN 16/512GB");
+    expect(row.configuration).not.toContain("Processor:");
     expect(row.configuration).not.toContain("Charger");
   });
 
@@ -410,13 +410,35 @@ describe("mapAssetToInventoryRow", () => {
   });
 });
 
+describe("formatInventoryLocationColumn", () => {
+  it("drops building after · or newline", () => {
+    expect(formatInventoryLocationColumn("New Delhi · CRC2")).toBe("New Delhi");
+    expect(formatInventoryLocationColumn("New Delhi\nCRC2")).toBe("New Delhi");
+    expect(formatInventoryLocationColumn("Mumbai")).toBe("Mumbai");
+  });
+});
+
 describe("formatConfigurationColumn / resolveInventoryChargerCode", () => {
-  it("drops Generation and Charger from configuration column", () => {
+  it("formats labeled configuration compactly and drops Charger", () => {
     expect(
       formatConfigurationColumn(
         "Processor: Intel Core i5; Generation: 11th; RAM: 8 GB; Storage: 256 GB SSD; Charger: CHG-9",
       ),
-    ).toBe("Processor: Intel Core i5\nRAM: 8 GB\nStorage: 256 GB SSD");
+    ).toBe("i5 11th GEN 8/256GB");
+  });
+
+  it("formats newline-separated labeled configuration compactly", () => {
+    expect(
+      formatConfigurationColumn(
+        "Processor: Intel i5\nGeneration: 10th\nRAM: 16 GB\nStorage: 512 GB",
+      ),
+    ).toBe("i5 10th GEN 16/512GB");
+  });
+
+  it("normalizes legacy compact configuration", () => {
+    expect(formatConfigurationColumn("i5 10th GEN 16/512GB")).toBe(
+      "i5 10th GEN 16/512GB",
+    );
   });
 
   it("returns blank charger code for missing or placeholder values", () => {
@@ -430,6 +452,25 @@ describe("formatConfigurationColumn / resolveInventoryChargerCode", () => {
     expect(
       resolveInventoryChargerCode([{ typeLabel: "Mouse", serialDisplay: "MS-1" }]),
     ).toBe("");
+  });
+
+  it("prefers Excel serial over auto CHARGER-NNNN component codes", () => {
+    expect(resolveAccessorySerialDisplay("CHARGER-0001", "CHG-FM6PJFU")).toBe("CHG-FM6PJFU");
+    expect(resolveAccessorySerialDisplay("CHG-1001", "CHG-1001")).toBe("CHG-1001");
+    expect(resolveAccessorySerialDisplay("CHG-1001", null)).toBe("CHG-1001");
+    expect(resolveAccessorySerialDisplay(null, "CHG-88")).toBe("CHG-88");
+  });
+
+  it("falls back to Charger label in configuration when accessories lack a code", () => {
+    expect(
+      resolveInventoryChargerCode([], "Processor: Intel i5; Charger: CHG-77"),
+    ).toBe("CHG-77");
+    expect(
+      resolveInventoryChargerCode(
+        [{ typeLabel: "Charger", serialDisplay: "—" }],
+        "Charger: CHG-88",
+      ),
+    ).toBe("CHG-88");
   });
 });
 

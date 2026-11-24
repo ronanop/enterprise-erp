@@ -79,6 +79,8 @@ class PrjSiteInstallation(Base, *PrjDetailMixin):
     requestor_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     circle: Mapped[str | None] = mapped_column(String(100), nullable=True)
     cloud_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Snapshot of tracker PO lines for this cloud (shown on project detail).
+    cloud_po_lines: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     site_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     power_requirements: Mapped[str | None] = mapped_column(Text, nullable=True)
     rfai_request_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

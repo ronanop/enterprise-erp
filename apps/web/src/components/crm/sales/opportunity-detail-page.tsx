@@ -17,19 +17,28 @@ import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
 import { CrmEntityRejectionAlert } from "@/components/crm/sales/crm-approval-inbox-listener";
 import { BlueprintActions } from "@/components/crm/sales/blueprint-actions";
 import { PoValidationChain } from "@/components/crm/sales/po-validation-chain";
+import { SalesStageBadge } from "@/components/crm/sales/sales-stage-badge";
 import { resolveSalesStageLabel } from "@/lib/crm/sales-blueprint-stages";
 import { CrmDetailEditLink } from "@/components/crm/sales/crm-detail-edit-link";
 import { CrmRecordActionsMenu } from "@/components/crm/sales/crm-record-actions-menu";
 import { EntityAttachmentsList } from "@/components/crm/sales/entity-attachments-list";
+import { CrmCustomFieldsReadOnly } from "@/components/crm/sales/crm-custom-fields-section";
 import { LeadDetailsCard } from "@/components/crm/sales/lead-details-card";
 import { OpportunityDealControls } from "@/components/crm/sales/opportunity-deal-controls";
 import { CompanyWorkspaceNav } from "@/components/crm/company-workspace-nav";
 import { PageHeader } from "@/components/layout/page-header";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { cloneOpportunityRecord, downloadOpportunityExport, printOpportunityPreview } from "@/lib/crm/crm-record-actions";
+import {
+  buildOvfPrintPdfAttachmentById,
+  buildQuotePrintPdfAttachment,
+  cloneOpportunityRecord,
+  downloadOpportunityExport,
+  printOpportunityPreview,
+} from "@/lib/crm/crm-record-actions";
 import { formatCrmCode } from "@/lib/crm/format-crm-code";
+import { pageSectionVisible } from "@/lib/crm/crm-settings-ui";
 import { setCrmOpportunityContext, setCrmSidebarFocus } from "@/lib/crm-sidebar-focus";
+import { useCrmSettingsEffective } from "@/hooks/use-crm-settings";
 import { ApiClientError } from "@/services/api-client";
 import { listCompanyGst } from "@/services/crm-deal-controls-service";
 import {
@@ -46,6 +55,7 @@ import {
   listLeadSourceOptions,
   listMarketingEventOptions,
   listOvfs,
+  listQuoteLines,
   listQuotes,
   downloadAttachment,
   markOvfDealWon,
@@ -82,16 +92,16 @@ const CUSTOM_ACTIONS = ["quote_accepted"];
 /** Quote follow-on actions to surface on the opportunity BlueprintActions strip. */
 const QUOTE_STAGE_ACTIONS: Record<string, string[]> = {
   approved_internal: ["send_to_customer"],
-  sent_to_customer: ["accept", "negotiate", "follow_up"],
-  negotiation: ["accept", "negotiate", "follow_up"],
-  follow_up: ["accept", "negotiate", "follow_up"],
+  sent_to_customer: ["negotiate", "accept", "lost"],
+  negotiation: ["negotiate", "accept", "lost"],
+  follow_up: ["negotiate", "accept", "lost"],
 };
 
 /** OVF follow-on actions to surface on the opportunity BlueprintActions strip. */
 const OVF_STAGE_ACTIONS: Record<string, string[]> = {
   draft: ["send_for_approval"],
   approved: ["share_to_scm"],
-  shared_scm: ["deal_won"],
+  // shared_scm is CRM-terminal (no Mark Deal Won / further transitions)
 };
 const OVF_FOLLOW_ON = new Set(Object.values(OVF_STAGE_ACTIONS).flat());
 
@@ -99,6 +109,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
   const router = useRouter();
   const searchParams = useSearchParams();
   const fromMyJobs = searchParams.get("from") === "my-jobs";
+  const { settings } = useCrmSettingsEffective();
   const [opp, setOpp] = useState<Opportunity | null>(null);
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [blueprint, setBlueprint] = useState<BlueprintState | null>(null);
@@ -120,13 +131,15 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
     setLoading(true);
     setError(null);
     try {
-      const [oppRow, bp, employeeOptions, leadSourceOptions, marketingEventOptions] = await Promise.all([
+      const [oppRow, bp, employeeOptions, marketingEventOptions] = await Promise.all([
         getOpportunity(opportunityId),
         getOpportunityBlueprint(opportunityId),
         listCrmMemberOptions().catch(() => [] as Option[]),
-        listLeadSourceOptions().catch(() => [] as Option[]),
         listMarketingEventOptions().catch(() => [] as Option[]),
       ]);
+      const leadSourceOptions = await listLeadSourceOptions(oppRow.company_id).catch(
+        () => [] as Option[],
+      );
       setOpp(oppRow);
       setBlueprint(bp);
       setEmployees(employeeOptions);
@@ -217,6 +230,12 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
           if (!assignedUserId && assignedUserIds.length === 0) {
             throw new ApiClientError("Select an approver before sending for approval.", 400);
           }
+          let ovfPdf: { filename: string; base64: string } | null = null;
+          try {
+            ovfPdf = await buildOvfPrintPdfAttachmentById(ovf.id);
+          } catch {
+            ovfPdf = null;
+          }
           await sendOvfForApproval(ovf.id, {
             team_role: typeof payload.team_role === "string" ? payload.team_role : undefined,
             remarks: typeof payload.remarks === "string" ? payload.remarks : null,
@@ -227,6 +246,8 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
                 : assignedUserId
                   ? [assignedUserId]
                   : undefined,
+            ovf_pdf_base64: ovfPdf?.base64 ?? null,
+            ovf_pdf_filename: ovfPdf?.filename ?? null,
           });
         } else if (action === "share_to_scm") {
           await shareOvfToScm(ovf.id);
@@ -240,7 +261,24 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
       } else if (quote && quoteFollowOn.includes(action)) {
         await applyQuoteAction(quote.id, action, payload);
       } else {
-        await applyOpportunityAction(opportunityId, action, payload);
+        let enrichedPayload = payload;
+        if (action === "attach_po" || action === "send_po_approval") {
+          const acceptedQuote = quotes.find((row) => row.quote_stage === "accepted") ?? quote;
+          if (acceptedQuote) {
+            try {
+              const lineRows = await listQuoteLines(acceptedQuote.id);
+              const quotationPdf = await buildQuotePrintPdfAttachment(acceptedQuote, lineRows);
+              enrichedPayload = {
+                ...payload,
+                quotation_pdf_base64: quotationPdf.base64,
+                quotation_pdf_filename: quotationPdf.filename,
+              };
+            } catch {
+              // PO approval still proceeds; email may omit the quote print.
+            }
+          }
+        }
+        await applyOpportunityAction(opportunityId, action, enrichedPayload);
       }
       await load();
     } catch (err) {
@@ -327,27 +365,46 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
     ovfs.length === 0 &&
     blueprint.state === "ovf_ready";
   const createOvfActions = canCreateOvf ? ["create_ovf"] : [];
-  const createOvfLabels: Record<string, string> = canCreateOvf
-    ? {
-      create_ovf:
-        quotesForOvf.length > 1
-          ? `Create OVF · ${quotesForOvf.length} quotes`
-          : "Create OVF",
-    }
-    : {};
+  const activeQuoteRevision = Math.max(1, Number(activeQuote?.quote_revision) || 1);
+  const createOvfLabels: Record<string, string> = {
+    ...(canCreateOvf
+      ? {
+        create_ovf:
+          quotesForOvf.length > 1
+            ? `Create OVF · ${quotesForOvf.length} quotes`
+            : "Create OVF",
+      }
+      : {}),
+    ...(activeQuote
+      ? {
+        negotiate: `Create Quote V${activeQuoteRevision + 1}`,
+        accept: "Deal Won",
+        lost: "Deal Lost",
+      }
+      : {}),
+  };
   const showQuotes =
-    quotes.length > 0 ||
-    ["quote_ready", "quote_in_progress", "po_pending", "po_approval", "ovf_ready", "won"].includes(
-      blueprint.state,
-    );
-  const showOvf = ovfs.length > 0 || ["ovf_ready", "won"].includes(blueprint.state);
+    pageSectionVisible(settings, "opportunity_detail", "quotes", true) &&
+    (quotes.length > 0 ||
+      ["quote_ready", "quote_in_progress", "po_pending", "po_approval", "ovf_ready", "won"].includes(
+        blueprint.state,
+      ));
+  const showOvf =
+    pageSectionVisible(settings, "opportunity_detail", "ovf", true) &&
+    (ovfs.length > 0 || ["ovf_ready", "won"].includes(blueprint.state));
+  const showBlueprint = pageSectionVisible(settings, "opportunity_detail", "blueprint", true);
+  const showDocuments = pageSectionVisible(settings, "opportunity_detail", "documents", true);
+  const showSummary = pageSectionVisible(settings, "opportunity_detail", "summary", true);
 
   const quoteFollowOnActions =
     blueprint.state === "quote_in_progress" && activeQuote
       ? (QUOTE_STAGE_ACTIONS[activeQuote.quote_stage] ?? [])
       : [];
   const ovfFollowOnActions =
-    existingOvf && !existingOvf.locked && !existingOvf.deal_won
+    existingOvf &&
+      !existingOvf.locked &&
+      !existingOvf.deal_won &&
+      !existingOvf.shared_to_scm
       ? (OVF_STAGE_ACTIONS[existingOvf.blueprint_state] ?? [])
       : [];
   const blueprintActions = Array.from(
@@ -491,18 +548,15 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
                 Stage / status
               </p>
               <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                <Badge
-                  variant="outline"
-                  className={
-                    opp.current_stage === "won" || opp.status === "won"
-                      ? "border-emerald-200 bg-emerald-50 capitalize text-emerald-800"
-                      : "capitalize"
-                  }
-                >
-                  {opp.current_stage === "won" || opp.status === "won"
-                    ? "Deal won"
-                    : opp.current_stage.replaceAll("_", " ")}
-                </Badge>
+                <SalesStageBadge
+                  label={resolveSalesStageLabel({
+                    entityType: "opportunity",
+                    blueprintState: opp.blueprint_state || opp.current_stage,
+                    opportunity: opp,
+                  })}
+                  state={opp.blueprint_state || opp.current_stage}
+                  entityType="opportunity"
+                />
                 <span className="text-xs capitalize text-muted-foreground">{opp.status}</span>
               </div>
             </div>
@@ -524,38 +578,64 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
                 {formatCrmCode(opp.opportunity_code)}
               </p>
             </div>
+            {opp.has_services && opp.service_sourcing_channel ? (
+              <div>
+                <p className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                  Service sourcing
+                </p>
+                <p className="mt-0.5 text-sm font-medium text-foreground">
+                  {opp.service_sourcing_channel}
+                </p>
+              </div>
+            ) : null}
           </div>
 
           {banner ? <CrmErrorBanner>{banner.text}</CrmErrorBanner> : null}
           {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
 
-          <BlueprintActions
-            allowedActions={blueprintActions}
-            locked={blueprint.locked}
-            opportunityId={opp.id}
-            entityType="opportunity"
-            currentStageLabel={resolveSalesStageLabel({
-              entityType: "opportunity",
-              blueprintState: blueprint.state,
-              locked: blueprint.locked,
-              opportunity: opp,
-              quotes,
-              ovfs,
-            })}
-            excludeActions={CUSTOM_ACTIONS}
-            actionLabelOverrides={createOvfLabels}
-            defaultValues={{
-              deal_won_amount: activeQuote?.grand_total ?? existingOvf?.deal_won_amount ?? null,
-            }}
-            onAction={onBlueprintAction}
-            disabled={busy}
-          />
+          {showBlueprint ? (
+            <BlueprintActions
+              allowedActions={blueprintActions}
+              locked={blueprint.locked}
+              opportunityId={opp.id}
+              entityType="opportunity"
+              servicesSowOwnerUserId={
+                opp.has_services ||
+                  (opp.product_type || "")
+                    .toLowerCase()
+                    .split(/[,&]/)
+                    .map((p) => p.trim())
+                    .includes("services")
+                  ? employees.find((e) => e.id === opp.owner_employee_id)?.userId ?? null
+                  : null
+              }
+              currentStageLabel={resolveSalesStageLabel({
+                entityType: "opportunity",
+                blueprintState: blueprint.state,
+                locked: blueprint.locked,
+                opportunity: opp,
+                quotes,
+                ovfs,
+              })}
+              showDealWonBadge={
+                String(opp.status || "").toLowerCase() === "won" ||
+                quotes.some((row) => row.quote_stage === "accepted")
+              }
+              excludeActions={CUSTOM_ACTIONS}
+              actionLabelOverrides={createOvfLabels}
+              defaultValues={{
+                deal_won_amount: activeQuote?.grand_total ?? existingOvf?.deal_won_amount ?? null,
+              }}
+              onAction={onBlueprintAction}
+              disabled={busy}
+            />
+          ) : null}
 
-          {blueprint.po_validation ? (
+          {showBlueprint && blueprint.po_validation ? (
             <PoValidationChain validation={blueprint.po_validation} />
           ) : null}
 
-          {opp.blueprint_state ? (
+          {showDocuments && opp.blueprint_state ? (
             <OpportunityDealControls key={opp.version} opportunity={opp} onChanged={() => void load()} />
           ) : null}
 
@@ -608,9 +688,16 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
                               ) : null}
                             </td>
                             <td className="px-4 py-2">
-                              <Badge variant="outline" className="capitalize">
-                                {q.quote_stage.replaceAll("_", " ")}
-                              </Badge>
+                              <SalesStageBadge
+                                label={resolveSalesStageLabel({
+                                  entityType: "quote",
+                                  blueprintState: q.quote_stage,
+                                  quote: q,
+                                  locked: q.locked,
+                                })}
+                                state={q.quote_stage}
+                                entityType="quote"
+                              />
                             </td>
                             <td className="px-4 py-2">{formatInr(q.grand_total)}</td>
                             <td className="px-4 py-2">{q.avg_margin_pct}%</td>
@@ -700,9 +787,15 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
                               )}
                             </td>
                             <td className="px-4 py-2">
-                              <Badge variant="outline" className="capitalize">
-                                {o.blueprint_state.replaceAll("_", " ")}
-                              </Badge>
+                              <SalesStageBadge
+                                label={resolveSalesStageLabel({
+                                  entityType: "ovf",
+                                  blueprintState: o.blueprint_state,
+                                  ovf: o,
+                                })}
+                                state={o.blueprint_state}
+                                entityType="ovf"
+                              />
                             </td>
                             <td className="px-4 py-2">
                               {o.deal_won ? formatInr(o.deal_won_amount ?? 0) : "-"}
@@ -717,7 +810,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
             </CrmListPanel>
           ) : null}
 
-          {sourceLead ? (
+          {showSummary && sourceLead ? (
             <LeadDetailsCard
               lead={sourceLead}
               company={company}
@@ -728,7 +821,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
               title="Opportunity Information"
               mergeFullName
             />
-          ) : opp.lead_id ? (
+          ) : showSummary && opp.lead_id ? (
             <CrmSection title="Source Lead" icon={Handshake}>
               <p className="text-xs text-muted-foreground">
                 Source lead could not be loaded.{" "}
@@ -740,6 +833,10 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
                 </Link>
               </p>
             </CrmSection>
+          ) : null}
+
+          {showSummary ? (
+            <CrmCustomFieldsReadOnly entity="opportunity" values={opp.custom_fields} />
           ) : null}
 
           {(fromMyJobs || blueprint.locked) && reviewAttachment ? (
@@ -783,17 +880,19 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
             </CrmSection>
           ) : null}
 
-          <CrmSection title="Attachments" icon={Paperclip}>
-            <EntityAttachmentsList
-              attachments={attachments}
-              entityType="opportunity"
-              entityId={opportunityId}
-              branchId={opp.branch_id}
-              companyId={opp.company_id}
-              highlightCategory={fromMyJobs || blueprint.locked ? reviewCategory : null}
-              onChanged={load}
-            />
-          </CrmSection>
+          {showDocuments ? (
+            <CrmSection title="Attachments" icon={Paperclip}>
+              <EntityAttachmentsList
+                attachments={attachments}
+                entityType="opportunity"
+                entityId={opportunityId}
+                branchId={opp.branch_id}
+                companyId={opp.company_id}
+                highlightCategory={fromMyJobs || blueprint.locked ? reviewCategory : null}
+                onChanged={load}
+              />
+            </CrmSection>
+          ) : null}
         </CrmPage>
       </div>
     </div>

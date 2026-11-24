@@ -16,7 +16,7 @@ import {
   YAxis,
 } from "recharts";
 
-/** Matches CRM / HR / ERP chart palette - no purple gradients. */
+/** Matches CRM / HR / ERP chart palette — no purple gradients. */
 export const SERVICE_CHART_COLORS = {
   sky: "#0369A1",
   skyDark: "#0C4A6E",
@@ -48,8 +48,9 @@ const MODE_COLORS: Record<string, string> = {
 
 const SLA_COLORS: Record<string, string> = {
   "Currently breached": SERVICE_CHART_COLORS.rose,
+  "SLA paused": SERVICE_CHART_COLORS.amber,
   "Closed within SLA": SERVICE_CHART_COLORS.emerald,
-  "Closed after breach": SERVICE_CHART_COLORS.amber,
+  "Closed after breach": SERVICE_CHART_COLORS.slate,
 };
 
 export type ServiceChartLinkPoint = {
@@ -168,7 +169,7 @@ function ChartLegend({
   );
 }
 
-/** Horizontal bars - ticket lifecycle stages */
+/** Horizontal bars — ticket lifecycle stages */
 export function ServiceStatusBarChart({
   data,
   loading,
@@ -233,7 +234,7 @@ export function ServiceStatusBarChart({
   );
 }
 
-/** Vertical columns - within SLA vs breached */
+/** Vertical columns — within SLA vs breached */
 export function ServiceSlaComplianceBarChart({
   data,
   loading,
@@ -270,11 +271,13 @@ export function ServiceSlaComplianceBarChart({
               tickFormatter={(value: string) =>
                 value === "Currently breached"
                   ? "Breached"
-                  : value === "Closed within SLA"
-                    ? "Within SLA"
-                    : value === "Closed after breach"
-                      ? "After breach"
-                      : value
+                  : value === "SLA paused"
+                    ? "Paused"
+                    : value === "Closed within SLA"
+                      ? "Within SLA"
+                      : value === "Closed after breach"
+                        ? "After breach"
+                        : value
               }
             />
             <YAxis
@@ -320,7 +323,7 @@ export function ServiceSlaComplianceBarChart({
   );
 }
 
-/** Donut - tickets by support mode (remote / onsite / OEM) */
+/** Donut — tickets by support mode (remote / onsite / OEM) */
 export function ServiceSupportModeChart({
   data,
   loading,

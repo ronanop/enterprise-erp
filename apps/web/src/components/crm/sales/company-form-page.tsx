@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Building2, FileText, MapPin } from "lucide-react";
 
 import { CrmErrorBanner, CrmPage, CrmSection } from "@/components/crm/crm-ui";
+import { CrmCustomFieldsSection } from "@/components/crm/sales/crm-custom-fields-section";
 import { CrmSessionEmployeeField } from "@/components/crm/sales/crm-session-employee-field";
 import { KycContactDesignationField } from "@/components/crm/sales/kyc-contact-designation-field";
 import {
@@ -21,17 +22,21 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuthUser } from "@/hooks/use-auth-user";
+import { useCrmSettingsEffective } from "@/hooks/use-crm-settings";
 import {
   resolveSessionEmployeeId,
   resolveSessionEmployeeLabel,
 } from "@/lib/crm/session-employee";
+import { formFieldsMap, pushRequired } from "@/lib/crm/crm-settings-ui";
 import { containsUnsafeMarkup } from "@/lib/text-safety";
 import {
   COMPANY_LEAD_SOURCES,
   companyLeadSourceLabel,
   normalizeCompanyLeadSource,
 } from "@/lib/crm/company-lead-sources";
+import { catalogOptions } from "@/services/crm-settings-service";
 import { ApiClientError } from "@/services/api-client";
+
 import {
   createCompanyGst,
   listCompanyGst,
@@ -57,7 +62,7 @@ function normalizeGstin(value: string): string {
   return value.trim().toUpperCase().replaceAll(" ", "");
 }
 
-const INDUSTRIES = [
+const FALLBACK_INDUSTRIES = [
   "IT & Technology",
   "Manufacturing",
   "Healthcare",
@@ -139,6 +144,8 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
   const router = useRouter();
   const isEdit = Boolean(companyId);
   const { user } = useAuthUser();
+  const { settings } = useCrmSettingsEffective();
+  const companyFields = useMemo(() => formFieldsMap(settings, "company"), [settings]);
   const [company, setCompany] = useState<Company | null>(null);
   const [form, setForm] = useState<CompanyFormInput>(EMPTY_FORM);
   const [otherSource, setOtherSource] = useState("");
@@ -153,6 +160,34 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
   const [sameAsBilling, setSameAsBilling] = useState(false);
   /** Head-office GSTIN for this customer account (branches come from POs). */
   const [headOfficeGstin, setHeadOfficeGstin] = useState("");
+  const [customFields, setCustomFields] = useState<Record<string, unknown>>({});
+
+  const industryOptions = useMemo(() => {
+    const opts = catalogOptions(settings, "industries");
+    if (opts.length > 0) return opts;
+    return FALLBACK_INDUSTRIES.map((value, order) => ({
+      value,
+      label: value,
+      enabled: true,
+      order,
+    }));
+  }, [settings]);
+
+  const companySourceOptions = useMemo(() => {
+    const opts = catalogOptions(settings, "company_lead_sources");
+    if (opts.length > 0) return opts;
+    return COMPANY_LEAD_SOURCES.map((value, order) => ({
+      value,
+      label: companyLeadSourceLabel(value),
+      enabled: true,
+      order,
+    }));
+  }, [settings]);
+
+  const knownCompanySourceValues = useMemo(
+    () => new Set(companySourceOptions.map((option) => option.value)),
+    [companySourceOptions],
+  );
 
   const backHref = isEdit && companyId ? `/crm/companies/${companyId}` : "/crm/companies";
   const backLabel = isEdit ? (company?.customer_name ?? "Company") : "Companies";
@@ -171,8 +206,13 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
       setMarketingEvents(events);
       if (companyRow) {
         const normalizedSource = normalizeCompanyLeadSource(companyRow.source);
-        const knownSource = (COMPANY_LEAD_SOURCES as readonly string[]).includes(normalizedSource);
+        const knownSource = knownCompanySourceValues.has(normalizedSource);
         setCompany(companyRow);
+        setCustomFields(
+          companyRow.custom_fields && typeof companyRow.custom_fields === "object"
+            ? { ...companyRow.custom_fields }
+            : {},
+        );
         setForm({
           branch_id: companyRow.branch_id,
           customer_name: companyRow.customer_name,
@@ -228,6 +268,7 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
         setOtherSource("");
         setSameAsBilling(false);
         setHeadOfficeGstin("");
+        setCustomFields({});
         const nextNo = await peekNextCompanyAccountNumber().catch(() => "");
         setNextAccountNumber(nextNo);
       }
@@ -236,7 +277,7 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
     } finally {
       setLoading(false);
     }
-  }, [companyId, user]);
+  }, [companyId, user, knownCompanySourceValues]);
 
   const accountManagerLabel = useMemo(() => {
     if (form.account_owner_id) {
@@ -298,24 +339,26 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
 
   async function save() {
     const missing: string[] = [];
-    if (!form.customer_name.trim()) missing.push("Company Name");
-    if (!form.industry) missing.push("Industry");
-    if (!form.source) missing.push("Source");
+    pushRequired(missing, companyFields, "customer_name", "Company Name", !form.customer_name.trim(), true);
+    pushRequired(missing, companyFields, "industry", "Industry", !form.industry, true);
+    pushRequired(missing, companyFields, "source", "Source", !form.source, true);
     if (form.source === "other" && !otherSource.trim()) missing.push("Other Source");
     if (form.source === "multi_tier" && !form.partner_names?.trim()) missing.push("Partner Names");
     if (form.source === "event" && !form.marketing_event_id) missing.push("Event");
-    if (!form.first_name?.trim()) missing.push("First Name");
-    if (!form.last_name?.trim()) missing.push("Last Name");
-    if (!form.role?.trim()) missing.push("Designation");
-    if (!form.customer_email?.trim()) missing.push("Customer Email");
-    if (!form.phone?.trim()) missing.push("Phone");
-    if (!form.website?.trim()) missing.push("Website");
-    if (!isEdit && !form.branch_id) missing.push("Branch");
-    if (!form.billing_street.trim()) missing.push("Billing Street");
-    if (!form.billing_city.trim()) missing.push("Billing City");
-    if (!form.billing_state.trim()) missing.push("Billing State");
-    if (!form.billing_code.trim()) missing.push("Billing Code");
-    if (!form.billing_country.trim()) missing.push("Billing Country");
+    pushRequired(missing, companyFields, "first_name", "First Name", !form.first_name?.trim(), true);
+    pushRequired(missing, companyFields, "last_name", "Last Name", !form.last_name?.trim(), true);
+    pushRequired(missing, companyFields, "role", "Designation", !form.role?.trim(), true);
+    pushRequired(missing, companyFields, "customer_email", "Customer Email", !form.customer_email?.trim(), true);
+    pushRequired(missing, companyFields, "phone", "Phone", !form.phone?.trim(), true);
+    pushRequired(missing, companyFields, "website", "Website", !form.website?.trim(), true);
+    if (!isEdit) {
+      pushRequired(missing, companyFields, "branch_id", "Branch", !form.branch_id, true);
+    }
+    pushRequired(missing, companyFields, "billing_street", "Billing Street", !form.billing_street.trim(), true);
+    pushRequired(missing, companyFields, "billing_city", "Billing City", !form.billing_city.trim(), true);
+    pushRequired(missing, companyFields, "billing_state", "Billing State", !form.billing_state.trim(), true);
+    pushRequired(missing, companyFields, "billing_code", "Billing Code", !form.billing_code.trim(), true);
+    pushRequired(missing, companyFields, "billing_country", "Billing Country", !form.billing_country.trim(), true);
     if (missing.length > 0) {
       setMandateMessage(missingRequiredMessage(missing));
       setMandateOpen(true);
@@ -374,6 +417,7 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
         marketing_event_id: form.source === "event" ? form.marketing_event_id || null : null,
         account_owner_id: form.account_owner_id || null,
         account_ownership_id: form.account_ownership_id || null,
+        custom_fields: Object.keys(customFields).length > 0 ? customFields : null,
       };
       const saved = isEdit && companyId
         ? await updateCompany(companyId, payload)
@@ -510,9 +554,9 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
             <FinanceField label="Industry *">
               <FinanceSelect value={form.industry} onChange={(e) => set("industry", e.target.value)}>
                 <option value="">None</option>
-                {INDUSTRIES.map((industry) => (
-                  <option key={industry} value={industry}>
-                    {industry}
+                {industryOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
                   </option>
                 ))}
               </FinanceSelect>
@@ -538,9 +582,9 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
                 }}
               >
                 <option value="">None</option>
-                {COMPANY_LEAD_SOURCES.map((source) => (
-                  <option key={source} value={source}>
-                    {companyLeadSourceLabel(source)}
+                {companySourceOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label || companyLeadSourceLabel(option.value)}
                   </option>
                 ))}
               </FinanceSelect>
@@ -753,6 +797,12 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
           </div>
         </div>
       </CrmSection>
+
+      <CrmCustomFieldsSection
+        entity="company"
+        values={customFields}
+        onChange={setCustomFields}
+      />
 
       <CrmSection title="Description Information" icon={FileText}>
         <FinanceField label="Description">

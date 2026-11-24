@@ -13,11 +13,15 @@ export function excelEntityCell(row: EmployeeRecord): string {
 }
 
 export function excelOrganisationCell(row: EmployeeRecord): string {
-  const blob = `${row.extension.employment.entityName || ""} ${row.companyName || ""}`.toLowerCase();
-  if (blob.includes("digitech") || blob.includes("technolog") || blob.includes("cache")) {
-    return "Cache";
+  const fromImport = (row.extension.employment.branchName || "").trim();
+  if (fromImport && !/^(cache|digitech|technologies)$/i.test(fromImport)) {
+    return fromImport;
   }
-  return row.companyName || row.branchName || "-";
+  const blob = `${row.extension.employment.entityName || ""} ${row.companyName || ""} ${fromImport}`.toLowerCase();
+  if (blob.includes("digitech") || blob.includes("technolog") || blob.includes("cache")) {
+    return fromImport || "Cache";
+  }
+  return fromImport || row.companyName || row.branchName || "-";
 }
 
 function dash(value?: string | null): string {

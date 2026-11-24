@@ -45,6 +45,16 @@ class CrmOvf(Base, *CrmTransactionMixin):
             "freight_medium IS NULL OR freight_medium IN ('air','road','sea','courier')",
             name="ck_crm_ovf_freight_medium",
         ),
+        CheckConstraint(
+            "scm_hold_request_status IS NULL OR scm_hold_request_status IN "
+            "('pending','accepted','rejected')",
+            name="ck_crm_ovf_hold_request_status",
+        ),
+        CheckConstraint(
+            "scm_charge_request_status IS NULL OR scm_charge_request_status IN "
+            "('pending','accepted','rejected')",
+            name="ck_crm_ovf_charge_request_status",
+        ),
         {"schema": "crm"},
     )
 
@@ -88,6 +98,7 @@ class CrmOvf(Base, *CrmTransactionMixin):
     installation_details: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     approval_status: Mapped[str] = mapped_column(String(30), nullable=False, default="not_required")
+    custom_fields: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     shared_to_scm: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     shared_to_scm_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     scm_on_hold: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
@@ -101,6 +112,23 @@ class CrmOvf(Base, *CrmTransactionMixin):
     )
     scm_hold_history: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     scm_on_hold_remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Hold is applied only after a Hold approve / reject owner accepts this request.
+    scm_hold_request_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    scm_hold_request_remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scm_hold_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    scm_hold_requested_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    # Freight / finance edits wait here until a Freight & finance approver accepts them.
+    scm_charge_request_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    scm_charge_request_freight: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    scm_charge_request_finance_pct: Mapped[Decimal | None] = mapped_column(
+        Numeric(6, 3), nullable=True
+    )
+    scm_charge_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    scm_charge_requested_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     deal_won: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     deal_won_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
 
@@ -110,7 +138,7 @@ class CrmOvf(Base, *CrmTransactionMixin):
 
     additional_charges: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=0)
     freight: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=0)
-    total_margin_pct: Mapped[Decimal] = mapped_column(Numeric(6, 3), nullable=False, default=0)
+    total_margin_pct: Mapped[Decimal] = mapped_column(Numeric(22, 10), nullable=False, default=0)
     total_margin_amount: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=0)
 
     locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
@@ -140,7 +168,7 @@ class CrmOvf(Base, *CrmTransactionMixin):
     # receivables, stock held against the deal, and approved execution
     # expenses until Finance marks the full payment received.
     margin_at_approval_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
-    margin_at_approval_pct: Mapped[Decimal | None] = mapped_column(Numeric(6, 3), nullable=True)
+    margin_at_approval_pct: Mapped[Decimal | None] = mapped_column(Numeric(22, 10), nullable=True)
     execution_expense_total: Mapped[Decimal] = mapped_column(
         Numeric(18, 4), nullable=False, default=0, server_default="0"
     )
@@ -152,7 +180,7 @@ class CrmOvf(Base, *CrmTransactionMixin):
         Numeric(6, 3), nullable=False, default=0, server_default="0"
     )
     live_margin_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
-    live_margin_pct: Mapped[Decimal | None] = mapped_column(Numeric(6, 3), nullable=True)
+    live_margin_pct: Mapped[Decimal | None] = mapped_column(Numeric(22, 10), nullable=True)
     live_margin_as_of: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     full_payment_received: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"

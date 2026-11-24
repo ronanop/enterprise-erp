@@ -42,19 +42,38 @@ function asIso(value: unknown): string | null {
   return d.toISOString();
 }
 
+function stripReasonFromDetail(detail?: string | null): string | null {
+  if (detail == null) return null;
+  const cleaned = String(detail)
+    .split(/;\s*/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0 && !/^reason\s*:/i.test(part))
+    .join("; ");
+  return cleaned || null;
+}
+
 export function mapApiLifecycleEvents(
   events: AssetLifecycleTimelineApiEvent[],
 ): PortalTimelineEvent[] {
-  return events.map((ev) => ({
-    id: ev.id,
-    kind: (ev.kind as PortalTimelineKind) || "other",
-    stage: ev.stage || "Activity",
-    title: ev.title,
-    detail: ev.detail,
-    occurredAt: ev.occurred_at ?? null,
-    actorLabel: ev.actor_label ?? null,
-    referenceLabel: ev.reference_label ?? null,
-  }));
+  return events
+    .filter((ev) => {
+      const stage = String(ev.stage ?? "").trim().toLowerCase();
+      const title = String(ev.title ?? "").trim().toLowerCase();
+      // Drop register workflow lifecycle cards (submit/approve/reject/…).
+      if (stage === "lifecycle") return false;
+      if (title.startsWith("lifecycle ")) return false;
+      return true;
+    })
+    .map((ev) => ({
+      id: ev.id,
+      kind: (ev.kind as PortalTimelineKind) || "other",
+      stage: ev.stage || "Activity",
+      title: ev.title,
+      detail: stripReasonFromDetail(ev.detail),
+      occurredAt: ev.occurred_at ?? null,
+      actorLabel: ev.actor_label ?? null,
+      referenceLabel: ev.reference_label ?? null,
+    }));
 }
 
 /** Assignment History tab — one card per custody cycle with assign + return clarity. */
@@ -81,21 +100,6 @@ export function buildAssignmentTimeline(
       occurredAt: asIso(occurredRaw) ?? null,
       actorLabel: row.assigneeLabel,
       referenceLabel: row.documentNumber !== "—" ? row.documentNumber : null,
-      meta: [
-        { label: "User", value: dash(row.assigneeLabel) },
-        { label: "Assigned", value: dash(row.allocatedAt) },
-        { label: "De-assigned", value: dash(row.returnedAt) },
-        { label: "Status", value: dash(row.status) },
-        ...(row.deliveryChallanSummary && row.deliveryChallanSummary !== "—"
-          ? [{ label: "Delivery", value: row.deliveryChallanSummary }]
-          : []),
-        ...(row.assignmentRemarks && row.assignmentRemarks !== "—"
-          ? [{ label: "Assignment remarks", value: row.assignmentRemarks }]
-          : []),
-        ...(row.returnRemarks && row.returnRemarks !== "—"
-          ? [{ label: "Return remarks", value: row.returnRemarks }]
-          : []),
-      ],
     };
   });
 }
@@ -142,7 +146,7 @@ export function buildMaintenanceTimeline(
         kind,
         stage,
         title,
-        detail: row.reason != null ? String(row.reason) : null,
+        detail: null,
         occurredAt: finished ?? started,
         referenceLabel:
           row.document_number != null ? String(row.document_number) : null,
@@ -190,26 +194,21 @@ export function buildClientLifecycleTimeline(input: {
       referenceLabel: input.assetCode ?? null,
     });
   }
-  for (const asn of buildAssignmentTimeline(input.assignments)) {
+  for (const entry of input.assignments) {
+    const asn = buildAssignmentTimeline([entry])[0];
+    if (!asn) continue;
     events.push(asn);
-    // Also emit explicit assign milestone when both dates exist.
-    if (asn.meta) {
-      const assigned = asn.meta.find((m) => m.label === "Assigned")?.value;
-      const returned = asn.meta.find((m) => m.label === "De-assigned")?.value;
-      if (assigned && assigned !== "—" && asn.kind === "returned") {
-        events.push({
-          id: `${asn.id}-assigned`,
-          kind: "assigned",
-          stage: "Assigned",
-          title: `Assigned to ${asn.actorLabel ?? "user"}`,
-          occurredAt: asIso(assigned),
-          actorLabel: asn.actorLabel,
-          referenceLabel: asn.referenceLabel,
-        });
-      }
-      if (returned && returned !== "—") {
-        // already represented by returned card
-      }
+    // Also emit explicit assign milestone when a returned cycle has an assign date.
+    if (asn.kind === "returned" && entry.allocatedAtRaw) {
+      events.push({
+        id: `${asn.id}-assigned`,
+        kind: "assigned",
+        stage: "Assigned",
+        title: `Assigned to ${asn.actorLabel ?? "user"}`,
+        occurredAt: asIso(entry.allocatedAtRaw),
+        actorLabel: asn.actorLabel,
+        referenceLabel: asn.referenceLabel,
+      });
     }
   }
   for (const m of buildMaintenanceTimeline(input.maintenances)) {

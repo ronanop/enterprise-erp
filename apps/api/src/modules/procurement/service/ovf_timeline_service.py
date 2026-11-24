@@ -242,6 +242,77 @@ class OvfTimelineService:
                     )
                 )
 
+        for order in linked_orders:
+            po_label = order_labels.get(order.id, "Vendor PO")
+            promised = getattr(order, "customer_promised_delivery_date", None)
+            promised_label = (
+                promised.isoformat()
+                if promised is not None and hasattr(promised, "isoformat")
+                else None
+            )
+            if getattr(order, "po_sent_to_vendor_at", None):
+                events.append(
+                    self._event(
+                        event_id=f"mail-vendor-{order.id}",
+                        occurred_at=order.po_sent_to_vendor_at,
+                        event_type="procurement_action",
+                        entity_type="procurement",
+                        entity_id=order.id,
+                        entity_label=po_label,
+                        title="Mail sent to vendor",
+                        summary=f"Purchase order {po_label} emailed to the vendor",
+                        action="mail_sent_vendor",
+                    )
+                )
+            if getattr(order, "customer_order_processed_sent_at", None):
+                summary = "Order-processed mail sent to the customer"
+                if promised_label:
+                    summary = f"{summary}. Customer EDD {promised_label}"
+                events.append(
+                    self._event(
+                        event_id=f"mail-customer-processed-{order.id}",
+                        occurred_at=order.customer_order_processed_sent_at,
+                        event_type="procurement_action",
+                        entity_type="procurement",
+                        entity_id=order.id,
+                        entity_label=po_label,
+                        title="Mail sent to customer",
+                        summary=summary,
+                        action="mail_sent_customer",
+                    )
+                )
+            if getattr(order, "customer_ack_sent_at", None):
+                events.append(
+                    self._event(
+                        event_id=f"mail-customer-ack-{order.id}",
+                        occurred_at=order.customer_ack_sent_at,
+                        event_type="procurement_action",
+                        entity_type="procurement",
+                        entity_id=order.id,
+                        entity_label=po_label,
+                        title="Mail sent to customer",
+                        summary=f"Acknowledgement emailed to the customer for {po_label}",
+                        action="mail_sent_customer",
+                    )
+                )
+            if getattr(order, "customer_dispatch_shared_at", None):
+                summary = f"Dispatch details emailed to the customer for {po_label}"
+                if promised_label:
+                    summary = f"{summary}. Customer EDD {promised_label}"
+                events.append(
+                    self._event(
+                        event_id=f"mail-customer-dispatch-{order.id}",
+                        occurred_at=order.customer_dispatch_shared_at,
+                        event_type="delivery",
+                        entity_type="procurement",
+                        entity_id=order.id,
+                        entity_label=po_label,
+                        title="Mail sent to customer",
+                        summary=summary,
+                        action="mail_sent_customer",
+                    )
+                )
+
         for batch in batch_rows:
             po_label = order_labels.get(batch.order_header_id, "Vendor PO")
             events.append(

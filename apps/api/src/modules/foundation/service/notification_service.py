@@ -212,6 +212,7 @@ class NotificationService:
         template_id: UUID | None = None,
         payload_json: dict | None = None,
         created_by: UUID | None = None,
+        attachments: list[dict] | None = None,
     ):
         to = (to_address or "").strip()
         if not to:
@@ -234,6 +235,9 @@ class NotificationService:
 
         payload["_subject"] = subject
         payload["_body"] = body_html
+        if attachments:
+            # Stored on the event payload for the delivery engine (base64).
+            payload["_attachments"] = attachments[:10]
 
         return self.send(
             tenant_id=tenant_id,

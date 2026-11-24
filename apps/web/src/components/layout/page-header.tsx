@@ -12,6 +12,8 @@ interface PageHeaderProps {
   /** Optional back navigation shown above the title. */
   backHref?: string;
   backLabel?: string;
+  /** Full back control label. Defaults to `Back to {backLabel}`. */
+  backText?: string;
   /** When set, renders a back button instead of a link (e.g. close overlay on same page). */
   onBack?: () => void;
   className?: string;
@@ -26,13 +28,16 @@ export function PageHeader({
   actions,
   backHref,
   backLabel,
+  backText,
   onBack,
   className,
   titleClassName,
   centerTitle = false,
 }: PageHeaderProps) {
+  const resolvedBackText =
+    (backText || "").trim() || (backLabel ? `Back to ${backLabel}` : "");
   const backControl =
-    onBack && backLabel ? (
+    onBack && resolvedBackText ? (
       <button
         type="button"
         onClick={onBack}
@@ -42,9 +47,9 @@ export function PageHeader({
         )}
       >
         <ArrowLeft className="size-3.5" aria-hidden />
-        Back to {backLabel}
+        {resolvedBackText}
       </button>
-    ) : backHref && backLabel ? (
+    ) : backHref && resolvedBackText ? (
       <Link
         href={backHref}
         className={cn(
@@ -53,7 +58,7 @@ export function PageHeader({
         )}
       >
         <ArrowLeft className="size-3.5" aria-hidden />
-        Back to {backLabel}
+        {resolvedBackText}
       </Link>
     ) : null;
 

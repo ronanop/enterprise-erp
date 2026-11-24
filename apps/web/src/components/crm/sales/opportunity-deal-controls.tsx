@@ -5,6 +5,10 @@ import Link from "next/link";
 import { Landmark, TriangleAlert } from "lucide-react";
 
 import { CrmSection } from "@/components/crm/crm-ui";
+import {
+  RequiredFieldsDialog,
+  missingRequiredMessage,
+} from "@/components/crm/sales/required-fields-dialog";
 import { FinanceField } from "@/components/finance/journals/finance-form-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +39,9 @@ export function OpportunityDealControls({ opportunity, onChanged }: Props) {
   const [summary, setSummary] = useState<CustomerExpenseSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [mandateOpen, setMandateOpen] = useState(false);
+  const [mandateMessage, setMandateMessage] = useState("");
+  const [mandateFields, setMandateFields] = useState<string[]>([]);
   const [draft, setDraft] = useState({
     purchase_model: opportunity.purchase_model ?? "",
     lease_type: opportunity.lease_type ?? "",
@@ -82,6 +89,24 @@ export function OpportunityDealControls({ opportunity, onChanged }: Props) {
   const isOpex = draft.purchase_model === "opex";
 
   async function save() {
+    const missing: string[] = [];
+    if (!draft.purchase_model.trim()) {
+      missing.push("Purchase model");
+    }
+    if (isOpex) {
+      if (!draft.lease_type.trim()) missing.push("Lease type");
+      if (!draft.lease_partner.trim()) missing.push("Lease partner");
+      if (!draft.lease_interest_rate_pct.trim()) missing.push("Rate of interest (%)");
+      if (!draft.lease_tenure_months.trim()) missing.push("Tenure (months)");
+      if (!draft.lease_monthly_rental.trim()) missing.push("Monthly rental (₹)");
+    }
+    if (missing.length > 0) {
+      setMandateFields(missing);
+      setMandateMessage(missingRequiredMessage(missing));
+      setMandateOpen(true);
+      return;
+    }
+
     setBusy(true);
     setError(null);
     try {
@@ -244,6 +269,16 @@ export function OpportunityDealControls({ opportunity, onChanged }: Props) {
           </Button>
         </div>
       </CrmSection>
+
+      <RequiredFieldsDialog
+        open={mandateOpen}
+        message={mandateMessage}
+        fields={mandateFields}
+        onClose={() => {
+          setMandateOpen(false);
+          setMandateFields([]);
+        }}
+      />
     </>
   );
 }

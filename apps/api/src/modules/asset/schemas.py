@@ -2168,3 +2168,38 @@ class DomainMembershipMeResponse(BaseModel):
     domains: list[str]
     admin_domains: list[str] = []
     memberships: list[DomainMembershipMeMembership]
+
+
+class AssetEmployeeDirectoryItem(BaseModel):
+    """Slim employee + department projection for Asset assignment / custody pickers."""
+
+    id: UUID
+    employee_code: str
+    first_name: str
+    last_name: str
+    display_name: str
+    department_id: UUID
+    department_code: str | None = None
+    department_name: str | None = None
+    status: str
+
+
+class AssetEmployeeDirectoryListResult(BaseModel):
+    items: list[AssetEmployeeDirectoryItem]
+    total: int
+
+
+class AssetDepartmentDirectoryItem(BaseModel):
+    """Slim department projection from organization.org_department for Asset pickers."""
+
+    id: UUID
+    department_code: str
+    department_name: str
+    company_id: UUID
+    branch_id: UUID
+    status: str
+
+
+class AssetDepartmentDirectoryListResult(BaseModel):
+    items: list[AssetDepartmentDirectoryItem]
+    total: int

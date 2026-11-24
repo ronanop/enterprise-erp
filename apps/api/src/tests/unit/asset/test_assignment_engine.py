@@ -32,6 +32,13 @@ def test_cancel_draft() -> None:
     assert row.status == "cancelled"
 
 
+def test_cancel_submitted() -> None:
+    engine = AssetAssignmentEngine()
+    row = _row("submitted")
+    engine.cancel_submitted(row)
+    assert row.status == "cancelled"
+
+
 def test_reopen_requires_rejected() -> None:
     engine = AssetAssignmentEngine()
     row = _row("cancelled")

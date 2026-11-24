@@ -126,7 +126,10 @@ class AssetInformationPortalService:
             category_name = category.category_name
 
         manufacturer = self._safe_vendor_name(ctx, asset.supplier_vendor_id)
-        model = self._safe_product_model(ctx, asset.product_id)
+        # Prefer the asset register model field; fall back to linked product name.
+        model = (getattr(asset, "model", None) or "").strip() or None
+        if model is None:
+            model = self._safe_product_model(ctx, asset.product_id)
 
         return AssetInformationPortalResponse(
             asset_id=asset.id,
@@ -287,9 +290,6 @@ class AssetInformationPortalService:
                     "From": _ops_label(old_ops) if old_ops else None,
                     "To": _ops_label(new_ops) if new_ops else None,
                     "Disposal date": new_v.get("disposal_date"),
-                    "Reason": new_v.get("reason")
-                    or new_v.get("remarks")
-                    or old_v.get("reason"),
                     "Management approval": approval_label,
                     "Document": new_v.get("disposal_document_number"),
                 }
@@ -305,20 +305,8 @@ class AssetInformationPortalService:
             )
 
         if op in {"submit", "approve", "reject", "cancel", "activate"}:
-            status_new = new_v.get("status")
-            return AssetLifecycleTimelineEvent(
-                id=eid,
-                kind="status",
-                stage="Lifecycle",
-                title=f"Lifecycle {op}",
-                detail=_fmt_pair(
-                    {
-                        "Status": _lifecycle_label(status_new) if status_new else op.title(),
-                    }
-                ),
-                occurred_at=occurred,
-                reference_id=getattr(entry, "entity_id", None),
-            )
+            # Register workflow transitions are not shown on the Information Portal timeline.
+            return None
 
         if op == "update":
             # Skip noisy empty updates; surface meaningful field diffs when present.
@@ -341,21 +329,22 @@ class AssetInformationPortalService:
             for key, val in interesting.items():
                 before = old_v.get(key)
                 if key == "status":
-                    detail_parts.append(
-                        f"Lifecycle: {_lifecycle_label(before)} → {_lifecycle_label(val)}"
-                    )
-                elif key == "operational_status":
+                    # Skip register status noise on the portal timeline.
+                    continue
+                if key == "operational_status":
                     detail_parts.append(f"Ops: {_ops_label(before)} → {_ops_label(val)}")
                 elif before is not None and str(before) != str(val):
                     detail_parts.append(f"{key}: {before} → {val}")
                 else:
                     detail_parts.append(f"{key}: {val}")
+            if not detail_parts:
+                return None
             return AssetLifecycleTimelineEvent(
                 id=eid,
                 kind="updated",
                 stage="Updated",
                 title="Asset details updated",
-                detail="; ".join(detail_parts) if detail_parts else None,
+                detail="; ".join(detail_parts),
                 occurred_at=occurred,
                 reference_id=getattr(entry, "entity_id", None),
             )

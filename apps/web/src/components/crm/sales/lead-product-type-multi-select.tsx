@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 type LeadProductTypeMultiSelectProps = {
   value: string[];
   onChange: (value: string[]) => void;
+  options?: string[];
 };
 
 type MenuCoords = {
@@ -19,7 +20,11 @@ type MenuCoords = {
   width: number;
 };
 
-export function LeadProductTypeMultiSelect({ value, onChange }: LeadProductTypeMultiSelectProps) {
+export function LeadProductTypeMultiSelect({
+  value,
+  onChange,
+  options = LEAD_PRODUCT_TYPES,
+}: LeadProductTypeMultiSelectProps) {
   const triggerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
@@ -31,9 +36,9 @@ export function LeadProductTypeMultiSelect({ value, onChange }: LeadProductTypeM
 
   const filteredOptions = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return [...LEAD_PRODUCT_TYPES];
-    return LEAD_PRODUCT_TYPES.filter((option) => option.toLowerCase().includes(q));
-  }, [search]);
+    if (!q) return [...options];
+    return options.filter((option) => option.toLowerCase().includes(q));
+  }, [search, options]);
 
   const triggerLabel =
     value.length === 0

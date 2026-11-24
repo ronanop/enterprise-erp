@@ -65,6 +65,12 @@ class AssetComponentService:
         include_availability: bool = False,
     ) -> tuple[list[AstAssetComponent] | list[dict], int]:
         cid = self._scope.resolve_list_company_id(ctx, company_id)
+        # When listing by parent asset, do not pin the session company — the asset may
+        # belong to another company than the header context (Edit Asset / import).
+        if asset_id is not None and company_id is None:
+            cid = None
+        if asset_ids and company_id is None:
+            cid = None
         if sort not in {"created_at", "component_code", "component_name"}:
             sort = "created_at"
         if asset_ids:
@@ -570,6 +576,22 @@ class AssetComponentService:
             )
             detached.append(self._enrich_row(ctx, updated))
         return detached
+
+    def dispose_active_for_parent(
+        self,
+        ctx: TenantContext,
+        parent_asset_id: UUID,
+        *,
+        reason: str = "parent_assignment_return_dispose",
+    ) -> list[dict]:
+        """Dispose every active component on a parent before the parent is disposed.
+
+        Covers lightweight accessories (chargers, etc.) and linked child assets.
+        Call after assignment component reconcile so ISSUED lines no longer block.
+        """
+        del reason  # call-site context only; dispose() owns the audit trail
+        active = self._repo.list_by_asset(ctx, parent_asset_id, include_inactive=False)
+        return [self.dispose(ctx, row.id) for row in active]
 
     def _enrich_row(self, ctx: TenantContext, row: AstAssetComponent | None) -> dict:
         if row is None:

@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/select";
 import { isAuthenticated } from "@/lib/auth";
 import { ApiClientError, resourceService } from "@/services/api-client";
+import { formatDropdownLabel } from "@/components/assets/shared/format-dropdown-label";
 
 type AssetRow = {
   id: string;
@@ -359,7 +360,7 @@ export function AssetWarrantyWorkspace() {
                   </SelectItem>
                   {STATUS_OPTIONS.filter(Boolean).map((status) => (
                     <SelectItem key={status} value={status} className="cursor-pointer">
-                      {status}
+                      {formatDropdownLabel(status)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -380,7 +381,7 @@ export function AssetWarrantyWorkspace() {
                   </SelectItem>
                   {WARRANTY_TYPES.map((type) => (
                     <SelectItem key={type} value={type} className="cursor-pointer">
-                      {type}
+                      {formatDropdownLabel(type)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -525,7 +526,7 @@ export function AssetWarrantyWorkspace() {
                   <SelectContent>
                     {WARRANTY_TYPES.map((type) => (
                       <SelectItem key={type} value={type} className="cursor-pointer">
-                        {type}
+                        {formatDropdownLabel(type)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -619,7 +620,7 @@ export function AssetWarrantyWorkspace() {
                           <SelectContent>
                             {WARRANTY_TYPES.map((type) => (
                               <SelectItem key={type} value={type} className="cursor-pointer">
-                                {type}
+                                {formatDropdownLabel(type)}
                               </SelectItem>
                             ))}
                           </SelectContent>

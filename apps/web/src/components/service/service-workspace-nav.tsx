@@ -31,9 +31,9 @@ export type ServiceNavItem = {
   fieldEngineerOnly?: boolean;
 };
 
-/** SOP service request ticket workflow - CRM-style workspace panes. */
+/** Service ITSM workspace panes (Service-management feature set on main shell). */
 export const SERVICE_NAV: readonly ServiceNavItem[] = [
-  { title: "Dashboard", href: "/service", icon: LayoutDashboard },
+  { title: "Overview", href: "/service", icon: LayoutDashboard },
   { title: "Request Tickets", href: "/service/service-request-tickets", icon: Ticket },
   { title: "Mailbox", href: "/service/mailbox", icon: Inbox, mailboxAccess: true },
   {
@@ -45,11 +45,6 @@ export const SERVICE_NAV: readonly ServiceNavItem[] = [
   { title: "SLAs", href: "/service/service-slas", icon: Clock3 },
   { title: "Resolved", href: "/service/resolved-tickets", icon: CheckCircle2 },
 ];
-
-function canViewServiceMailbox(permissions: string[] | undefined | null): boolean {
-  const perms = permissions ?? [];
-  return perms.includes("service.request:update") || perms.includes("service.request:approve");
-}
 
 function filterServiceNav(
   items: readonly ServiceNavItem[],
@@ -64,7 +59,8 @@ function filterServiceNav(
 
   return items.filter((item) => {
     if (item.fieldEngineerOnly) return isFe;
-    if (item.mailboxAccess) return canViewServiceMailbox(opts.permissions) && !feOnly;
+    // Mailbox is a core Service pane from Service-management — visible to all non-FE-only users.
+    if (item.mailboxAccess) return !feOnly;
     if (feOnly) return false;
     return true;
   });
@@ -75,7 +71,7 @@ function isServiceNavActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-/** Left sidebar for the Service workspace. */
+/** Left sidebar for the Service workspace (main shell). */
 export function ServiceSidebar() {
   const pathname = usePathname();
   const { user, adminModuleKeys } = useAuthUser();

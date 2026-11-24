@@ -400,7 +400,7 @@ class OvfService:
                     "description": cust["description"],
                     "qty": cust["qty"],
                     "margin_amount": round(margin_amt, 4),
-                    "margin_pct": round(margin_pct, 3),
+                    "margin_pct": round(margin_pct, 10),
                 }
             )
 
@@ -413,7 +413,7 @@ class OvfService:
         margin_pct_header = float(ovf.total_margin_pct or 0)
         if not margin_pct_header and customer_sell_total:
             display_margin = float(ovf.total_margin_amount or margin_net)
-            margin_pct_header = round(display_margin / customer_sell_total * 100.0, 3)
+            margin_pct_header = round(display_margin / customer_sell_total * 100.0, 10)
 
         billing_parts = [ovf.billing_address, ovf.billing_state, ovf.billing_country]
         shipping_parts = [ovf.shipping_address, ovf.shipping_state, ovf.shipping_country]
@@ -421,6 +421,15 @@ class OvfService:
         distributor_name = (oem.get("distributor_name") or "").strip() or None
         if not distributor_name:
             distributor_name = _aggregate_distributor_names(vendor_dtos)
+
+        customer_account_number = None
+        if ovf.company_account_id:
+            try:
+                account = self._companies.get(ctx, ovf.company_account_id)
+            except (NotFoundException, ForbiddenException):
+                account = None
+            if account is not None:
+                customer_account_number = (getattr(account, "account_number", None) or "").strip() or None
 
         return {
             "ovf_id": ovf.id,
@@ -434,6 +443,7 @@ class OvfService:
             "po_date": self._resolve_customer_po_display_date(ctx, ovf),
             "delivery_period": ovf.delivery_period,
             "customer_name": ovf.customer_name,
+            "customer_account_number": customer_account_number,
             "quote_name": ovf.quote_name,
             "account_name": ovf.account_name,
             "owner_name": ovf.owner_name,
@@ -452,6 +462,22 @@ class OvfService:
             "scm_last_hold_released_at": getattr(ovf, "scm_last_hold_released_at", None),
             "scm_hold_history": serialize_scm_hold_history(ovf),
             "scm_on_hold_remark": getattr(ovf, "scm_on_hold_remark", None),
+            "scm_hold_request_status": getattr(ovf, "scm_hold_request_status", None),
+            "scm_hold_request_remark": getattr(ovf, "scm_hold_request_remark", None),
+            "scm_hold_requested_at": getattr(ovf, "scm_hold_requested_at", None),
+            "scm_hold_requested_by": getattr(ovf, "scm_hold_requested_by", None),
+            "scm_charge_request_status": getattr(ovf, "scm_charge_request_status", None),
+            "scm_charge_request_freight": (
+                float(ovf.scm_charge_request_freight)
+                if getattr(ovf, "scm_charge_request_freight", None) is not None
+                else None
+            ),
+            "scm_charge_request_finance_pct": (
+                float(ovf.scm_charge_request_finance_pct)
+                if getattr(ovf, "scm_charge_request_finance_pct", None) is not None
+                else None
+            ),
+            "scm_charge_requested_at": getattr(ovf, "scm_charge_requested_at", None),
             "freight": freight,
             "additional_charges": float(ovf.additional_charges or 0),
             "vendor_payment_days": int(ovf.vendor_payment_days or 0),
@@ -544,7 +570,7 @@ class OvfService:
             "vendor_tax_amount": round(vendor_tax, 4),
             "vendor_total_with_tax": round(vendor_with_tax, 4),
             "total_margin_amount": margin_amount,
-            "margin_pct": round(margin_pct, 3),
+            "margin_pct": round(margin_pct, 10),
             "description": "; ".join(desc_parts) if desc_parts else None,
             "customer_po_number": ovf.po_number,
             "customer_po_date": self._resolve_customer_po_display_date(ctx, ovf),
@@ -858,6 +884,13 @@ class OvfService:
         approval_status = fields.pop("approval_status", None) or "not_required"
         if approval_status not in ("not_required", "pending", "approved", "rejected"):
             approval_status = "not_required"
+        if "custom_fields" in fields:
+            from modules.crm.service.crm_settings_service import CrmSettingsService
+
+            effective = CrmSettingsService(self._db).get_effective(ctx, require_erp_admin=False)
+            fields["custom_fields"] = CrmSettingsService.sanitize_custom_fields(
+                effective, "ovf", fields.get("custom_fields")
+            )
         row = self._repo.create(
             ctx,
             company_id=opp.company_id,
@@ -955,6 +988,13 @@ class OvfService:
 
         # Freight is written only via Ask SCM / SCM charges — ignore Sales payload.
         fields.pop("freight", None)
+        if "custom_fields" in fields:
+            from modules.crm.service.crm_settings_service import CrmSettingsService
+
+            effective = CrmSettingsService(self._db).get_effective(ctx, require_erp_admin=False)
+            fields["custom_fields"] = CrmSettingsService.sanitize_custom_fields(
+                effective, "ovf", fields.get("custom_fields")
+            )
 
         vendor_days = int(fields.get("vendor_payment_days", ovf.vendor_payment_days) or 0)
         customer_days = int(fields.get("customer_payment_days", ovf.customer_payment_days) or 0)
@@ -1107,6 +1147,37 @@ class OvfService:
 
             OvfFinanceService(self._db).refresh_live_margin(ctx, ovf_id)
 
+    def _ovf_pdf_filename(self, ovf: CrmOvf) -> str:
+        code = (ovf.ovf_no or "OVF").replace("/", "_").replace("\\", "_").strip() or "OVF"
+        label = (ovf.customer_name or ovf.quote_name or "").strip()
+        if label:
+            safe = "".join(ch if ch.isalnum() or ch in {" ", "-", "_"} else " " for ch in label)
+            safe = "_".join(safe.split())[:60]
+            if safe:
+                return f"OVF_{code}_{safe}.pdf"
+        return f"OVF_{code}.pdf"
+
+    def _ovf_email_attachments(
+        self,
+        ovf: CrmOvf,
+        *,
+        ovf_pdf_base64: str | None,
+        ovf_pdf_filename: str | None,
+    ) -> list[dict]:
+        content = (ovf_pdf_base64 or "").strip()
+        if not content:
+            return []
+        filename = (ovf_pdf_filename or "").strip() or self._ovf_pdf_filename(ovf)
+        if not filename.lower().endswith(".pdf"):
+            filename = f"{filename}.pdf"
+        return [
+            {
+                "filename": filename,
+                "content_base64": content,
+                "content_type": "application/pdf",
+            }
+        ]
+
     # -- blueprint / approval workflow ------------------------------------
     def send_for_approval(
         self,
@@ -1117,6 +1188,8 @@ class OvfService:
         remarks: str | None = None,
         assigned_user_id: UUID | None = None,
         assigned_user_ids: list[UUID] | None = None,
+        ovf_pdf_base64: str | None = None,
+        ovf_pdf_filename: str | None = None,
     ) -> CrmOvf:
         ovf = self.get(ctx, ovf_id)
         sales_blueprint_engine.assert_not_locked(ovf)
@@ -1140,6 +1213,12 @@ class OvfService:
             remarks=remarks,
             assigned_user_id=assigned_user_id,
             assigned_user_ids=assigned_user_ids,
+            email_attachments=self._ovf_email_attachments(
+                ovf,
+                ovf_pdf_base64=ovf_pdf_base64,
+                ovf_pdf_filename=ovf_pdf_filename,
+            )
+            or None,
         )
         row = self._repo.update(ctx, ovf_id, blueprint_state=next_state, approval_status="pending", locked=True)
         self._log(ctx, ovf, ovf.blueprint_state, next_state, "send_for_approval", remarks)
@@ -1176,9 +1255,25 @@ class OvfService:
         raise ConflictException(f"Unsupported OVF blueprint action '{action}'")
 
     def share_to_scm(self, ctx: TenantContext, ovf_id: UUID) -> CrmOvf:
+        from modules.crm.service.crm_settings_service import CrmSettingsService
+
         ovf = self.get(ctx, ovf_id)
         if ovf.shared_to_scm:
             return ovf
+        settings = CrmSettingsService(self._db).get_effective(ctx, require_erp_admin=False)
+        if CrmSettingsService.policy_flag(
+            settings, "share_to_scm_requires_approved_ovf", True
+        ):
+            status = (ovf.approval_status or "").strip().lower()
+            state = (ovf.blueprint_state or "").strip().lower()
+            if status not in {"approved", "auto_approved"} and state not in {
+                "approved",
+                "shared_scm",
+            }:
+                raise ConflictException(
+                    "OVF must be approved before sharing to SCM "
+                    "(CRM Settings → Policies → share to scm requires approved ovf)."
+                )
         sales_blueprint_engine.assert_not_locked(ovf)
         next_state = sales_blueprint_engine.transition("ovf", ovf.blueprint_state, "share_to_scm")
         row = self._repo.update(
@@ -1243,6 +1338,59 @@ class OvfService:
             None,
         )
         return row
+
+    def request_scm_hold(
+        self,
+        ctx: TenantContext,
+        ovf_id: UUID,
+        *,
+        remark: str,
+    ) -> CrmOvf:
+        """Queue a hold. The OVF stays open until a Hold approver accepts it."""
+        ovf = self.get(ctx, ovf_id)
+        if not ovf.shared_to_scm:
+            raise ConflictException("OVF has not been shared to SCM")
+        if bool(ovf.scm_on_hold):
+            raise ConflictException("OVF is already on SCM hold")
+        if (getattr(ovf, "scm_hold_request_status", None) or "") == "pending":
+            raise ConflictException("A hold request is already waiting for approval")
+        remark_text = (remark or "").strip()
+        if not remark_text:
+            raise ConflictException("Hold remark is required")
+        now = datetime.now(timezone.utc)
+        row = self._repo.update(
+            ctx,
+            ovf_id,
+            scm_hold_request_status="pending",
+            scm_hold_request_remark=remark_text,
+            scm_hold_requested_at=now,
+            scm_hold_requested_by=ctx.user_id,
+        )
+        self._log(ctx, ovf, ovf.blueprint_state, ovf.blueprint_state, "scm_hold_requested", remark_text)
+        return row
+
+    def decide_scm_hold(self, ctx: TenantContext, ovf_id: UUID, *, accept: bool) -> CrmOvf:
+        """A Hold approver accepts (places on hold) or rejects a pending hold request."""
+        ovf = self.get(ctx, ovf_id)
+        if (getattr(ovf, "scm_hold_request_status", None) or "") != "pending":
+            raise ConflictException("This OVF has no pending hold request")
+        remark = (getattr(ovf, "scm_hold_request_remark", None) or "").strip()
+        if accept:
+            self.set_scm_on_hold(ctx, ovf_id, on_hold=True, remark=remark or "Approved hold")
+            row = self._repo.update(ctx, ovf_id, scm_hold_request_status="accepted")
+            self._log(ctx, ovf, ovf.blueprint_state, ovf.blueprint_state, "scm_hold_accepted", remark)
+            return row
+        row = self._repo.update(ctx, ovf_id, scm_hold_request_status="rejected")
+        self._log(ctx, ovf, ovf.blueprint_state, ovf.blueprint_state, "scm_hold_rejected", remark)
+        return row
+
+    def list_scm_hold_requests(self, ctx: TenantContext) -> list[CrmOvf]:
+        rows = self._repo.list_shared_to_scm(ctx, None)
+        return [
+            row
+            for row in rows
+            if (getattr(row, "scm_hold_request_status", None) or "") in {"pending", "accepted", "rejected"}
+        ]
 
     def request_freight_from_scm(
         self,
@@ -1361,7 +1509,7 @@ class OvfService:
         note = (remarks or "").strip()
         brief = (
             f"Sales requested supporting items (outside the main PO) for OVF {ovf.ovf_no}.\n"
-            "Submit each item name, qty and unit cost in My Jobs."
+            "Submit each item name, qty and distributor in My Jobs. SCM prices them separately."
             + (f"\nNote: {note}" if note else "")
         )
         ApprovalTaskService(self._db).route_approval(
@@ -1378,6 +1526,97 @@ class OvfService:
         )
         self._log(
             ctx, ovf, ovf.blueprint_state, ovf.blueprint_state, "request_supporting_items", None
+        )
+        return self.get(ctx, ovf_id)
+
+    def request_supporting_item_prices_from_scm(
+        self,
+        ctx: TenantContext,
+        ovf_id: UUID,
+        *,
+        remarks: str | None = None,
+    ) -> CrmOvf:
+        """Ask SCM to price Ops-provided supporting items via My Jobs."""
+        ovf = self.get(ctx, ovf_id)
+        if ovf.deal_won:
+            raise ConflictException("Cannot request supporting item prices after Deal Won")
+        if ovf.blueprint_state not in {"draft", "approved", "shared_scm"}:
+            raise ConflictException(
+                f"Cannot request supporting item prices while OVF is in '{ovf.blueprint_state}'"
+            )
+
+        supporting = [
+            ln
+            for ln in self._lines.list_for_ovf(ctx, ovf.id)
+            if ln.side == "vendor"
+            and str(ln.description or "").strip().startswith("[supporting]")
+        ]
+        if not supporting:
+            raise ConflictException(
+                "Add supporting items first (Ask Operations), then request SCM pricing."
+            )
+
+        from modules.crm.service.approval_step_owner_service import ApprovalStepOwnerService
+        from modules.crm.service.approval_task_service import ApprovalTaskService
+
+        pending = ApprovalTaskService(self._db).list(
+            ctx,
+            company_id=ovf.company_id,
+            status="pending",
+            entity_type="ovf",
+            entity_id=ovf.id,
+        )
+        if any(task.action == "price_supporting_items" for task in pending):
+            raise ConflictException(
+                "A supporting-items pricing request is already pending for this OVF"
+            )
+
+        owner_ids = ApprovalStepOwnerService(self._db).list_user_ids(
+            ctx, "ovf_price_supporting_items"
+        )
+        if not owner_ids:
+            # Fall back to freight SCM owners when pricing owners are not configured yet.
+            owner_ids = ApprovalStepOwnerService(self._db).list_user_ids(
+                ctx, "ovf_provide_freight"
+            )
+        if not owner_ids:
+            raise ConflictException(
+                "No SCM supporting-item pricing owners configured. "
+                "Set them under CRM → Users → Default task owners "
+                "(OVF — Price supporting items, or OVF — Provide freight)."
+            )
+
+        note = (remarks or "").strip()
+        lines_brief = "\n".join(
+            f"- {ln.product_name} × {Decimal(str(ln.qty)).normalize():f}"
+            + (f" ({ln.distributor_name})" if ln.distributor_name else "")
+            for ln in supporting
+        )
+        brief = (
+            f"Sales requested unit purchase prices for supporting items on OVF {ovf.ovf_no}.\n"
+            f"{lines_brief}\n"
+            "Enter unit purchase (₹) for each item in My Jobs."
+            + (f"\nNote: {note}" if note else "")
+        )
+        ApprovalTaskService(self._db).route_approval(
+            ctx,
+            title=f"Price supporting items for OVF {ovf.ovf_no}",
+            entity_type="ovf",
+            entity_id=ovf.id,
+            team_role="scm",
+            action="price_supporting_items",
+            company_id=ovf.company_id,
+            branch_id=ovf.branch_id,
+            assigned_user_ids=owner_ids,
+            remarks=brief,
+        )
+        self._log(
+            ctx,
+            ovf,
+            ovf.blueprint_state,
+            ovf.blueprint_state,
+            "request_supporting_item_prices",
+            f"items={len(supporting)}",
         )
         return self.get(ctx, ovf_id)
 
@@ -1539,6 +1778,52 @@ class OvfService:
             ovf.blueprint_state,
             "ops_provide_supporting_items",
             f"items={created}",
+        )
+        return self.get(ctx, ovf_id)
+
+    def apply_supporting_item_prices_from_scm(
+        self,
+        ctx: TenantContext,
+        ovf_id: UUID,
+        items: list[dict[str, Any]],
+    ) -> CrmOvf:
+        """Update unit purchase on existing supporting lines from an SCM My Jobs task."""
+        ovf = self.get(ctx, ovf_id)
+        if not items:
+            raise ConflictException("Price at least one supporting item")
+
+        supporting = [
+            ln
+            for ln in self._lines.list_for_ovf(ctx, ovf.id)
+            if ln.side == "vendor"
+            and str(ln.description or "").strip().startswith("[supporting]")
+        ]
+        by_id = {str(ln.id): ln for ln in supporting}
+        by_name = {(ln.product_name or "").strip().lower(): ln for ln in supporting}
+        updated = 0
+        for raw in items:
+            line_id = str(raw.get("line_id") or "").strip()
+            name = str(raw.get("product_name") or "").strip()
+            unit_price = Decimal(str(raw.get("unit_price") or 0))
+            if unit_price < 0:
+                raise ConflictException("Unit price cannot be negative")
+            line = by_id.get(line_id) if line_id else None
+            if line is None and name:
+                line = by_name.get(name.lower())
+            if line is None:
+                raise ConflictException(
+                    f"Supporting item not found for pricing: {name or line_id or 'unknown'}"
+                )
+            self.update_line(ctx, line.id, unit_price=unit_price)
+            updated += 1
+
+        self._log(
+            ctx,
+            ovf,
+            ovf.blueprint_state,
+            ovf.blueprint_state,
+            "scm_price_supporting_items",
+            f"items={updated}",
         )
         return self.get(ctx, ovf_id)
 
@@ -1810,6 +2095,101 @@ class OvfService:
             f"freight={row.freight}",
         )
         return row
+
+    def request_scm_charge_change(
+        self,
+        ctx: TenantContext,
+        ovf_id: UUID,
+        *,
+        freight: Decimal | float | str,
+        finance_cost_pct: Decimal | float | str,
+    ) -> CrmOvf:
+        """Queue freight and finance. Live values stay until a Freight approver accepts."""
+        ovf = self.get(ctx, ovf_id)
+        if not ovf.shared_to_scm:
+            raise ConflictException("OVF has not been shared to SCM")
+        if bool(getattr(ovf, "scm_on_hold", False)):
+            raise ConflictException(
+                "Freight and finance cannot be changed while the OVF is on SCM hold. Unhold first."
+            )
+        next_freight = Decimal(str(freight))
+        next_finance = Decimal(str(finance_cost_pct))
+        if next_freight < 0:
+            raise ConflictException("Freight cannot be negative")
+        if next_finance < 0:
+            raise ConflictException("Finance cost % cannot be negative")
+        next_freight = next_freight.quantize(Decimal("0.0001"))
+        next_finance = next_finance.quantize(Decimal("0.001"))
+        current_freight = Decimal(str(ovf.freight or 0)).quantize(Decimal("0.0001"))
+        current_finance = Decimal(str(ovf.finance_cost_pct or 0)).quantize(Decimal("0.001"))
+        if next_freight == current_freight and next_finance == current_finance:
+            raise ConflictException("Freight and finance are already these values")
+        now = datetime.now(timezone.utc)
+        row = self._repo.update(
+            ctx,
+            ovf_id,
+            scm_charge_request_status="pending",
+            scm_charge_request_freight=next_freight,
+            scm_charge_request_finance_pct=next_finance,
+            scm_charge_requested_at=now,
+            scm_charge_requested_by=ctx.user_id,
+        )
+        self._log(
+            ctx,
+            ovf,
+            ovf.blueprint_state,
+            ovf.blueprint_state,
+            "scm_charge_change_requested",
+            f"freight={next_freight}; finance_cost_pct={next_finance}",
+        )
+        return row
+
+    def decide_scm_charge_change(self, ctx: TenantContext, ovf_id: UUID, *, accept: bool) -> CrmOvf:
+        """Accept applies the queued freight and finance. Reject leaves the live values."""
+        ovf = self.get(ctx, ovf_id)
+        if (getattr(ovf, "scm_charge_request_status", None) or "") != "pending":
+            raise ConflictException("This OVF has no pending freight and finance request")
+        if not accept:
+            row = self._repo.update(ctx, ovf_id, scm_charge_request_status="rejected")
+            self._log(
+                ctx,
+                ovf,
+                ovf.blueprint_state,
+                ovf.blueprint_state,
+                "scm_charge_change_rejected",
+                None,
+            )
+            return row
+        freight = getattr(ovf, "scm_charge_request_freight", None)
+        finance = getattr(ovf, "scm_charge_request_finance_pct", None)
+        if freight is None or finance is None:
+            raise ConflictException("The freight and finance request is incomplete")
+        self.update_scm_charges(
+            ctx,
+            ovf_id,
+            freight=freight,
+            additional_charges=ovf.additional_charges,
+            finance_cost_pct=finance,
+        )
+        row = self._repo.update(ctx, ovf_id, scm_charge_request_status="accepted")
+        self._log(
+            ctx,
+            ovf,
+            ovf.blueprint_state,
+            ovf.blueprint_state,
+            "scm_charge_change_accepted",
+            f"freight={freight}; finance_cost_pct={finance}",
+        )
+        return row
+
+    def list_scm_charge_requests(self, ctx: TenantContext) -> list[CrmOvf]:
+        rows = self._repo.list_shared_to_scm(ctx, None)
+        return [
+            row
+            for row in rows
+            if (getattr(row, "scm_charge_request_status", None) or "")
+            in {"pending", "accepted", "rejected"}
+        ]
 
     def update_scm_charges(
         self,
@@ -2156,7 +2536,18 @@ class OvfService:
 
         opp = self._get_opportunity(ctx, ovf.opportunity_id)
         from_opp_state = opp.blueprint_state
-        opp_next_state = sales_blueprint_engine.transition("opportunity", from_opp_state, "deal_won")
+        already_won = str(opp.status or "").lower() == "won" or from_opp_state == "won"
+        # Deal is won at quote acceptance; OVF deal_won closes fulfilment blueprint.
+        if from_opp_state == "won":
+            opp_next_state = "won"
+        elif from_opp_state == "ovf_ready":
+            opp_next_state = sales_blueprint_engine.transition(
+                "opportunity", from_opp_state, "deal_won"
+            )
+        else:
+            raise ConflictException(
+                f"Cannot close OVF deal won while opportunity is in '{from_opp_state}'"
+            )
 
         self._opportunities.update(
             ctx,
@@ -2167,15 +2558,16 @@ class OvfService:
             probability_percent=100,
             deal_won_amount=amount,
             forecast_amount=amount,
-            won_at=datetime.now(timezone.utc),
+            won_at=opp.won_at or datetime.now(timezone.utc),
         )
         log_state_history(
             self._db, ctx, company_id=opp.company_id, branch_id=opp.branch_id,
             entity_type="opportunity", entity_id=opp.id,
             from_state=from_opp_state, to_state=opp_next_state, action="deal_won",
-            remark=f"OVF {ovf.ovf_no} deal won at {amount}",
+            remark=f"OVF {ovf.ovf_no} fulfilment closed at {amount}",
         )
-        self._notify_deal_won_emails(ctx, opp, amount)
+        if not already_won:
+            self._notify_deal_won_emails(ctx, opp, amount)
         return row
 
     def _notify_deal_won_emails(self, ctx: TenantContext, opp, amount) -> None:

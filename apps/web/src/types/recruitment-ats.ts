@@ -76,7 +76,7 @@ export const CANDIDATE_STATUS_LABELS = STATUS_LABELS;
 export const INTERVIEW_ROUND_LABELS: Record<InterviewRound, string> = {
   round_1: "Round 1",
   round_2: "Round 2",
-  hr: "HR Discussion",
+  hr: "Negotiation Round",
 };
 
 export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
@@ -91,12 +91,26 @@ export const SOURCE_LABELS: Record<CandidateSource, string> = {
   linkedin: "LinkedIn",
   indeed: "Indeed",
   naukri: "Naukri",
-  company_website: "Company Website",
+  company_website: "Website",
   campus: "Campus",
   walk_in: "Walk-In",
   recruiter: "Recruiter",
   other: "Other",
 };
+
+/** Normalize API / import / careers source strings to CandidateSource. */
+export function normalizeCandidateSource(raw: unknown): CandidateSource {
+  const key = String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  if (!key) return "other";
+  if (key === "website" || key === "career_site" || key === "careers" || key === "web") {
+    return "company_website";
+  }
+  if (key in SOURCE_LABELS) return key as CandidateSource;
+  return "other";
+}
 
 export const OFFER_STATUS_LABELS: Record<OfferStatus, string> = {
   draft: "Draft",
@@ -105,6 +119,9 @@ export const OFFER_STATUS_LABELS: Record<OfferStatus, string> = {
   rejected: "Rejected",
   expired: "Expired",
 };
+
+/** Who the opening is for — external = public careers; internal = employees. */
+export type JobPostingAudience = "internal" | "external";
 
 export type JobOpening = {
   id: string;
@@ -131,8 +148,18 @@ export type JobOpening = {
   createdAt: string;
   updatedAt: string;
   apiId?: string;
+  /** Resolved org UUIDs for API persistence */
+  branchId?: string;
+  departmentId?: string;
+  designationId?: string;
+  hiringManagerId?: string;
+  recruiterId?: string;
   /** Job description document name/URI for interview attach */
   jdFileName?: string;
+  /** Internal transfer vs public/external hire */
+  postingAudience: JobPostingAudience;
+  /** Approval email copy filename (required evidence/artifact) */
+  evidenceEmailFileName?: string;
 };
 
 export type AtsCandidate = {
@@ -160,6 +187,17 @@ export type AtsCandidate = {
   linkedinUrl: string;
   source: CandidateSource;
   recruiter: string;
+  /** Parsed resume extras (local + mapped to API where possible) */
+  skills?: string[];
+  education?: string;
+  summary?: string;
+  educationDetails?: { degree?: string; institution?: string; year?: string }[];
+  experienceDetails?: {
+    company?: string;
+    title?: string;
+    duration?: string;
+    highlights?: string;
+  }[];
   createdAt: string;
   updatedAt: string;
   apiId?: string;
@@ -181,6 +219,8 @@ export type PipelineApplication = {
   status: CandidatePipelineStatus;
   appliedAt: string;
   notes: string;
+  /** CTC agreed in Negotiation Round — prefills offer letter. */
+  negotiatedCtc?: number;
   updatedAt: string;
   stageEnteredAt?: string;
   stageHistory?: StageHistoryEntry[];
@@ -248,32 +288,38 @@ export type AtsOffer = {
   updatedAt: string;
 };
 
+/** Templates shown in Generate Offer UI (legacy kinds remain on AtsOffer for old rows). */
 export const OFFER_TEMPLATE_OPTIONS: {
-  id: OfferTemplateKind;
+  id: Extract<OfferTemplateKind, "standard" | "internship">;
   label: string;
   description: string;
 }[] = [
   {
     id: "standard",
     label: "Standard Offer Letter",
-    description: "Default company offer letter with all standard clauses.",
-  },
-  {
-    id: "with_benefits",
-    label: "With Benefits",
-    description: "Includes benefits, insurance and other perks.",
+    description: "Full-time / permanent offer with standard clauses.",
   },
   {
     id: "internship",
-    label: "Internship Offer",
+    label: "Internship Offer Letter",
     description: "Template for internship positions.",
   },
-  {
-    id: "custom",
-    label: "Custom Template",
-    description: "Use a custom template.",
-  },
 ];
+
+/** Reusable offer letter PDF shell + overlay body (Offers tab). */
+export type OfferLetterTemplate = {
+  id: string;
+  name: string;
+  description?: string;
+  /** Uploaded PDF file name */
+  pdfFileName: string;
+  /** PDF as data URL for preview / reuse */
+  pdfDataUrl: string;
+  /** Body text shown over the PDF */
+  bodyContent: string;
+  createdAt: string;
+  updatedAt: string;
+};
 
 export type AtsDocument = {
   id: string;
@@ -283,7 +329,13 @@ export type AtsDocument = {
   uploadedAt: string;
   status?: DocVerificationStatus;
   expiryDate?: string;
+  /** External / remote link when available */
   url?: string;
+  /** Inline preview/download payload (data URL) — local + VM browser storage */
+  contentDataUrl?: string;
+  mimeType?: string;
+  /** Optional link back to ATS offer */
+  offerId?: string;
 };
 
 export type AtsAuditEntry = {
@@ -322,7 +374,10 @@ export function emptyAtsFilters(): AtsFilters {
 export type CreateJobInput = Omit<
   JobOpening,
   "id" | "jobCode" | "filled" | "createdAt" | "updatedAt" | "apiId"
->;
+> & {
+  /** Binary for approval email evidence (uploaded after requisition create). */
+  evidenceEmailFile?: File | null;
+};
 
 export type CreateCandidateInput = Omit<
   AtsCandidate,

@@ -157,17 +157,43 @@ class EmployeeImportService:
         rows = list(self._db.scalars(stmt).all())
         commands = EmployeeCommands(self._db)
         deleted = 0
+        employee_ids: list[UUID] = []
         for i, row in enumerate(rows):
             # Free unique (company_id, employee_code) and (company_id, email)
             commands.soft_delete_freeing_identity(
                 row.id, suffix=f"{stamp}-{i}", deleted_by=ctx.user_id
             )
+            employee_ids.append(row.id)
             deleted += 1
+
+        # Free hr_employment document numbers so re-import can allocate EMPL-* again.
+        empl_cleared = 0
+        if employee_ids:
+            empl_rows = list(
+                self._db.scalars(
+                    select(HrEmployment).where(
+                        HrEmployment.tenant_id == ctx.tenant_id,
+                        HrEmployment.is_deleted.is_(False),
+                        HrEmployment.employee_id.in_(employee_ids),
+                    )
+                ).all()
+            )
+            for j, empl in enumerate(empl_rows):
+                empl.is_deleted = True
+                empl.deleted_at = datetime.now(timezone.utc)
+                empl.deleted_by = ctx.user_id
+                empl.document_number = f"{empl.document_number}-DEL-{stamp}-{j}"[:50]
+                empl.updated_by = ctx.user_id
+                empl.version = int(empl.version or 1) + 1
+                empl_cleared += 1
 
         self._db.flush()
         return {
             "deleted": deleted,
-            "message": f"Soft-deleted {deleted} employee(s). Codes freed for re-import.",
+            "message": (
+                f"Soft-deleted {deleted} employee(s) and {empl_cleared} "
+                "employment record(s). Codes freed for re-import."
+            ),
         }
 
     def import_rows(self, ctx: TenantContext, rows: list[dict]) -> dict:
@@ -199,6 +225,8 @@ class EmployeeImportService:
         errors: list[str] = []
         results: list[dict] = []
         code_to_id: dict[str, UUID] = {}
+        # Track emails claimed in this batch per company to avoid unique collisions.
+        claimed_emails: dict[UUID, set[str]] = {}
 
         for c in companies:
             for emp in self._employees.list_employees(ctx, company_id=c.id):
@@ -207,154 +235,177 @@ class EmployeeImportService:
         pending_managers: list[tuple[UUID, str, str]] = []
 
         for idx, raw in enumerate(rows, start=2):
+            # Nested savepoint: one bad row must not poison the whole batch session.
             try:
-                emp_code = str(raw.get("employee_code") or "").strip().upper()
-                name = str(raw.get("name") or "").strip()
-                if not emp_code:
-                    skipped += 1
-                    errors.append(f"Row {idx}: missing Emp Code")
-                    continue
-                if not name:
-                    skipped += 1
-                    errors.append(f"Row {idx}: missing Name")
-                    continue
+                with self._db.begin_nested():
+                    emp_code = str(raw.get("employee_code") or "").strip().upper()
+                    name = str(raw.get("name") or "").strip()
+                    if not emp_code:
+                        skipped += 1
+                        errors.append(f"Row {idx}: missing Emp Code")
+                        continue
+                    if not name:
+                        skipped += 1
+                        errors.append(f"Row {idx}: missing Name")
+                        continue
 
-                entity_raw = str(raw.get("entity") or "").strip()
-                org_raw = str(raw.get("organisation") or raw.get("organization") or "").strip()
-                company = self._resolve_company(
-                    entity_raw,
-                    org_raw,
-                    emp_code,
-                    company_by_key,
-                    companies,
-                    default_company,
-                    warnings,
-                    idx,
-                )
-                branch_id = self._default_branch(ctx, company.id, branch_by_company)
-                first_name, last_name = _split_name(name)
-
-                department_name = str(raw.get("department") or "General").strip() or "General"
-                designation_name = str(raw.get("designation") or "Staff").strip() or "Staff"
-                base_location = str(raw.get("base_location") or "").strip()
-                manager_raw = str(raw.get("reporting_manager") or "").strip()
-                email = str(raw.get("email") or "").strip()
-                mobile = str(raw.get("mobile") or "").strip() or "0000000000"
-                joining = _parse_date(str(raw.get("joining_date") or ""))
-
-                if not email:
-                    email = f"{emp_code.lower().replace(' ', '')}@import.cache.local"
-
-                dept_id = self._ensure_department(
-                    ctx, company.id, branch_id, department_name, dept_cache
-                )
-                designation_id = self._ensure_designation(
-                    ctx, company.id, designation_name, desig_cache
-                )
-                work_location: str | None = None
-                if base_location:
-                    _loc_id, work_location = self._ensure_location(
-                        ctx, company.id, branch_id, base_location, loc_cache
+                    entity_raw = str(raw.get("entity") or "").strip()
+                    org_raw = str(raw.get("organisation") or raw.get("organization") or "").strip()
+                    company = self._resolve_company(
+                        entity_raw,
+                        org_raw,
+                        emp_code,
+                        company_by_key,
+                        companies,
+                        default_company,
+                        warnings,
+                        idx,
                     )
+                    branch_id = self._default_branch(ctx, company.id, branch_by_company)
+                    first_name, last_name = _split_name(name)
 
-                # Upsert by Emp Code across all companies (re-import remaps Digitech↔Technologies)
-                existing = self._find_by_code_any(ctx, emp_code)
-                if existing:
-                    next_email = email
-                    if (
-                        "@import.cache.local" in email
-                        and existing.email
-                        and "@import.cache.local" not in str(existing.email)
-                    ):
-                        next_email = existing.email
+                    department_name = str(raw.get("department") or "General").strip() or "General"
+                    designation_name = str(raw.get("designation") or "Staff").strip() or "Staff"
+                    base_location = str(raw.get("base_location") or "").strip()
+                    manager_raw = str(raw.get("reporting_manager") or "").strip()
+                    email = str(raw.get("email") or "").strip()
+                    mobile = str(raw.get("mobile") or "").strip() or "0000000000"
+                    joining = _parse_date(str(raw.get("joining_date") or ""))
 
-                    # Move company if Entity changed since last import
-                    if existing.company_id != company.id:
-                        EmployeeCommands(self._db).move_company(
-                            existing.id,
-                            company_id=company.id,
-                            branch_id=branch_id,
-                            updated_by=ctx.user_id,
+                    if not email:
+                        email = f"{emp_code.lower().replace(' ', '')}@import.cache.local"
+
+                    email_key = email.strip().lower()
+                    claimed = claimed_emails.setdefault(company.id, set())
+                    if email_key in claimed:
+                        # Sheet often reuses personal/cache emails — keep import moving.
+                        uniquified = (
+                            f"{emp_code.lower().replace(' ', '')}."
+                            f"{email_key.replace('@', '.at.')}@import.cache.local"
+                        )
+                        warnings.append(
+                            f"Row {idx} ({emp_code}): email '{email}' already used in this "
+                            f"company/import - using {uniquified}"
+                        )
+                        email = uniquified
+                        email_key = email.lower()
+                    claimed.add(email_key)
+
+                    dept_id = self._ensure_department(
+                        ctx, company.id, branch_id, department_name, dept_cache
+                    )
+                    designation_id = self._ensure_designation(
+                        ctx, company.id, designation_name, desig_cache
+                    )
+                    work_location: str | None = None
+                    if base_location:
+                        _loc_id, work_location = self._ensure_location(
+                            ctx, company.id, branch_id, base_location, loc_cache
                         )
 
-                    self._employees.update_employee(
-                        ctx,
-                        existing.id,
-                        branch_id=branch_id,
-                        department_id=dept_id,
-                        first_name=first_name,
-                        last_name=last_name,
-                        email=next_email,
-                        mobile=mobile if mobile != "0000000000" else existing.mobile,
-                        designation=designation_name,
-                        date_of_joining=joining,
-                        status="active",
-                    )
-                    emp_id = existing.id
-                    self._upsert_employment(
+                    # Upsert by Emp Code across all companies (re-import remaps Digitech↔Technologies)
+                    existing = self._find_by_code_any(ctx, emp_code)
+                    if existing:
+                        next_email = email
+                        if (
+                            "@import.cache.local" in email
+                            and existing.email
+                            and "@import.cache.local" not in str(existing.email)
+                        ):
+                            next_email = existing.email
+
+                        # Move company if Entity changed since last import
+                        if existing.company_id != company.id:
+                            EmployeeCommands(self._db).move_company(
+                                existing.id,
+                                company_id=company.id,
+                                branch_id=branch_id,
+                                updated_by=ctx.user_id,
+                            )
+
+                        self._employees.update_employee(
+                            ctx,
+                            existing.id,
+                            branch_id=branch_id,
+                            department_id=dept_id,
+                            first_name=first_name,
+                            last_name=last_name,
+                            email=next_email,
+                            mobile=mobile if mobile != "0000000000" else existing.mobile,
+                            designation=designation_name,
+                            date_of_joining=joining,
+                            status="active",
+                        )
+                        emp_id = existing.id
+                        self._upsert_employment(
+                            ctx,
+                            company_id=company.id,
+                            branch_id=branch_id,
+                            employee_id=emp_id,
+                            joining=joining,
+                            work_location=work_location,
+                        )
+                        updated += 1
+                        action = "updated"
+                    else:
+                        created_emp = self._employees.create_employee(
+                            ctx,
+                            company_id=company.id,
+                            branch_id=branch_id,
+                            department_id=dept_id,
+                            employee_code=emp_code,
+                            first_name=first_name,
+                            last_name=last_name,
+                            email=email,
+                            mobile=mobile,
+                            designation=designation_name,
+                            date_of_joining=joining,
+                            bypass_onboarding=True,
+                            status="active",
+                        )
+                        emp_id = created_emp.id
+                        self._upsert_employment(
+                            ctx,
+                            company_id=company.id,
+                            branch_id=branch_id,
+                            employee_id=emp_id,
+                            joining=joining,
+                            work_location=work_location,
+                        )
+                        created += 1
+                        action = "created"
+
+                    self._ensure_designation_assignment(
                         ctx,
                         company_id=company.id,
                         branch_id=branch_id,
                         employee_id=emp_id,
+                        designation_id=designation_id,
                         joining=joining,
-                        work_location=work_location,
                     )
-                    updated += 1
-                    action = "updated"
-                else:
-                    created_emp = self._employees.create_employee(
-                        ctx,
-                        company_id=company.id,
-                        branch_id=branch_id,
-                        department_id=dept_id,
-                        employee_code=emp_code,
-                        first_name=first_name,
-                        last_name=last_name,
-                        email=email,
-                        mobile=mobile,
-                        designation=designation_name,
-                        date_of_joining=joining,
-                        bypass_onboarding=True,
-                        status="active",
+
+                    code_to_id[emp_code] = emp_id
+                    if manager_raw:
+                        pending_managers.append((emp_id, emp_code, manager_raw))
+
+                    results.append(
+                        {
+                            "row": idx,
+                            "employee_code": emp_code,
+                            "action": action,
+                            "employee_id": str(emp_id),
+                            "company": company.company_name,
+                            "entity": entity_raw or org_raw or company.company_name,
+                            "base_location": work_location or "",
+                            "designation": designation_name,
+                        }
                     )
-                    emp_id = created_emp.id
-                    self._upsert_employment(
-                        ctx,
-                        company_id=company.id,
-                        branch_id=branch_id,
-                        employee_id=emp_id,
-                        joining=joining,
-                        work_location=work_location,
-                    )
-                    created += 1
-                    action = "created"
-
-                self._ensure_designation_assignment(
-                    ctx,
-                    company_id=company.id,
-                    branch_id=branch_id,
-                    employee_id=emp_id,
-                    designation_id=designation_id,
-                    joining=joining,
-                )
-
-                code_to_id[emp_code] = emp_id
-                if manager_raw:
-                    pending_managers.append((emp_id, emp_code, manager_raw))
-
-                results.append(
-                    {
-                        "row": idx,
-                        "employee_code": emp_code,
-                        "action": action,
-                        "employee_id": str(emp_id),
-                        "company": company.company_name,
-                        "entity": entity_raw or org_raw or company.company_name,
-                        "base_location": work_location or "",
-                        "designation": designation_name,
-                    }
-                )
             except Exception as exc:  # noqa: BLE001 - collect row errors
+                # Nested rollback undoes master inserts; drop caches so IDs are not reused.
+                dept_cache.clear()
+                desig_cache.clear()
+                loc_cache.clear()
+                branch_by_company.clear()
                 skipped += 1
                 errors.append(f"Row {idx}: {exc}")
 
@@ -369,11 +420,12 @@ class EmployeeImportService:
                 warnings.append(f"{emp_code}: cannot be own reporting manager")
                 continue
             try:
-                self._employees.update_employee(
-                    ctx,
-                    emp_id,
-                    reporting_manager_id=mgr_id,
-                )
+                with self._db.begin_nested():
+                    self._employees.update_employee(
+                        ctx,
+                        emp_id,
+                        reporting_manager_id=mgr_id,
+                    )
             except Exception as exc:  # noqa: BLE001
                 warnings.append(f"{emp_code}: manager link failed - {exc}")
 
@@ -717,6 +769,18 @@ class EmployeeImportService:
             }
             if work_location:
                 fields["work_location_text"] = work_location
+            # Moving company keeps the old EMPL doc number — that can collide with
+            # uk_hr_empl_company_doc. Always allocate a fresh number on company change.
+            if existing.company_id != company_id:
+                from modules.hr.domain.enums import HrEntityType
+                from modules.hr.service.document_number_service import DocumentNumberService
+
+                fields["document_number"] = DocumentNumberService(self._db).generate(
+                    HrEntityType.EMPLOYMENT,
+                    company_id,
+                    HrEmployment,
+                    "document_number",
+                )
             self._employment.update(ctx, existing.id, **fields)
             return
         self._employment.create(

@@ -11,7 +11,7 @@ from core.exceptions import ForbiddenException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.models.security import SecUser
 from modules.foundation.service.rbac_service import RBACService
-from modules.master_data.published import EmployeeRead
+from modules.master_data.models.employee import MasterEmployee
 from modules.service.models import (
     SvcServiceRequest,
     SvcServiceRequestCoOwner,
@@ -42,12 +42,20 @@ class TicketAccess:
     can_open: bool = False
     is_opened: bool = False
     can_resume: bool = False
+    can_pause_sla: bool = False
+    can_resume_sla: bool = False
+    is_on_duty: bool = True
+    roster_visibility_enabled: bool = False
 
 
 class TicketAccessService:
     def __init__(self, db: Session) -> None:
         self._db = db
         self._rbac = RBACService(db)
+        # Lazy import avoids circular import at module load.
+        from modules.service.adapters.hr_port import ServiceHrAdapter
+
+        self._hr = ServiceHrAdapter(db)
 
     def resolve_employee_id(self, ctx: TenantContext) -> UUID | None:
         user = self._db.scalar(
@@ -60,10 +68,10 @@ class TicketAccessService:
         if user and user.employee_id:
             return user.employee_id
         emp = self._db.scalar(
-            select(EmployeeRead.id).where(
-                EmployeeRead.user_id == ctx.user_id,
-                EmployeeRead.tenant_id == ctx.tenant_id,
-                EmployeeRead.is_deleted.is_(False),
+            select(MasterEmployee.id).where(
+                MasterEmployee.user_id == ctx.user_id,
+                MasterEmployee.tenant_id == ctx.tenant_id,
+                MasterEmployee.is_deleted.is_(False),
             )
         )
         return emp
@@ -131,8 +139,19 @@ class TicketAccessService:
             "awaiting_assignment",
         )
 
+        roster_gate = self._hr.roster_visibility_enabled
+        is_on_duty = (
+            True
+            if not roster_gate
+            else self._hr.is_employee_on_duty(ctx, employee_id, company_id=row.company_id)
+        )
+        # Off-shift engineers cannot browse others' tickets; owners/co-owners/managers still can.
+        roster_blocks = roster_gate and not is_manager and not is_owner and not is_co_owner and not is_on_duty
+
         if is_owner or is_co_owner:
             level = TicketAccessLevel.FULL
+        elif roster_blocks:
+            level = TicketAccessLevel.DENIED
         elif is_manager and unassigned:
             level = TicketAccessLevel.ASSIGN_PREVIEW
         elif is_manager:
@@ -147,18 +166,30 @@ class TicketAccessService:
             level = TicketAccessLevel.DENIED
 
         can_assign = is_manager and not locked and (unassigned or not row.owner_employee_id)
+        # Opening a newly assigned ticket requires being on the current shift when gate is on.
         can_open = (
             (is_owner or is_co_owner)
             and not closed
             and row.status == "assigned"
             and row.opened_at is None
+            and (not roster_gate or is_on_duty)
         )
+        # Owners/co-owners keep can_work even off-shift so they can finish/close their ticket.
         can_work = (is_owner or is_co_owner) and not closed and is_opened
         can_manage_collaborators = is_owner and not locked and is_opened
-        can_reopen = is_owner and closed
+        # Matches request_reopen(): owner or co-owner may request reopen after Close.
+        can_reopen = (is_owner or is_co_owner) and closed
         can_resume = (is_manager or is_owner or is_co_owner) and not closed and (
             awaiting or row.status in ("pending_customer", "pending_oem", "assigned")
         )
+        sla_active = bool(getattr(row, "sla_started_at", None)) and row.status not in (
+            "resolved",
+            "closed",
+            "cancelled",
+        )
+        currently_paused = getattr(row, "sla_paused_at", None) is not None
+        can_pause_sla = (is_owner or is_co_owner) and sla_active and is_opened and not currently_paused
+        can_resume_sla = (is_owner or is_co_owner) and currently_paused and not closed
 
         return TicketAccess(
             level=level,
@@ -174,6 +205,10 @@ class TicketAccessService:
             can_open=can_open,
             is_opened=is_opened,
             can_resume=can_resume,
+            can_pause_sla=can_pause_sla,
+            can_resume_sla=can_resume_sla,
+            is_on_duty=is_on_duty,
+            roster_visibility_enabled=roster_gate,
         )
 
     def require_level(

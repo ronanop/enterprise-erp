@@ -3,14 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Briefcase, Check, X } from "lucide-react";
+import { Briefcase, Check, Download, X } from "lucide-react";
 
 import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
 import { FinanceField, FinanceSelect, FinanceTextarea } from "@/components/finance/journals/finance-form-field";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
-import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { useAuthUser } from "@/hooks/use-auth-user";
@@ -18,21 +17,27 @@ import { canViewAllModuleScreens } from "@/lib/module-access";
 import { ApiClientError } from "@/services/api-client";
 import { respondMyJob } from "@/services/crm-deal-controls-service";
 import { Input } from "@/components/ui/input";
+import { downloadOvfExportById, downloadQuoteExport } from "@/lib/crm/crm-record-actions";
+import { supportingRowsFromOvfLines } from "@/components/crm/sales/ovf-order-lines-section";
 import {
   decideMyJob,
+  downloadAttachment,
   fileToBase64,
   formatInrPrecise,
-  getOpportunity,
   getOvf,
   getQuote,
   getSalesLead,
+  listAttachments,
   listMyJobs,
   listOpportunities,
+  listOvfLines,
   listOvfs,
+  listQuoteLines,
   listQuotes,
   listSalesLeads,
   myJobEntityHref,
   type ApprovalTask,
+  type Attachment,
 } from "@/services/sales-crm-service";
 import {
   listServiceContracts,
@@ -40,12 +45,46 @@ import {
   type ServiceRateContract,
 } from "@/services/service-projects-service";
 
-const TEAM_ROLES = ["presales", "project", "management", "accounts", "scm", "legal"];
-const STATUSES = ["pending", "approved", "rejected", "cancelled"];
 const FREIGHT_ACTION = "provide_freight";
 const SUPPORTING_ITEMS_ACTION = "provide_supporting_items";
+const PRICE_SUPPORTING_ACTION = "price_supporting_items";
 const SERVICE_VISITS_ACTION = "provide_service_visits";
 const ATTACHMENT_ACTIONS = new Set(["provide_boq_attachment", "provide_sow_attachment"]);
+const DOC_APPROVAL_ACTIONS = new Set(["approve_boq", "approve_sow"]);
+/** Finance → Legal → Management customer PO chain (same two docs on every stage). */
+const PO_APPROVAL_ACTIONS = new Set(["approve_po_finance", "approve_po_terms", "approve_po"]);
+const ACCEPTED_QUOTE_PRINT_NAME = "Accepted_Quote_Print.pdf";
+
+type PoApprovalDocs = {
+  quotePrint: Attachment | null;
+  customerPo: Attachment | null;
+};
+
+type DocApprovalFile = {
+  attachment: Attachment | null;
+  label: string;
+};
+
+function isDocApprovalTask(task: ApprovalTask): boolean {
+  return Boolean(task.action && DOC_APPROVAL_ACTIONS.has(task.action));
+}
+
+function docApprovalCategory(action: string | null | undefined): "boq" | "sow" | null {
+  if (action === "approve_boq") return "boq";
+  if (action === "approve_sow") return "sow";
+  return null;
+}
+
+function isPoApprovalTask(task: ApprovalTask): boolean {
+  return (
+    task.entity_type === "opportunity" &&
+    Boolean(task.action && PO_APPROVAL_ACTIONS.has(task.action))
+  );
+}
+
+function needsCustomerPoDownload(task: ApprovalTask): boolean {
+  return isPoApprovalTask(task) || task.action === FREIGHT_ACTION;
+}
 const FREIGHT_MEDIUMS = [
   { value: "road", label: "Road" },
   { value: "air", label: "Air" },
@@ -74,7 +113,7 @@ function blankSupportingDraft(): SupportingDraft {
 const SELECT_CLASS =
   "h-9 w-full cursor-pointer rounded-lg border border-input bg-background px-2.5 text-sm transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none";
 
-type SortKey = "title" | "opportunity_name" | "team_role" | "status";
+type SortKey = "title" | "created_at";
 
 function myJobDetailHref(task: ApprovalTask): string {
   const base = myJobEntityHref(task.entity_type, task.entity_id);
@@ -86,10 +125,18 @@ function myJobDetailHref(task: ApprovalTask): string {
 function approveLabel(task: ApprovalTask): string {
   if (task.action === FREIGHT_ACTION) return "Submit freight";
   if (task.action === SUPPORTING_ITEMS_ACTION) return "Submit items";
+  if (task.action === PRICE_SUPPORTING_ACTION) return "Submit prices";
   if (task.action === SERVICE_VISITS_ACTION) return "Submit plan";
   if (task.action && ATTACHMENT_ACTIONS.has(task.action)) return "Submit file";
   return "Approve";
 }
+
+type PricingDraft = {
+  line_id: string;
+  product_name: string;
+  qty: string;
+  unit_price: string;
+};
 
 function shortTime(value: string): string {
   return new Date(value).toLocaleString("en-IN", {
@@ -143,15 +190,12 @@ export function MyJobsPage({
     moduleRoles,
   );
   const [rows, setRows] = useState<ApprovalTask[]>([]);
-  const [recordNames, setRecordNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [teamRole, setTeamRole] = useState<string>("");
-  const [status, setStatus] = useState<string>("pending");
-  /** CRM / ERP admins default to the full tenant inbox (all assignees). */
+  /** CRM / ERP admins see the full tenant inbox; others only their assignments. */
   const [mineOnly, setMineOnly] = useState(true);
   const [mineFilterReady, setMineFilterReady] = useState(false);
-  const { sortBy, sortDir, onSort } = useTableSort<SortKey>("title", "asc");
+  const { sortBy, sortDir, onSort } = useTableSort<SortKey>("created_at", "desc");
 
   useEffect(() => {
     if (authLoading || mineFilterReady) return;
@@ -177,60 +221,110 @@ export function MyJobsPage({
   const [decideError, setDecideError] = useState<string | null>(null);
   const [cannotSubmitTask, setCannotSubmitTask] = useState<ApprovalTask | null>(null);
   const [cannotReason, setCannotReason] = useState("");
+  const [downloadingQuoteId, setDownloadingQuoteId] = useState<string | null>(null);
+  const [downloadingOvfId, setDownloadingOvfId] = useState<string | null>(null);
+  const [downloadingDocKey, setDownloadingDocKey] = useState<string | null>(null);
+  const [poDocsByTask, setPoDocsByTask] = useState<Record<string, PoApprovalDocs>>({});
+  const [docApprovalByTask, setDocApprovalByTask] = useState<Record<string, DocApprovalFile>>({});
+  const [pricingDrafts, setPricingDrafts] = useState<PricingDraft[]>([]);
+  const [loadingPricing, setLoadingPricing] = useState(false);
   const [responding, setResponding] = useState(false);
   const [respondError, setRespondError] = useState<string | null>(null);
   // SLA overdue flags are judged against when the list was fetched.
   const [loadedAt, setLoadedAt] = useState(0);
   const router = useRouter();
 
-  const loadNames = useCallback(async (tasks: ApprovalTask[]) => {
-    const names: Record<string, string> = {};
-    const oppCache = new Map<string, string>();
-
-    async function opportunityName(id: string): Promise<string | null> {
-      if (oppCache.has(id)) return oppCache.get(id) ?? null;
-      try {
-        const opp = await getOpportunity(id);
-        oppCache.set(id, opp.opportunity_name);
-        return opp.opportunity_name;
-      } catch {
-        return null;
-      }
+  const loadDocApprovalFiles = useCallback(async (tasks: ApprovalTask[]) => {
+    const relevant = tasks.filter(isDocApprovalTask);
+    if (relevant.length === 0) {
+      setDocApprovalByTask({});
+      return;
     }
-
-    await Promise.all(
-      tasks.map(async (task) => {
+    const entries = await Promise.all(
+      relevant.map(async (task) => {
+        const category = docApprovalCategory(task.action);
+        const label = category === "sow" ? "SOW" : "BOQ";
+        if (!category) {
+          return [task.id, { attachment: null, label }] as const;
+        }
         try {
-          if (task.entity_type === "opportunity") {
-            names[task.id] = (await opportunityName(task.entity_id)) ?? "-";
-          } else if (task.entity_type === "lead") {
-            try {
-              const lead = await getSalesLead(task.entity_id);
-              names[task.id] =
-                [lead.first_name, lead.last_name].filter(Boolean).join(" ").trim() ||
-                lead.project_title ||
-                lead.lead_code ||
-                "-";
-            } catch {
-              names[task.id] = "-";
+          let entityType = task.entity_type;
+          let entityId = task.entity_id;
+          if (task.entity_type === "lead") {
+            const lead = await getSalesLead(task.entity_id).catch(() => null);
+            if (lead?.converted_opportunity_id) {
+              entityType = "opportunity";
+              entityId = lead.converted_opportunity_id;
             }
-          } else if (task.entity_type === "quote") {
-            const quote = await getQuote(task.entity_id);
-            names[task.id] =
-              (quote.opportunity_id ? await opportunityName(quote.opportunity_id) : null) ?? quote.quote_no;
-          } else if (task.entity_type === "ovf") {
-            const ovf = await getOvf(task.entity_id);
-            names[task.id] =
-              (ovf.opportunity_id ? await opportunityName(ovf.opportunity_id) : null) ?? ovf.ovf_no;
-          } else {
-            names[task.id] = "-";
           }
+          const rows = await listAttachments(entityType, entityId).catch(() => [] as Attachment[]);
+          const match =
+            rows.find((row) => row.category === category) ??
+            rows.find((row) =>
+              category === "boq"
+                ? /boq/i.test(row.file_name || "")
+                : /sow/i.test(row.file_name || ""),
+            ) ??
+            null;
+          return [task.id, { attachment: match, label }] as const;
         } catch {
-          names[task.id] = "-";
+          return [task.id, { attachment: null, label }] as const;
         }
       }),
     );
-    setRecordNames(names);
+    setDocApprovalByTask(Object.fromEntries(entries));
+  }, []);
+
+  const loadPoDocs = useCallback(async (tasks: ApprovalTask[]) => {
+    const relevant = tasks.filter(needsCustomerPoDownload);
+    if (relevant.length === 0) {
+      setPoDocsByTask({});
+      return;
+    }
+    const docsByOpp = new Map<string, PoApprovalDocs>();
+    async function docsForOpportunity(oppId: string): Promise<PoApprovalDocs> {
+      const cached = docsByOpp.get(oppId);
+      if (cached) return cached;
+      const rows = await listAttachments("opportunity", oppId).catch(() => [] as Attachment[]);
+      const quotePrint =
+        rows.find(
+          (row) =>
+            row.category === "other" &&
+            (row.file_name || "").toLowerCase() === ACCEPTED_QUOTE_PRINT_NAME.toLowerCase(),
+        ) ??
+        rows.find(
+          (row) =>
+            row.category === "other" && /accepted[_\s-]?quote/i.test(row.file_name || ""),
+        ) ??
+        null;
+      const poRows = rows.filter((row) => row.category === "customer_po");
+      const customerPo =
+        poRows.find((row) => /\.pdf$/i.test(row.file_name || "")) ?? poRows[0] ?? null;
+      const docs = { quotePrint, customerPo };
+      docsByOpp.set(oppId, docs);
+      return docs;
+    }
+
+    const entries = await Promise.all(
+      relevant.map(async (task) => {
+        try {
+          let oppId: string | null = null;
+          if (task.entity_type === "opportunity") {
+            oppId = task.entity_id;
+          } else if (task.entity_type === "ovf") {
+            const ovf = await getOvf(task.entity_id);
+            oppId = ovf.opportunity_id ?? null;
+          }
+          if (!oppId) {
+            return [task.id, { quotePrint: null, customerPo: null }] as const;
+          }
+          return [task.id, await docsForOpportunity(oppId)] as const;
+        } catch {
+          return [task.id, { quotePrint: null, customerPo: null }] as const;
+        }
+      }),
+    );
+    setPoDocsByTask(Object.fromEntries(entries));
   }, []);
 
   const load = useCallback(async () => {
@@ -238,9 +332,8 @@ export function MyJobsPage({
     setError(null);
     try {
       const tasks = await listMyJobs({
-        team_role: teamRole || undefined,
-        status: status || undefined,
         mine: mineOnly || undefined,
+        status: "pending",
       });
 
       let visible = tasks;
@@ -265,15 +358,16 @@ export function MyJobsPage({
 
       setRows(visible);
       setLoadedAt(Date.now());
-      await loadNames(visible);
+      await Promise.all([loadPoDocs(visible), loadDocApprovalFiles(visible)]);
     } catch (err) {
       setRows([]);
-      setRecordNames({});
+      setPoDocsByTask({});
+      setDocApprovalByTask({});
       setError(err instanceof ApiClientError ? err.message : "Failed to load My Jobs");
     } finally {
       setLoading(false);
     }
-  }, [teamRole, status, mineOnly, companyAccountId, loadNames]);
+  }, [mineOnly, companyAccountId, loadPoDocs, loadDocApprovalFiles]);
 
   useEffect(() => {
     if (!mineFilterReady) return;
@@ -306,6 +400,7 @@ export function MyJobsPage({
     setFreightInsurance(false);
     setSupportingDrafts([blankSupportingDraft()]);
     setSupportingDescription("");
+    setPricingDrafts([]);
     setServiceContractId("");
     setServiceProjected("");
     setServiceConsumables("");
@@ -316,6 +411,106 @@ export function MyJobsPage({
       void listServiceContracts(true)
         .then((rows) => setServiceContracts(rows))
         .catch(() => setServiceContracts([]));
+    }
+    if (
+      outcome === "approved" &&
+      task.action === PRICE_SUPPORTING_ACTION &&
+      task.entity_type === "ovf"
+    ) {
+      setLoadingPricing(true);
+      void listOvfLines(task.entity_id)
+        .then((lines) => {
+          const rows = supportingRowsFromOvfLines(lines).map((row) => ({
+            line_id: row.id,
+            product_name: row.product_name,
+            qty: row.qty,
+            unit_price: row.unit_price === "0.00" || row.unit_price === "0" ? "" : row.unit_price,
+          }));
+          setPricingDrafts(rows);
+          if (rows.length === 0) {
+            setDecideError("No supporting items found on this OVF to price.");
+          }
+        })
+        .catch(() => {
+          setPricingDrafts([]);
+          setDecideError("Failed to load supporting items for pricing.");
+        })
+        .finally(() => setLoadingPricing(false));
+    }
+  }
+
+  async function downloadQuotePdf(task: ApprovalTask) {
+    if (task.entity_type !== "quote") return;
+    setDownloadingQuoteId(task.id);
+    setError(null);
+    try {
+      const [quoteRow, lineRows] = await Promise.all([
+        getQuote(task.entity_id),
+        listQuoteLines(task.entity_id),
+      ]);
+      await downloadQuoteExport(quoteRow, lineRows);
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Failed to download quotation PDF");
+    } finally {
+      setDownloadingQuoteId(null);
+    }
+  }
+
+  async function downloadOvfPdf(task: ApprovalTask) {
+    if (task.entity_type !== "ovf") return;
+    setDownloadingOvfId(task.id);
+    setError(null);
+    try {
+      await downloadOvfExportById(task.entity_id);
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Failed to download OVF PDF");
+    } finally {
+      setDownloadingOvfId(null);
+    }
+  }
+
+  async function downloadPoApprovalDoc(
+    task: ApprovalTask,
+    kind: "quote" | "po",
+  ) {
+    const docs = poDocsByTask[task.id];
+    const attachment = kind === "quote" ? docs?.quotePrint : docs?.customerPo;
+    if (!attachment) {
+      setError(
+        kind === "quote"
+          ? "Accepted quote PDF is not available for this PO yet."
+          : "Customer PO file is not available for this task yet.",
+      );
+      return;
+    }
+    const key = `${task.id}-${kind}`;
+    setDownloadingDocKey(key);
+    setError(null);
+    try {
+      await downloadAttachment(attachment.id, attachment.file_name, attachment);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to download document");
+    } finally {
+      setDownloadingDocKey(null);
+    }
+  }
+
+  async function downloadDocApprovalFile(task: ApprovalTask) {
+    const docs = docApprovalByTask[task.id];
+    const attachment = docs?.attachment;
+    if (!attachment) {
+      setError(`${docs?.label || "Document"} file is not attached yet`);
+      return;
+    }
+    const key = `${task.id}-doc`;
+    setDownloadingDocKey(key);
+    setError(null);
+    try {
+      await downloadAttachment(attachment.id, attachment.file_name, attachment);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to download document");
+    } finally {
+      setDownloadingDocKey(null);
     }
   }
 
@@ -339,6 +534,7 @@ export function MyJobsPage({
     }
     let supportingPayload:
       | Array<{
+        line_id?: string;
         product_name: string;
         qty: number;
         unit_price: number;
@@ -352,7 +548,7 @@ export function MyJobsPage({
         .map((row) => ({
           product_name: row.product_name.trim(),
           qty: Number(row.qty),
-          unit_price: Number(row.unit_price),
+          unit_price: 0,
           distributor_name: row.distributor_name.trim() || null,
           description: sharedDescription,
         }))
@@ -366,6 +562,25 @@ export function MyJobsPage({
           setDecideError(`Enter a qty greater than zero for "${row.product_name}".`);
           return;
         }
+      }
+      supportingPayload = cleaned.map((row) => ({
+        ...row,
+        qty: Number(row.qty.toFixed(4)),
+        unit_price: 0,
+      }));
+    }
+    if (decision.outcome === "approved" && action === PRICE_SUPPORTING_ACTION) {
+      if (pricingDrafts.length === 0) {
+        setDecideError("No supporting items available to price.");
+        return;
+      }
+      const cleaned = pricingDrafts.map((row) => ({
+        line_id: row.line_id,
+        product_name: row.product_name,
+        qty: Number(row.qty) || 1,
+        unit_price: Number(row.unit_price),
+      }));
+      for (const row of cleaned) {
         if (!Number.isFinite(row.unit_price) || row.unit_price < 0) {
           setDecideError(`Enter a valid unit purchase for "${row.product_name}".`);
           return;
@@ -439,7 +654,11 @@ export function MyJobsPage({
         }
         extras.freight_insurance = freightInsurance;
       }
-      if (decision.outcome === "approved" && action === SUPPORTING_ITEMS_ACTION && supportingPayload) {
+      if (
+        decision.outcome === "approved" &&
+        (action === SUPPORTING_ITEMS_ACTION || action === PRICE_SUPPORTING_ACTION) &&
+        supportingPayload
+      ) {
         extras.supporting_items = supportingPayload;
       }
       if (decision.outcome === "approved" && action === SERVICE_VISITS_ACTION && servicePlanPayload) {
@@ -487,11 +706,9 @@ export function MyJobsPage({
     () =>
       sortRows(rows, sortBy, sortDir, {
         title: (t) => t.title,
-        opportunity_name: (t) => recordNames[t.id] ?? "",
-        team_role: (t) => t.team_role,
-        status: (t) => t.status,
+        created_at: (t) => t.created_at ?? "",
       }),
-    [rows, sortBy, sortDir, recordNames],
+    [rows, sortBy, sortDir],
   );
 
   return (
@@ -502,44 +719,6 @@ export function MyJobsPage({
         />
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border/80 bg-card px-4 py-3 shadow-sm">
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Team</span>
-          <FinanceSelect value={teamRole} onChange={(e) => setTeamRole(e.target.value)} className="w-36">
-            <option value="">All teams</option>
-            {TEAM_ROLES.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </FinanceSelect>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Status</span>
-          <FinanceSelect value={status} onChange={(e) => setStatus(e.target.value)} className="w-32">
-            <option value="">All</option>
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </FinanceSelect>
-        </div>
-        {isCrmAdmin ? (
-          <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
-            <input
-              type="checkbox"
-              className="cursor-pointer"
-              checked={mineOnly}
-              onChange={(e) => setMineOnly(e.target.checked)}
-            />
-            Assigned to me / sent by me
-          </label>
-        ) : (
-          <span className="text-xs text-muted-foreground">Showing tasks assigned to you</span>
-        )}
-      </div>
-
       {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
 
       <CrmListPanel>
@@ -547,112 +726,257 @@ export function MyJobsPage({
           title="Tasks"
           icon={Briefcase}
           count={sorted.length}
+          countLabel="open"
         />
 
         <div className="erp-scroll overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
               <tr className={CRM_TABLE_HEAD_ROW}>
-                <CrmSortableTh label="Task" sortKey="title" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh
-                  label="Opportunity name"
-                  sortKey="opportunity_name"
+                  label="Task"
+                  sortKey="title"
                   activeKey={sortBy}
                   dir={sortDir}
                   onSort={onSort}
                 />
-                <CrmSortableTh label="Team" sortKey="team_role" activeKey={sortBy} dir={sortDir} onSort={onSort} />
-                <CrmSortableTh label="Status" sortKey="status" activeKey={sortBy} dir={sortDir} onSort={onSort} />
-                <th className="px-4 py-2.5" />
+                <CrmSortableTh
+                  label="Created"
+                  sortKey="created_at"
+                  activeKey={sortBy}
+                  dir={sortDir}
+                  onSort={onSort}
+                  className="w-[140px]"
+                />
+                <th className="w-[320px] px-3 py-2.5 text-right text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={3} className="px-4 py-10 text-center text-muted-foreground">
                     Loading tasks…
                   </td>
                 </tr>
               ) : sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
-                    {mineOnly
-                      ? "No tasks assigned to you (or sent by you) match these filters. Uncheck “Assigned to me / sent by me” to see the full company inbox."
-                      : "No tasks match these filters."}
+                  <td colSpan={3} className="px-4 py-10 text-center text-muted-foreground">
+                    No tasks found.
                   </td>
                 </tr>
               ) : (
-                sorted.map((task) => (
-                  <tr key={task.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
-                    <td className="px-4 py-2.5">
-                      <Link
-                        href={myJobDetailHref(task)}
-                        className="cursor-pointer font-medium text-foreground transition-colors duration-200 hover:text-primary hover:underline"
-                      >
-                        {task.title}
-                      </Link>
-                      <SlaLine task={task} now={loadedAt} />
-                    </td>
-                    <td className="px-4 py-2.5 text-foreground">{recordNames[task.id] ?? "-"}</td>
-                    <td className="px-4 py-2.5 capitalize text-muted-foreground">{task.team_role}</td>
-                    <td className="px-4 py-2.5">
-                      <FinanceStatusBadge status={task.status} />
-                    </td>
-                    <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                      {task.status === "pending" ? (
-                        <div className="flex justify-end gap-1.5">
-                          {task.action && ATTACHMENT_ACTIONS.has(task.action) && !task.responded_at ? (
-                            <>
+                sorted.map((task) => {
+                  const poDocs = needsCustomerPoDownload(task)
+                    ? poDocsByTask[task.id]
+                    : undefined;
+                  const docApproval = isDocApprovalTask(task)
+                    ? docApprovalByTask[task.id]
+                    : undefined;
+                  const quoteDocKey = `${task.id}-quote`;
+                  const poDocKey = `${task.id}-po`;
+                  const docKey = `${task.id}-doc`;
+                  return (
+                    <tr key={task.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
+                      <td className="px-3 py-2.5 align-middle">
+                        <Link
+                          href={myJobDetailHref(task)}
+                          className="cursor-pointer font-medium text-foreground transition-colors duration-200 hover:text-primary hover:underline"
+                        >
+                          {task.title}
+                        </Link>
+                        <SlaLine task={task} now={loadedAt} />
+                      </td>
+                      <td className="px-3 py-2.5 align-middle whitespace-nowrap text-muted-foreground">
+                        {task.created_at ? shortTime(task.created_at) : "-"}
+                      </td>
+                      <td className="px-3 py-2.5 align-middle">
+                        {task.status === "pending" ? (
+                          <div className="flex flex-nowrap items-center justify-end gap-1.5 whitespace-nowrap">
+                            {task.entity_type === "quote" ? (
                               <Button
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                disabled={responding}
+                                disabled={downloadingQuoteId === task.id}
                                 className="cursor-pointer"
-                                onClick={() => void respond(task, true)}
+                                onClick={() => void downloadQuotePdf(task)}
                               >
-                                Can submit
+                                <Download className="size-3.5" />
+                                {downloadingQuoteId === task.id ? "PDF…" : "PDF"}
                               </Button>
+                            ) : null}
+                            {task.entity_type === "ovf" ? (
                               <Button
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                disabled={responding}
+                                disabled={downloadingOvfId === task.id}
+                                title="Download OVF print PDF"
                                 className="cursor-pointer"
-                                onClick={() => {
-                                  setCannotSubmitTask(task);
-                                  setCannotReason("");
-                                  setRespondError(null);
-                                }}
+                                onClick={() => void downloadOvfPdf(task)}
                               >
-                                Can&apos;t submit
+                                <Download className="size-3.5" />
+                                {downloadingOvfId === task.id ? "PDF…" : "PDF"}
                               </Button>
-                            </>
-                          ) : null}
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="cursor-pointer"
-                            onClick={() => openDecision(task, "approved")}
-                          >
-                            <Check className="size-3.5" /> {approveLabel(task)}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="sm"
-                            className="cursor-pointer"
-                            onClick={() => openDecision(task, "rejected")}
-                          >
-                            <X className="size-3.5" /> Reject
-                          </Button>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">-</span>
-                      )}
-                    </td>
-                  </tr>
-                ))
+                            ) : null}
+                            {isPoApprovalTask(task) ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={!poDocs?.quotePrint || downloadingDocKey === quoteDocKey}
+                                  title={
+                                    poDocs?.quotePrint
+                                      ? poDocs.quotePrint.file_name
+                                      : "Accepted quote PDF not attached yet"
+                                  }
+                                  className="cursor-pointer"
+                                  onClick={() => void downloadPoApprovalDoc(task, "quote")}
+                                >
+                                  <Download className="size-3.5" />
+                                  {downloadingDocKey === quoteDocKey ? "Quote…" : "Quote"}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={!poDocs?.customerPo || downloadingDocKey === poDocKey}
+                                  title={
+                                    poDocs?.customerPo
+                                      ? poDocs.customerPo.file_name
+                                      : "Customer PO not attached yet"
+                                  }
+                                  className="cursor-pointer"
+                                  onClick={() => void downloadPoApprovalDoc(task, "po")}
+                                >
+                                  <Download className="size-3.5" />
+                                  {downloadingDocKey === poDocKey ? "PO…" : "PO"}
+                                </Button>
+                              </>
+                            ) : null}
+                            {task.action === FREIGHT_ACTION ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={!poDocs?.customerPo || downloadingDocKey === poDocKey}
+                                title={
+                                  poDocs?.customerPo
+                                    ? poDocs.customerPo.file_name
+                                    : "Customer PO not attached yet"
+                                }
+                                className="cursor-pointer"
+                                onClick={() => void downloadPoApprovalDoc(task, "po")}
+                              >
+                                <Download className="size-3.5" />
+                                {downloadingDocKey === poDocKey ? "PO…" : "PO"}
+                              </Button>
+                            ) : null}
+                            {isDocApprovalTask(task) ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={!docApproval?.attachment || downloadingDocKey === docKey}
+                                title={
+                                  docApproval?.attachment
+                                    ? docApproval.attachment.file_name
+                                    : `${docApproval?.label || "Document"} file not attached yet`
+                                }
+                                className="cursor-pointer"
+                                onClick={() => void downloadDocApprovalFile(task)}
+                              >
+                                <Download className="size-3.5" />
+                                {downloadingDocKey === docKey
+                                  ? "File…"
+                                  : docApproval?.label || "File"}
+                              </Button>
+                            ) : null}
+                            {task.action && ATTACHMENT_ACTIONS.has(task.action) && !task.responded_at ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={responding}
+                                  className="cursor-pointer"
+                                  onClick={() => void respond(task, true)}
+                                >
+                                  Can submit
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={responding}
+                                  className="cursor-pointer"
+                                  onClick={() => {
+                                    setCannotSubmitTask(task);
+                                    setCannotReason("");
+                                    setRespondError(null);
+                                  }}
+                                >
+                                  Can&apos;t submit
+                                </Button>
+                              </>
+                            ) : null}
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="cursor-pointer"
+                              onClick={() => openDecision(task, "approved")}
+                            >
+                              <Check className="size-3.5" /> {approveLabel(task)}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="sm"
+                              className="cursor-pointer"
+                              onClick={() => openDecision(task, "rejected")}
+                            >
+                              <X className="size-3.5" /> Reject
+                            </Button>
+                          </div>
+                        ) : task.entity_type === "quote" ? (
+                          <div className="flex justify-end">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={downloadingQuoteId === task.id}
+                              className="cursor-pointer"
+                              onClick={() => void downloadQuotePdf(task)}
+                            >
+                              <Download className="size-3.5" />
+                              {downloadingQuoteId === task.id ? "PDF…" : "PDF"}
+                            </Button>
+                          </div>
+                        ) : task.entity_type === "ovf" ? (
+                          <div className="flex justify-end">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={downloadingOvfId === task.id}
+                              title="Download OVF print PDF"
+                              className="cursor-pointer"
+                              onClick={() => void downloadOvfPdf(task)}
+                            >
+                              <Download className="size-3.5" />
+                              {downloadingOvfId === task.id ? "PDF…" : "PDF"}
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="block text-right text-xs text-muted-foreground">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -682,17 +1006,20 @@ export function MyJobsPage({
               ? "Submit freight"
               : decision.task.action === SUPPORTING_ITEMS_ACTION
                 ? "Submit items"
-                : decision.task.action === SERVICE_VISITS_ACTION
-                  ? "Submit plan"
-                  : decision.task.action && ATTACHMENT_ACTIONS.has(decision.task.action)
-                    ? "Submit file"
-                    : "Approve"
+                : decision.task.action === PRICE_SUPPORTING_ACTION
+                  ? "Submit prices"
+                  : decision.task.action === SERVICE_VISITS_ACTION
+                    ? "Submit plan"
+                    : decision.task.action && ATTACHMENT_ACTIONS.has(decision.task.action)
+                      ? "Submit file"
+                      : "Approve"
             : "Reject"
         }
         busy={deciding}
         contentClassName={
           decision?.outcome === "approved" &&
             (decision.task.action === SUPPORTING_ITEMS_ACTION ||
+              decision.task.action === PRICE_SUPPORTING_ACTION ||
               decision.task.action === SERVICE_VISITS_ACTION)
             ? "max-w-3xl"
             : "max-w-lg"
@@ -760,16 +1087,16 @@ export function MyJobsPage({
         {decision?.outcome === "approved" && decision.task.action === SUPPORTING_ITEMS_ACTION ? (
           <div className="mb-3 space-y-2">
             <p className="text-xs text-muted-foreground">
-              Add items outside the main customer PO (cables, SFPs, etc.).
+              Add items outside the main customer PO (cables, SFPs, etc.). SCM will price them
+              separately from the OVF page.
             </p>
             <div className="rounded-md border border-border/70">
               <table className="w-full table-fixed text-left text-xs">
                 <thead>
                   <tr className="border-b border-border/70 bg-muted/50 text-[11px] font-medium text-muted-foreground uppercase">
-                    <th className="w-[34%] px-3 py-2">Item *</th>
-                    <th className="w-[12%] px-3 py-2">Qty *</th>
-                    <th className="w-[16%] px-3 py-2">Unit (₹) *</th>
-                    <th className="w-[30%] px-3 py-2">Distributor</th>
+                    <th className="w-[42%] px-3 py-2">Item *</th>
+                    <th className="w-[14%] px-3 py-2">Qty *</th>
+                    <th className="w-[36%] px-3 py-2">Distributor</th>
                     <th className="w-[8%] px-2 py-2" />
                   </tr>
                 </thead>
@@ -799,22 +1126,6 @@ export function MyJobsPage({
                           onChange={(e) =>
                             setSupportingDrafts((rows) =>
                               rows.map((r) => (r.key === row.key ? { ...r, qty: e.target.value } : r)),
-                            )
-                          }
-                          className="h-8 w-full"
-                        />
-                      </td>
-                      <td className="px-3 py-2">
-                        <Input
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          value={row.unit_price}
-                          onChange={(e) =>
-                            setSupportingDrafts((rows) =>
-                              rows.map((r) =>
-                                r.key === row.key ? { ...r, unit_price: e.target.value } : r,
-                              ),
                             )
                           }
                           className="h-8 w-full"
@@ -870,6 +1181,63 @@ export function MyJobsPage({
                 className="min-h-[72px] rounded-lg border-slate-200 bg-white text-[13px] shadow-none placeholder:text-slate-400 focus-visible:border-sky-400 focus-visible:ring-2 focus-visible:ring-sky-200/80"
               />
             </FinanceField>
+          </div>
+        ) : null}
+        {decision?.outcome === "approved" && decision.task.action === PRICE_SUPPORTING_ACTION ? (
+          <div className="mb-3 space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Enter unit purchase (₹) for each supporting item Ops submitted.
+            </p>
+            {loadingPricing ? (
+              <p className="text-xs text-muted-foreground">Loading items…</p>
+            ) : (
+              <div className="rounded-md border border-border/70">
+                <table className="w-full table-fixed text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-border/70 bg-muted/50 text-[11px] font-medium text-muted-foreground uppercase">
+                      <th className="w-[44%] px-3 py-2">Item</th>
+                      <th className="w-[14%] px-3 py-2">Qty</th>
+                      <th className="w-[42%] px-3 py-2">Unit (₹) *</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pricingDrafts.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="px-3 py-6 text-center text-muted-foreground">
+                          No supporting items found.
+                        </td>
+                      </tr>
+                    ) : (
+                      pricingDrafts.map((row) => (
+                        <tr key={row.line_id} className="border-b border-border/40 last:border-0">
+                          <td className="px-3 py-2 font-medium text-foreground">{row.product_name}</td>
+                          <td className="px-3 py-2 tabular-nums text-muted-foreground">{row.qty}</td>
+                          <td className="px-3 py-2">
+                            <Input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={row.unit_price}
+                              onChange={(e) =>
+                                setPricingDrafts((rows) =>
+                                  rows.map((r) =>
+                                    r.line_id === row.line_id
+                                      ? { ...r, unit_price: e.target.value }
+                                      : r,
+                                  ),
+                                )
+                              }
+                              placeholder="0.00"
+                              className="h-8 w-full"
+                            />
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         ) : null}
         {decision?.outcome === "approved" && decision.task.action === SERVICE_VISITS_ACTION ? (

@@ -1,11 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { CircleDot, Eye, FileSpreadsheet, PackageCheck, RefreshCw } from "lucide-react";
 
 import { FinanceKpiCard } from "@/components/finance/finance-kpi-card";
-import { GrnDeliveryChallanMenu } from "@/components/procurement/grn-delivery-challan-menu";
 import {
   GrnReceiptHistoryDialog,
   type GrnReceiptPdfContext,
@@ -26,14 +24,6 @@ import {
   type ScmVendorPo,
   type VendorOption,
 } from "@/services/procurement-service";
-import {
-  buildDeliveryChallanPdfInputFromRecordResolved,
-  downloadDeliveryChallanPdf,
-} from "@/utils/delivery-challan-pdf";
-import {
-  listDeliveryChallans,
-  type DeliveryChallanRecord,
-} from "@/utils/delivery-challan-storage";
 import {
   buildGrnExportRowsWithBatches,
   exportGrnsXlsx,
@@ -66,19 +56,14 @@ function formatPoCreatedDate(row: ScmVendorPo): string {
   });
 }
 
-function deliveryChallanHref(orderId: string): string {
-  const returnTo = encodeURIComponent("/procurement/delivery-challan");
-  return `/procurement/delivery-challan/new?orderId=${encodeURIComponent(orderId)}&returnTo=${returnTo}`;
-}
-
 function buildGrnPdfContext(row: ScmVendorPo, vendor?: VendorOption): GrnReceiptPdfContext {
   const vendorEntry = vendor?.addressEntries?.[0];
   const vendorAddressRaw = vendorEntry?.address || vendor?.address || "";
   const vendorAddressLines = vendorAddressRaw.includes("\n")
     ? vendorAddressRaw
-        .split(/\r?\n/)
-        .map((part) => part.trim())
-        .filter(Boolean)
+      .split(/\r?\n/)
+      .map((part) => part.trim())
+      .filter(Boolean)
     : vendorAddressRaw.trim()
       ? [vendorAddressRaw.trim()]
       : [];
@@ -91,22 +76,6 @@ function buildGrnPdfContext(row: ScmVendorPo, vendor?: VendorOption): GrnReceipt
   };
 }
 
-function challansByOrderIdMap(): Record<string, DeliveryChallanRecord[]> {
-  const map: Record<string, DeliveryChallanRecord[]> = {};
-  for (const challan of listDeliveryChallans()) {
-    const orderId = challan.orderId?.trim();
-    if (!orderId) continue;
-    if (!map[orderId]) map[orderId] = [];
-    map[orderId].push(challan);
-  }
-  for (const orderId of Object.keys(map)) {
-    map[orderId].sort(
-      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-    );
-  }
-  return map;
-}
-
 function grnReceiptRowsFromVendorPos(pos: ScmVendorPo[]): ScmVendorPo[] {
   return pos.filter(
     (row) => isReceiptEligible(row.status) && isPartialOrDelivered(row.grn_status),
@@ -114,7 +83,6 @@ function grnReceiptRowsFromVendorPos(pos: ScmVendorPo[]): ScmVendorPo[] {
 }
 
 export function GrnsListPage() {
-  const router = useRouter();
   const cachedPosOnMount = peekVendorPosFromCache();
   const initialGrnRows = cachedPosOnMount ? grnReceiptRowsFromVendorPos(cachedPosOnMount) : [];
   const [rows, setRows] = useState<ScmVendorPo[]>(() => initialGrnRows);
@@ -123,10 +91,6 @@ export function GrnsListPage() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(() => cachedPosOnMount === null);
   const [refreshing, setRefreshing] = useState(false);
-  const [challanPdfBusyId, setChallanPdfBusyId] = useState<string | null>(null);
-  const [challansByOrder, setChallansByOrder] = useState<Record<string, DeliveryChallanRecord[]>>(
-    () => (typeof window === "undefined" ? {} : challansByOrderIdMap()),
-  );
   const [error, setError] = useState<string | null>(null);
   const [historyOrder, setHistoryOrder] = useState<{
     id: string;
@@ -151,7 +115,6 @@ export function GrnsListPage() {
       ]);
       setRows(grnReceiptRowsFromVendorPos(pos));
       setVendors(Object.fromEntries(vendorRows.map((v) => [v.id, v])));
-      setChallansByOrder(challansByOrderIdMap());
     } catch (err) {
       if (!hadInstant) {
         setRows([]);
@@ -161,7 +124,7 @@ export function GrnsListPage() {
         /sign in|session expired|unauthorized|missing authentication/i.test(message)
           ? ""
           : /failed to fetch|network|load failed|unreachable|web page instead/i.test(message) ||
-              message === "Failed to load GRN status"
+            message === "Failed to load GRN status"
             ? " Start the API on port 8000 and sign in, then refresh."
             : "";
       setError(`${message}${hint}`);
@@ -210,7 +173,7 @@ export function GrnsListPage() {
     [rows],
   );
 
-  const tableColSpan = 11;
+  const tableColSpan = 10;
 
   async function onExport() {
     setError(null);
@@ -225,19 +188,6 @@ export function GrnsListPage() {
       await exportGrnsXlsx(`grns-all-${stamp}.xlsx`, exportRows);
     } catch (err) {
       setError(formatApiError(err, "Export failed"));
-    }
-  }
-
-  async function onDownloadChallanPdf(challan: DeliveryChallanRecord) {
-    setChallanPdfBusyId(challan.id);
-    setError(null);
-    try {
-      const input = await buildDeliveryChallanPdfInputFromRecordResolved(challan);
-      await downloadDeliveryChallanPdf(input);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to download delivery challan PDF");
-    } finally {
-      setChallanPdfBusyId(null);
     }
   }
 
@@ -309,11 +259,10 @@ export function GrnsListPage() {
               key={key}
               type="button"
               onClick={() => setFilter(key)}
-              className={`cursor-pointer rounded-md border px-2.5 py-1 text-xs font-medium transition-colors duration-200 ${
-                filter === key
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-card text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-              }`}
+              className={`cursor-pointer rounded-md border px-2.5 py-1 text-xs font-medium transition-colors duration-200 ${filter === key
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-card text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                }`}
             >
               {key === "all" ? "All" : key === "closed" ? "Delivered" : "Partial"}
             </button>
@@ -346,7 +295,6 @@ export function GrnsListPage() {
                 <th className="px-3 py-2 font-bold">Margin</th>
                 <th className="px-3 py-2 font-bold">GRN</th>
                 <th className="px-3 py-2 font-bold">Received</th>
-                <th className={procurementUi.th}>Challans</th>
                 <th className="px-3 py-2 text-center font-bold">GRN detail</th>
               </tr>
             </thead>
@@ -380,16 +328,8 @@ export function GrnsListPage() {
                   Number(row.margin_amount) ||
                   (customerAmt > 0 ? customerAmt - vendorAmt : 0);
                 const grnLabel = formatGrnStatusBadgeLabel(row.grn_status);
-                const orderHref = `/procurement/orders/${row.id}?tab=grn&from=grns`;
                 return (
-                  <tr
-                    key={row.id}
-                    className={cn(
-                      "border-b border-border/70 cursor-pointer transition-colors duration-150",
-                      "hover:bg-muted/40 active:bg-muted/55",
-                    )}
-                    onClick={() => router.push(orderHref)}
-                  >
+                  <tr key={row.id} className="border-b border-border/70">
                     <td className="px-3 py-2 font-medium tabular-nums">
                       {row.company_po_number || row.document_number || "-"}
                     </td>
@@ -410,18 +350,14 @@ export function GrnsListPage() {
                       </Badge>
                     </td>
                     <td className="px-3 py-2 tabular-nums text-muted-foreground">
-                      {receivedQty} / {orderedQty}
+                      <div>{receivedQty} / {orderedQty}</div>
+                      {row.current_grn_number ? (
+                        <div className="text-[11px] text-muted-foreground/80">
+                          Latest {row.current_grn_number}
+                        </div>
+                      ) : null}
                     </td>
-                    <td className={procurementUi.td} onClick={(e) => e.stopPropagation()}>
-                      <GrnDeliveryChallanMenu
-                        poLabel={row.company_po_number || row.document_number}
-                        challans={challansByOrder[row.id] ?? []}
-                        createHref={deliveryChallanHref(row.id)}
-                        pdfBusyId={challanPdfBusyId}
-                        onDownloadPdf={onDownloadChallanPdf}
-                      />
-                    </td>
-                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-3 py-2">
                       <div className="flex justify-center">
                         <Button
                           type="button"

@@ -219,7 +219,9 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
         }
 
         await load();
-        setFollowUpFeedback(`Assigned ${field.label.replace(/ assignee$/i, "")} owner.`);
+        setFollowUpFeedback(
+          `Assigned ${field.label.replace(/ assignee$/i, "")} owner. Notification email sent.`,
+        )
       } catch (err) {
         setError(err instanceof ApiClientError ? err.message : "Failed to assign stage owner");
       } finally {

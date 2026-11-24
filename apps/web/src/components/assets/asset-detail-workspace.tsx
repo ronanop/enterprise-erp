@@ -659,7 +659,16 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
       {tab === "maintenance" ? (
         <HistoryList
           rows={maintenances}
-          columns={["document_number", "status", "maintenance_type", "scheduled_date"]}
+          columns={[
+            "document_number",
+            "maintenance_type",
+            "status",
+            "created_at",
+            "completed_date",
+            "expected_duration_days",
+            "expected_return_date",
+            "reason",
+          ]}
         />
       ) : null}
       {tab === "documents" ? (

@@ -13,8 +13,14 @@ import {
   X,
 } from "lucide-react";
 
+import { SalesStageBadge } from "@/components/crm/sales/sales-stage-badge";
 import { Button } from "@/components/ui/button";
-import { resolveSalesStageLabel } from "@/lib/crm/sales-blueprint-stages";
+import { formatCrmCode } from "@/lib/crm/format-crm-code";
+import {
+  resolveSalesStageLabel,
+  salesStageBadgeClassName,
+  salesStageToneFromLabel,
+} from "@/lib/crm/sales-blueprint-stages";
 import { cn } from "@/lib/utils";
 import { ApiClientError } from "@/services/api-client";
 import {
@@ -23,6 +29,9 @@ import {
   type OpportunityTimeline,
   type OpportunityTimelineEvent,
 } from "@/services/sales-crm-service";
+
+/** Full blueprint span shown when history has no stage milestones yet. */
+const BLUEPRINT_PATH_FALLBACK = "Lead Open → Deal Won → OVF Shared to SCM";
 
 function formatWhen(value: string): string {
   const date = new Date(value);
@@ -54,7 +63,7 @@ function eventIcon(event: OpportunityTimelineEvent) {
   }
 }
 
-function eventTone(event: OpportunityTimelineEvent): string {
+function eventTone(event: OpportunityTimelineEvent, stageTitle?: string): string {
   if (event.event_type === "approval_decided" && event.decision === "rejected") {
     return "border-destructive/40 bg-destructive/10 text-destructive";
   }
@@ -66,6 +75,14 @@ function eventTone(event: OpportunityTimelineEvent): string {
   }
   if (event.event_type === "attachment") {
     return "border-amber-500/30 bg-amber-500/10 text-amber-800";
+  }
+  if (
+    stageTitle &&
+    (event.event_type === "stage_change" ||
+      event.event_type === "state_transition" ||
+      event.event_type === "created")
+  ) {
+    return salesStageBadgeClassName(salesStageToneFromLabel(stageTitle));
   }
   return "border-border bg-muted text-muted-foreground";
 }
@@ -84,33 +101,54 @@ const CURRENT_STATE_TITLES = new Set([
   "SOW Studied",
   "BOQ/SOW Studied",
   "Deal Registration",
-  "Deal Registration Submitted",
+  "Attach Vendor Quotation",
   "Vendor Quotation Received",
+  "Vendor Quotation Attached",
   "Vendor Quote Attached",
   "Quote Created",
   "Quote Sent for Approval",
   "Quote Approved",
   "Quote Sent",
   "Quote Accepted",
+  "Deal Won",
   "Customer PO Attached",
   "Customer PO Sent for Approval",
   "Customer PO Approved",
   "OVF Ready",
   "Customer PO Approved / OVF Ready",
   "OVF Created",
-  "OVF Created · Draft",
   "OVF Sent for Approval",
   "OVF Approved",
   "OVF Shared to SCM",
   "Deal Won",
   "Deal Lost",
+  "Lost Deal",
 ]);
+
+/** Compact path from first → latest Current State milestone on this deal. */
+function timelinePathSubtitle(events: OpportunityTimelineEvent[]): string {
+  const titles: string[] = [];
+  for (const event of events) {
+    const title = resolveTimelineEventTitle(event);
+    if (!CURRENT_STATE_TITLES.has(title)) continue;
+    if (titles[titles.length - 1] === title) continue;
+    titles.push(title);
+  }
+  if (titles.length === 0) return BLUEPRINT_PATH_FALLBACK;
+  if (titles.length === 1) return titles[0];
+  return `${titles[0]} → ${titles[titles.length - 1]}`;
+}
 
 const STAGE_ENTITIES = new Set<string>(["lead", "opportunity", "quote", "ovf"]);
 
 /** Prefer API Current State titles; only remap unknown history titles. */
 function resolveTimelineEventTitle(event: OpportunityTimelineEvent): string {
   const title = (event.title || "").trim();
+  if (title === "OVF Created · Draft") return "OVF Created";
+  // Legacy duplicate DR step — keep a single "Deal Registration" label.
+  if (title === "Deal Registration Submitted" || title === "DR Registration Submitted") {
+    return "Deal Registration";
+  }
   if (title && CURRENT_STATE_TITLES.has(title)) {
     return title;
   }
@@ -134,6 +172,7 @@ function resolveTimelineEventTitle(event: OpportunityTimelineEvent): string {
 function EventCard({ event }: { event: OpportunityTimelineEvent }) {
   const Icon = eventIcon(event);
   const title = resolveTimelineEventTitle(event);
+  const isStageTitle = CURRENT_STATE_TITLES.has(title);
   const assignees = (event.assignee_names ?? []).filter(Boolean);
   const isSentForApproval = /sent for approval/i.test(title) || assignees.length > 0;
   const approverLabel =
@@ -153,7 +192,7 @@ function EventCard({ event }: { event: OpportunityTimelineEvent }) {
       <span
         className={cn(
           "absolute top-0.5 left-0 flex size-6 items-center justify-center rounded-full border",
-          eventTone(event),
+          eventTone(event, isStageTitle ? title : undefined),
         )}
         aria-hidden
       >
@@ -162,7 +201,11 @@ function EventCard({ event }: { event: OpportunityTimelineEvent }) {
       <div className="rounded-lg border border-border/70 bg-card px-3 py-2.5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-[13px] font-medium text-foreground">{title}</p>
+            {isStageTitle ? (
+              <SalesStageBadge label={title} className="normal-case" />
+            ) : (
+              <p className="text-[13px] font-medium text-foreground">{title}</p>
+            )}
             {isSentForApproval && assignees.length > 0 ? (
               <p className="mt-0.5 text-[11px] text-muted-foreground">
                 Sent to{" "}
@@ -193,7 +236,9 @@ function EventCard({ event }: { event: OpportunityTimelineEvent }) {
         </div>
 
         {event.summary ? (
-          <p className="mt-1.5 text-[12px] leading-relaxed text-foreground/85">{event.summary}</p>
+          <p className="mt-1.5 text-[12px] leading-relaxed text-foreground/85">
+            {formatCrmCode(event.summary) || event.summary}
+          </p>
         ) : null}
 
         <dl className="mt-2 grid gap-1 text-[11px] text-muted-foreground">
@@ -215,7 +260,8 @@ function EventCard({ event }: { event: OpportunityTimelineEvent }) {
               <dd>{event.decided_by_name}</dd>
             </div>
           ) : null}
-          {event.event_type !== "approval_requested" &&
+          {!isStageTitle &&
+            event.event_type !== "approval_requested" &&
             (event.from_state || event.to_state) ? (
             <div className="flex gap-1.5">
               <dt className="shrink-0 font-medium text-foreground/70">State</dt>
@@ -311,10 +357,15 @@ export function OpportunityTimelinePanel({
               Deal timeline
             </h2>
             <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-              Lead creation → Deal won
-              {data?.opportunity_code || data?.opportunity_name
-                ? ` · ${[data.opportunity_code, data.opportunity_name].filter(Boolean).join(" · ")}`
-                : ""}
+              {data
+                ? [
+                  timelinePathSubtitle(data.events),
+                  formatCrmCode(data.opportunity_code) || null,
+                  data.opportunity_name?.trim() || null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+                : BLUEPRINT_PATH_FALLBACK}
             </p>
           </div>
           <Button

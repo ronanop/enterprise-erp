@@ -270,6 +270,7 @@ class CrmEmailNotificationService:
         payload: dict,
         created_by: UUID | None = None,
         exclude_user_ids: set[UUID] | None = None,
+        attachments: list[dict] | None = None,
     ) -> bool:
         if recipient_user_id is None:
             return False
@@ -288,6 +289,8 @@ class CrmEmailNotificationService:
                 enriched["_subject"] = render_template(tpl.subject_template, enriched) or template_code
             if not enriched.get("_body"):
                 enriched["_body"] = render_template(tpl.body_template, enriched)
+            if attachments:
+                enriched["_attachments"] = attachments
             self._notif.send(
                 tenant_id=tenant_id,
                 template_id=tpl.id,
@@ -534,6 +537,7 @@ class CrmEmailNotificationService:
         priority: str,
         remarks: str | None,
         is_admin_copy: bool,
+        attachments: list[dict] | None = None,
     ) -> int:
         del entity_id  # reserved for future deep-links by entity
         if assignee_user_id is None or is_admin_copy:
@@ -545,6 +549,8 @@ class CrmEmailNotificationService:
         action_key = (action or "").strip().lower()
         # approve_* / approve → action-required; provide_* / other work → assignment.
         use_approver = action_key.startswith("approve") or action_key in {"approve", "approve_internally"}
+        # Quote/OVF approval mails should include the print PDF for primary approvers.
+        mail_attachments = attachments if use_approver else None
 
         sent = 0
         if use_approver:
@@ -561,6 +567,7 @@ class CrmEmailNotificationService:
                     "record_url": jobs_url,
                 },
                 created_by=assigner_user_id,
+                attachments=mail_attachments,
             ):
                 sent += 1
             return sent

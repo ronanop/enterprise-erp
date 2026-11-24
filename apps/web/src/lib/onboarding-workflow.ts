@@ -25,13 +25,33 @@ export function isCandidateSubmitted(caseRow: Pick<OnboardingCase, "portal">): b
   return Boolean(caseRow.portal.submittedAt);
 }
 
+function documentsReadyForApproval(
+  caseRow: Pick<OnboardingCase, "portal">,
+): boolean {
+  // BG-check files are display-only here; approval gates on onboarding portal uploads.
+  const docs = (caseRow.portal.documents ?? []).filter((d) => d.source !== "bg_check");
+  if (!docs.length) return false;
+  if (docs.some((d) => d.verifyStatus === "pending" || d.verifyStatus === "rejected")) {
+    return false;
+  }
+  return docs.every(
+    (d) => d.verifyStatus === "verified" || d.verifyStatus === "accepted",
+  );
+}
+
+/**
+ * Approve → Ready to Join. Allow after portal submit, or when every uploaded
+ * document is verified (covers cases stuck in in_progress after HR verify).
+ */
 export function canApproveOnboardingCase(
   caseRow: Pick<OnboardingCase, "status" | "portal">,
 ): boolean {
-  return (
-    isCandidateSubmitted(caseRow) &&
-    ["hr_review", "overdue"].includes(caseRow.status)
-  );
+  if (
+    !["in_progress", "submitted", "hr_review", "overdue"].includes(caseRow.status)
+  ) {
+    return false;
+  }
+  return isCandidateSubmitted(caseRow) || documentsReadyForApproval(caseRow);
 }
 
 /** Create employee profile after HR approval. */

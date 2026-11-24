@@ -34,7 +34,6 @@ import {
   PremiumStackedBarChart,
 } from "@/components/hr/dashboard/hr-analytics-charts";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
-import { EmsSkeleton } from "@/components/hr/workforce/ems-primitives";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuthUser } from "@/hooks/use-auth-user";
@@ -312,11 +311,7 @@ export function HrExecutiveDashboardPage() {
         </div>
       ) : null}
 
-      {loading && !data ? (
-        <EmsSkeleton rows={8} />
-      ) : (
-        <>
-          <section className="grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <DashboardListBox
               title="Upcoming Events"
               subtitle="Birthdays and work anniversaries"
@@ -439,7 +434,7 @@ export function HrExecutiveDashboardPage() {
                         {k.label}
                       </p>
                       <p className="mt-0.5 text-2xl leading-none font-normal text-white tabular-nums">
-                        {loading ? "-" : (k.value ?? 0).toLocaleString("en-IN")}
+                        {(k.value ?? 0).toLocaleString("en-IN")}
                       </p>
                     </div>
                   </div>
@@ -473,16 +468,6 @@ export function HrExecutiveDashboardPage() {
             </div>
 
             <ChartHeightContext.Provider value={268}>
-              {chartsLoading ? (
-                <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="h-[268px] animate-pulse rounded-2xl border border-border bg-muted/40"
-                    />
-                  ))}
-                </div>
-              ) : (
               <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
                 <ChartFrame>
                   <PremiumBarChart
@@ -526,11 +511,8 @@ export function HrExecutiveDashboardPage() {
                   />
                 </ChartFrame>
               </div>
-              )}
             </ChartHeightContext.Provider>
           </section>
-        </>
-      )}
     </div>
   );
 }

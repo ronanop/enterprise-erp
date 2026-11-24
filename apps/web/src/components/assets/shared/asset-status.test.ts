@@ -9,7 +9,7 @@ import {
 
 describe("asset-status labels", () => {
   it("formats operational labels for UX", () => {
-    expect(OPERATIONAL_STATUS_LABELS.READY_TO_MOVE).toBe("Ready to Move");
+    expect(OPERATIONAL_STATUS_LABELS.READY_TO_MOVE).toBe("In Stock");
     expect(OPERATIONAL_STATUS_LABELS.PENDING_DISPOSAL).toBe("Pending Disposal");
     expect(OPERATIONAL_STATUS_LABELS.DISPOSED).toBe("Disposed");
     expect(OPERATIONAL_STATUS_LABELS.IN_USE_AS_COMPONENT).toBe("In Use as Component");
@@ -29,7 +29,7 @@ describe("formatPortalOverviewStatus", () => {
         operational_status: "READY_TO_MOVE",
         status: "submitted",
       }),
-    ).toBe("Ready to Move");
+    ).toBe("In Stock");
   });
 
   it("maps known operational values case-insensitively", () => {

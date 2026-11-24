@@ -14,6 +14,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from modules.asset.domain.enums import (
+    AssetAssignmentStatus,
     AssetComponentType,
     AssetOperationalStatus,
     AssignmentDeliveryReferenceStatus,
@@ -120,11 +121,23 @@ class AssetExcelImportEngine:
                     outcome=ExcelImportRowOutcome.FAILED.value,
                     reason="branch_id is required (set user branch context or pass branch_id)",
                 )
-            dup = self._detect_duplicate(ctx, company_id=cid, row=row)
-            if dup is not None:
-                return dup
+
+            # Re-import with the same S/N / asset tag updates the existing asset
+            # (assign / maintenance) instead of failing as duplicate_serial.
+            existing = self._find_existing_asset(ctx, company_id=cid, row=row)
+            if existing is not None:
+                return self._import_existing_asset(
+                    ctx,
+                    asset=existing,
+                    row=row,
+                    company_id=cid,
+                    target_ops=target_ops,
+                    preview_warning=preview == "warning",
+                )
 
             asset = self._create_and_activate_asset(ctx, row=row, defaults=defaults, company_id=cid)
+            # Install charger before assignment so activate can issue it onto custody lines.
+            self._install_charger_if_present(ctx, row=row, asset_id=asset.id, company_id=cid)
             assignment_id: UUID | None = None
             final_ops = Ready
             warning = preview == "warning"
@@ -145,8 +158,6 @@ class AssetExcelImportEngine:
                 )
                 if warning_reason:
                     warning = True
-
-            self._install_charger_if_present(ctx, row=row, asset_id=asset.id, company_id=cid)
 
             return ExcelImportRowResult(
                 row_number=row.row_number,
@@ -180,46 +191,103 @@ class AssetExcelImportEngine:
         asset_id: UUID,
         company_id: UUID | None,
     ) -> None:
-        serial = (row.charger_serial or "").strip()
-        if not serial:
+        # Same identity model as Add Asset / AssetChargerService: Excel "Charger"
+        # value is the charger code (component_code + serial), not an auto CHARGER-NNNN.
+        code = (row.charger_serial or "").strip()
+        if not code:
             return
+        if len(code) > 100:
+            raise ValueError("Charger code exceeds maximum length")
         self._components.install(
             ctx,
             company_id=company_id,
             asset_id=asset_id,
             branch_id=row.branch_id,
             component_type=AssetComponentType.CHARGER.value,
-            serial_number=serial,
+            component_code=code,
+            serial_number=code,
+            component_name="Charger",
         )
 
-    def _detect_duplicate(
+    def _find_existing_asset(
         self,
         ctx: TenantContext,
         *,
         company_id: UUID | None,
         row: ExcelImportRowInput,
-    ) -> ExcelImportRowResult | None:
+    ):
         tag = (row.asset_tag or "").strip()
         if tag:
             existing = self._assets.find_by_asset_code(ctx, tag, company_id=company_id)
             if existing is not None:
-                return ExcelImportRowResult(
-                    row_number=row.row_number,
-                    outcome=ExcelImportRowOutcome.DUPLICATE.value,
-                    reason=ExcelImportSkipReason.DUPLICATE_ASSET_TAG.value,
-                    asset_id=existing.id,
-                )
+                return existing
         serial = (row.serial_number or "").strip()
         if serial:
-            by_serial = self._assets.find_by_serial_number(ctx, serial, company_id=company_id)
-            if by_serial is not None:
-                return ExcelImportRowResult(
-                    row_number=row.row_number,
-                    outcome=ExcelImportRowOutcome.DUPLICATE.value,
-                    reason=ExcelImportSkipReason.DUPLICATE_SERIAL.value,
-                    asset_id=by_serial.id,
-                )
+            return self._assets.find_by_serial_number(ctx, serial, company_id=company_id)
         return None
+
+    def _import_existing_asset(
+        self,
+        ctx: TenantContext,
+        *,
+        asset,
+        row: ExcelImportRowInput,
+        company_id: UUID | None,
+        target_ops: str,
+        preview_warning: bool,
+    ) -> ExcelImportRowResult:
+        """Apply Excel row intent onto an asset that already exists (same S/N or tag)."""
+        current_ops = (getattr(asset, "operational_status", None) or "").strip().upper()
+        assignment_id: UUID | None = None
+        final_ops = current_ops or Ready
+        warning_reason: str | None = "existing_asset"
+
+        if target_ops == Ready:
+            final_ops = current_ops or Ready
+        elif target_ops == Assigned:
+            if row.employee_id is None:
+                raise ValueError("ASSIGNED rows require employee_id")
+            if current_ops == Assigned:
+                # Already in custody — treat as successful re-import (idempotent).
+                final_ops = Assigned
+                warning_reason = "already_assigned"
+                pending = self._assignments.find_pending_or_active_for_asset(
+                    ctx, asset.id
+                )
+                if (
+                    pending is not None
+                    and pending.status == AssetAssignmentStatus.ACTIVE.value
+                    and row.issue_date is not None
+                ):
+                    self._assignments.apply_allocated_at_from_issue_date(
+                        ctx, pending.id, row.issue_date
+                    )
+                    assignment_id = pending.id
+            else:
+                assignment_id = self._assign_to_employee(
+                    ctx, asset_id=asset.id, row=row, company_id=company_id
+                )
+                final_ops = Assigned
+                warning_reason = "updated_existing_asset"
+        elif target_ops == InMaintenance:
+            if current_ops == InMaintenance:
+                final_ops = InMaintenance
+                warning_reason = "already_in_maintenance"
+            else:
+                final_ops, path_warning = self._path_to_maintenance(
+                    ctx, asset_id=asset.id, row=row, company_id=company_id
+                )
+                warning_reason = path_warning or "updated_existing_asset"
+
+        return ExcelImportRowResult(
+            row_number=row.row_number,
+            outcome=ExcelImportRowOutcome.IMPORTED.value,
+            asset_id=asset.id,
+            assignment_id=assignment_id,
+            operational_status=final_ops,
+            reason=warning_reason,
+            warning=preview_warning or True,
+        )
 
     def _create_and_activate_asset(
         self,
@@ -299,9 +367,20 @@ class AssetExcelImportEngine:
             delivery_challan_signature_status=row.delivery_challan_signature_status,
             assignment_remarks=row.assignment_remarks or "excel_import",
         )
-        self._assignments.submit(ctx, assignment.id)
-        activated = self._assignments.approve(ctx, assignment.id)
-        return activated.id
+        submitted = self._assignments.submit(ctx, assignment.id)
+        # When ASSET_WORKFLOW_GOVERNANCE_ENABLED=false, submit() already activates.
+        # Calling approve() again fails with "Only submitted assignments can be activated".
+        if getattr(submitted, "status", None) == AssetAssignmentStatus.ACTIVE.value:
+            assignment_id = submitted.id
+        else:
+            activated = self._assignments.approve(ctx, assignment.id)
+            assignment_id = activated.id
+        # Inventory "Issue Date" reads assignment.allocated_at — apply Excel Issue Date.
+        if row.issue_date is not None:
+            self._assignments.apply_allocated_at_from_issue_date(
+                ctx, assignment_id, row.issue_date
+            )
+        return assignment_id
 
     def _path_to_maintenance(
         self,
@@ -315,9 +394,8 @@ class AssetExcelImportEngine:
 
         Returns (final_ops, optional_warning_reason).
         """
-        reason = (row.maintenance_reason or "").strip()
-        if not reason:
-            raise ValueError("IN_MAINTENANCE rows require maintenance_reason")
+        reason = (row.maintenance_reason or "").strip() or "excel_import"
+
         duration = row.expected_duration_days or DEFAULT_IMPORT_MAINTENANCE_DURATION_DAYS
         if duration < 1:
             duration = DEFAULT_IMPORT_MAINTENANCE_DURATION_DAYS

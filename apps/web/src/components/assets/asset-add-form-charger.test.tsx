@@ -119,15 +119,15 @@ describe("AssetAddForm charger fields", () => {
 
     render(<AssetAddForm />);
     await waitFor(() =>
-      expect(screen.getByRole("combobox", { name: /Asset Type/i })).toBeInTheDocument(),
+      expect(screen.getByRole("combobox", { name: /Asset Name/i })).toBeInTheDocument(),
     );
 
-    await user.type(screen.getByLabelText(/Asset Name/i), "Laptop X");
+    await selectByLabel(user, /Asset Name/i, "type-1");
     await selectByLabel(user, /^Location/i, "loc-1");
     await waitFor(() => {
-      expect(screen.getByRole("combobox", { name: /Building/i })).not.toBeDisabled();
+      expect(screen.getByRole("combobox", { name: /Address/i })).not.toBeDisabled();
     });
-    await selectByLabel(user, /Building/i, "bldg-1");
+    await selectByLabel(user, /Address/i, "bldg-1");
     await selectByLabel(user, /Charger Available/i, "yes");
     await user.type(screen.getByTestId("charger-code-input"), "CHG-001");
     await user.click(screen.getByTestId("asset-add-save"));
@@ -147,15 +147,15 @@ describe("AssetAddForm charger fields", () => {
 
     render(<AssetAddForm />);
     await waitFor(() =>
-      expect(screen.getByRole("combobox", { name: /Asset Type/i })).toBeInTheDocument(),
+      expect(screen.getByRole("combobox", { name: /Asset Name/i })).toBeInTheDocument(),
     );
 
-    await user.type(screen.getByLabelText(/Asset Name/i), "Laptop Y");
+    await selectByLabel(user, /Asset Name/i, "type-1");
     await selectByLabel(user, /^Location/i, "loc-1");
     await waitFor(() => {
-      expect(screen.getByRole("combobox", { name: /Building/i })).not.toBeDisabled();
+      expect(screen.getByRole("combobox", { name: /Address/i })).not.toBeDisabled();
     });
-    await selectByLabel(user, /Building/i, "bldg-1");
+    await selectByLabel(user, /Address/i, "bldg-1");
     await selectByLabel(user, /Charger Available/i, "no");
     await user.click(screen.getByTestId("asset-add-save"));
 
@@ -226,7 +226,7 @@ describe("AssetAddForm charger fields", () => {
     expect(screen.getByDisplayValue("LTCM70SN001")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Lenovo")).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: /^Location/i })).toHaveTextContent("HQ");
-    expect(screen.getByRole("combobox", { name: /Building/i })).toHaveTextContent("Building A");
+    expect(screen.getByRole("combobox", { name: /Address/i })).toHaveTextContent("Building A");
     expect(screen.getByRole("combobox", { name: /Charger Available/i })).toHaveTextContent(
       /Yes/i,
     );
@@ -243,6 +243,7 @@ describe("AssetAddForm charger fields", () => {
     expect(body.charger_available).toBe(true);
     expect(body.charger_code).toBe("CHARGER-9999");
     expect(body.version).toBe(3);
+    expect(push).toHaveBeenCalledWith("/assets/assets");
   });
 
   it("sends charger_available false on edit to unlink charger component", async () => {

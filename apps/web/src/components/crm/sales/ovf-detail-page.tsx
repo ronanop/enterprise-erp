@@ -17,10 +17,6 @@ import { CrmEntityRejectionAlert } from "@/components/crm/sales/crm-approval-inb
 import { BlueprintActions } from "@/components/crm/sales/blueprint-actions";
 import { resolveSalesStageLabel } from "@/lib/crm/sales-blueprint-stages";
 import { CrmDetailEditLink } from "@/components/crm/sales/crm-detail-edit-link";
-import { OvfExecutionExpensesSection } from "@/components/crm/sales/ovf-execution-expenses-section";
-import { OvfInvoicePaymentSection } from "@/components/crm/sales/ovf-invoice-payment-section";
-import { OvfLiveMarginSection } from "@/components/crm/sales/ovf-live-margin-section";
-import { OvfServicePlanSection } from "@/components/crm/sales/ovf-service-plan-section";
 import { OvfStockSuggestions } from "@/components/crm/sales/ovf-stock-suggestions";
 import { CrmRecordActionsMenu } from "@/components/crm/sales/crm-record-actions-menu";
 import {
@@ -40,9 +36,14 @@ import {
 } from "@/components/crm/sales/ovf-order-lines-section";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
-import { cloneOvfRecord, downloadOvfExport, printOvfPreview } from "@/lib/crm/crm-record-actions";
+import {
+  buildOvfPrintPdfAttachment,
+  cloneOvfRecord,
+  downloadOvfExport,
+  printOvfPreview,
+} from "@/lib/crm/crm-record-actions";
 import { formatCrmCode } from "@/lib/crm/format-crm-code";
-import { buildLeadDistributorDropdownOptions } from "@/lib/crm/lead-distributor-options";
+import { loadCrmDistributorOptions } from "@/lib/crm/lead-distributor-options";
 import { ApiClientError } from "@/services/api-client";
 import {
   applyOvfAction,
@@ -127,9 +128,9 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
       setServiceChargeTotal(sumLineTotals(serviceRowsFromOvfLines(ovfLines)));
       if (oppRow?.lead_id) {
         const lead = await getSalesLead(oppRow.lead_id).catch(() => null);
-        setVendorNameOptions(buildLeadDistributorDropdownOptions(lead?.distributor_name));
+        setVendorNameOptions(await loadCrmDistributorOptions(lead?.distributor_name));
       } else {
-        setVendorNameOptions(buildLeadDistributorDropdownOptions(null));
+        setVendorNameOptions(await loadCrmDistributorOptions(null));
       }
     } catch (err) {
       setOvf(null);
@@ -157,11 +158,41 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
         if (!assignedUserId && assignedUserIds.length === 0) {
           throw new ApiClientError("Select an approver before sending for approval.", 400);
         }
+        const current = ovf;
+        let ovfPdf: { filename: string; base64: string } | null = null;
+        if (current) {
+          try {
+            ovfPdf = await buildOvfPrintPdfAttachment({
+              ovf: current,
+              quote,
+              opportunity,
+              customerName: textOrDash(current.customer_name),
+              accountName: textOrDash(current.account_name),
+              quoteName: textOrDash(current.quote_name),
+              ownerName: textOrDash(current.owner_name),
+              billingAddress: textOrDash(current.billing_address),
+              billingState: textOrDash(current.billing_state),
+              billingCountry: textOrDash(current.billing_country),
+              billingContact: textOrDash(current.billing_contact_person),
+              shippingAddress: textOrDash(current.shipping_address),
+              shippingState: textOrDash(current.shipping_state),
+              shippingCountry: textOrDash(current.shipping_country),
+              shippingContact: textOrDash(current.shipping_contact_person),
+              customerRows,
+              vendorRows,
+              supportingRows,
+            });
+          } catch {
+            ovfPdf = null;
+          }
+        }
         await sendOvfForApproval(ovfId, {
           team_role: payload.team_role,
           remarks: payload.remarks,
           assigned_user_id: assignedUserId ?? assignedUserIds[0],
           assigned_user_ids: assignedUserIds.length > 0 ? assignedUserIds : assignedUserId ? [assignedUserId] : undefined,
+          ovf_pdf_base64: ovfPdf?.base64 ?? null,
+          ovf_pdf_filename: ovfPdf?.filename ?? null,
         });
       } else if (action === "share_to_scm") {
         await shareOvfToScm(ovfId);
@@ -263,6 +294,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
       shippingContact,
       customerRows,
       vendorRows,
+      supportingRows,
     });
   }
 
@@ -285,6 +317,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
       shippingContact,
       customerRows,
       vendorRows,
+      supportingRows,
     });
   }
 
@@ -316,7 +349,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
         title={formatCrmCode(ovf.ovf_no)}
         actions={
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            {!blueprint.locked ? (
+            {blueprint.state === "draft" && !blueprint.locked ? (
               <CrmDetailEditLink href={`/crm/ovf/${ovf.id}/edit`} />
             ) : null}
             <CrmRecordActionsMenu
@@ -355,7 +388,11 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
       {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
 
       <BlueprintActions
-        allowedActions={blueprint.allowed_actions}
+        allowedActions={
+          ovf.shared_to_scm || ovf.deal_won
+            ? []
+            : blueprint.allowed_actions.filter((action) => action !== "deal_won")
+        }
         locked={blueprint.locked}
         entityType="ovf"
         currentStageLabel={resolveSalesStageLabel({
@@ -364,6 +401,11 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
           locked: blueprint.locked,
           ovf,
         })}
+        showDealWonBadge={
+          Boolean(ovf.deal_won) ||
+          String(opportunity?.status || "").toLowerCase() === "won" ||
+          quote?.quote_stage === "accepted"
+        }
         defaultValues={{
           deal_won_amount: totalSaleValue > 0 ? totalSaleValue : null,
         }}
@@ -419,14 +461,6 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
           </CrmDetailItem>
         </CrmDetailGrid>
       </CrmSection>
-
-      <OvfLiveMarginSection ovf={ovf} onChanged={() => void load()} />
-
-      <OvfExecutionExpensesSection ovf={ovf} onChanged={() => void load()} />
-
-      <OvfServicePlanSection ovf={ovf} onChanged={() => void load()} />
-
-      <OvfInvoicePaymentSection ovfId={ovfId} enabled={ovf.shared_to_scm} />
 
       <OvfStockSuggestions ovf={ovf} />
 

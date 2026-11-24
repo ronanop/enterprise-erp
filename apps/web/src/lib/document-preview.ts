@@ -72,21 +72,60 @@ export function canPreviewDocument(fileName: string, mimeType?: string | null, d
   return classifyDocumentPreview(fileName, mimeType) !== "unsupported";
 }
 
-export function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer {
-  const comma = dataUrl.indexOf(",");
-  const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
+export function dataUrlToUint8Array(dataUrl: string): Uint8Array {
+  const trimmed = dataUrl.trim();
+  const comma = trimmed.indexOf(",");
+  const header = comma >= 0 ? trimmed.slice(0, comma) : "";
+  const payload = comma >= 0 ? trimmed.slice(comma + 1) : trimmed;
+  if (!payload) throw new Error("Empty data URL");
+
+  if (/;base64/i.test(header) || (!header.includes("data:") && /^[A-Za-z0-9+/=\s]+$/.test(payload))) {
+    const binary = atob(payload.replace(/\s+/g, ""));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    return bytes;
   }
-  return bytes.buffer;
+
+  const decoded = decodeURIComponent(payload);
+  const bytes = new Uint8Array(decoded.length);
+  for (let i = 0; i < decoded.length; i += 1) bytes[i] = decoded.charCodeAt(i);
+  return bytes;
+}
+
+export function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer {
+  const bytes = dataUrlToUint8Array(dataUrl);
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
 }
 
 export function dataUrlToBlob(dataUrl: string, mimeFallback = "application/octet-stream"): Blob {
-  const match = /^data:([^;,]+)?/.exec(dataUrl);
-  const mime = match?.[1] || mimeFallback;
-  return new Blob([dataUrlToArrayBuffer(dataUrl)], { type: mime });
+  const match = /^data:([^;,]+)?/i.exec(dataUrl.trim());
+  let mime = (match?.[1] || mimeFallback).trim() || mimeFallback;
+  // Chrome PDF viewer breaks on `application/pdf;filename=…` — keep MIME clean
+  if (/pdf/i.test(mime) || /pdf/i.test(mimeFallback)) mime = "application/pdf";
+  const bytes = dataUrlToUint8Array(dataUrl);
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return new Blob([copy], { type: mime });
+}
+
+/** True when data URL looks like a non-empty PDF payload. */
+export function isUsablePdfDataUrl(dataUrl: string | null | undefined): boolean {
+  if (!dataUrl || !dataUrl.trim().startsWith("data:")) return false;
+  try {
+    const bytes = dataUrlToUint8Array(dataUrl);
+    if (bytes.byteLength < 5) return false;
+    // %PDF-
+    return (
+      bytes[0] === 0x25 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x44 &&
+      bytes[3] === 0x46
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function dataUrlToText(dataUrl: string): string {

@@ -56,9 +56,11 @@ class OrgScopedRepository:
         *,
         module_key: str | None = None,
     ) -> None:
-        if module_key and has_module_wide_data_access(ctx, module_key):
-            return
-        if is_platform_admin(ctx):
-            return
-        if ctx.branch_id and ctx.branch_id != branch_id:
-            raise ForbiddenException("Branch scope mismatch")
+        """Do not isolate by session branch.
+
+        Parking on CDPL HQ used to raise ``Branch scope mismatch`` for CT/VAPL
+        work across CRM, procurement, assets, etc. Entity separation (when used)
+        is company-level and HRMS-only via ``effective_company_ids``.
+        """
+        _ = (ctx, branch_id, module_key)
+        return

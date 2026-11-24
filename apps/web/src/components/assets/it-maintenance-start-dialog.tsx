@@ -22,6 +22,7 @@ import {
   type MaintenanceStartResult,
 } from "@/services/assets-service";
 import { listVendorOptions, type VendorOption } from "@/services/procurement-service";
+import { formatDropdownLabel } from "@/components/assets/shared/format-dropdown-label";
 
 const MAINTENANCE_TYPES = ["preventive", "corrective", "emergency", "annual_service"] as const;
 
@@ -235,7 +236,7 @@ export function ItMaintenanceStartDialog({
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="inv-mnt-return">Expected return date</Label>
+            <Label htmlFor="inv-mnt-return">Expected Return Date</Label>
             <Input id="inv-mnt-return" value={expectedReturn} readOnly disabled />
             <p className="text-[11px] text-muted-foreground">
               Calculated from start date + duration.
@@ -267,7 +268,7 @@ export function ItMaintenanceStartDialog({
                   <SelectContent>
                     {MAINTENANCE_TYPES.map((t) => (
                       <SelectItem key={t} value={t} className="cursor-pointer">
-                        {t}
+                        {formatDropdownLabel(t)}
                       </SelectItem>
                     ))}
                   </SelectContent>

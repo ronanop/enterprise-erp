@@ -46,8 +46,12 @@ import {
   type AssetsRow,
 } from "@/services/assets-service";
 
+/** UI page size for the documents asset table (client-side after full fetch). */
 const ASSET_PAGE_SIZE = 25;
+/** API max page_size for assets list (FastAPI le=200). */
+const ASSET_FETCH_PAGE_SIZE = 200;
 const DOC_PAGE_SIZE = 100;
+const DOC_FETCH_PAGE_SIZE = 200;
 
 /** UI document types. Values map to backend DOCUMENT_TYPES where possible. */
 export const ASSET_DOCUMENT_TYPE_OPTIONS = [
@@ -71,7 +75,7 @@ type AssetListItem = {
   assetCode: string;
   assetName: string;
   assetType: string;
-  holder: string;
+  serialNumber: string;
 };
 
 type DraftDocumentErrors = {
@@ -99,17 +103,12 @@ function mapAssetRow(row: AssetsRow): AssetListItem {
     asText(row.asset_type) ||
     asText(row.category_name) ||
     "—";
-  const holder =
-    asText(row.assignee_label) ||
-    asText(row.current_holder) ||
-    asText(row.custodian_label) ||
-    "—";
   return {
     id: asText(row.id),
     assetCode: asText(row.asset_code) || asText(row.document_number) || "—",
     assetName: asText(row.asset_name) || "—",
     assetType: type,
-    holder,
+    serialNumber: asText(row.serial_number) || "—",
   };
 }
 
@@ -274,8 +273,8 @@ function resolveDocumentNameFromFile(file: File): string {
 }
 
 export function AssetDocumentWorkspace() {
-  const [assets, setAssets] = useState<AssetListItem[]>([]);
-  const [assetTotal, setAssetTotal] = useState(0);
+  /** Full register — same scope as All Assets (no lifecycle/ops filter). */
+  const [allAssets, setAllAssets] = useState<AssetListItem[]>([]);
   const [assetPage, setAssetPage] = useState(1);
   const [assetSearch, setAssetSearch] = useState("");
   const [assetsLoading, setAssetsLoading] = useState(true);
@@ -294,9 +293,33 @@ export function AssetDocumentWorkspace() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const filteredAssets = useMemo(() => {
+    const q = assetSearch.trim().toLowerCase();
+    if (!q) return allAssets;
+    return allAssets.filter(
+      (a) =>
+        a.assetName.toLowerCase().includes(q) ||
+        a.assetCode.toLowerCase().includes(q) ||
+        a.assetType.toLowerCase().includes(q) ||
+        a.serialNumber.toLowerCase().includes(q),
+    );
+  }, [allAssets, assetSearch]);
+
+  const assetTotal = filteredAssets.length;
+  const totalAssetPages = Math.max(1, Math.ceil(assetTotal / ASSET_PAGE_SIZE) || 1);
+  const safeAssetPage = Math.min(assetPage, totalAssetPages);
+  const assets = useMemo(() => {
+    const start = (safeAssetPage - 1) * ASSET_PAGE_SIZE;
+    return filteredAssets.slice(start, start + ASSET_PAGE_SIZE);
+  }, [filteredAssets, safeAssetPage]);
+
+  useEffect(() => {
+    if (assetPage !== safeAssetPage) setAssetPage(safeAssetPage);
+  }, [assetPage, safeAssetPage]);
+
   const selectedAsset = useMemo(
-    () => assets.find((a) => a.id === selectedAssetId) ?? null,
-    [assets, selectedAssetId],
+    () => allAssets.find((a) => a.id === selectedAssetId) ?? null,
+    [allAssets, selectedAssetId],
   );
 
   const loadUploadLimits = useCallback(async () => {
@@ -306,14 +329,25 @@ export function AssetDocumentWorkspace() {
 
   const loadDocCounts = useCallback(async () => {
     try {
-      const payload = await documentService.search({
-        page: 1,
-        page_size: 200,
-        status: "active",
-      });
       const counts: Record<string, number> = {};
-      for (const doc of payload.items) {
-        counts[doc.asset_id] = (counts[doc.asset_id] ?? 0) + 1;
+      let page = 1;
+      while (page <= 50) {
+        const payload = await documentService.search({
+          page,
+          page_size: DOC_FETCH_PAGE_SIZE,
+          status: "active",
+        });
+        for (const doc of payload.items) {
+          counts[doc.asset_id] = (counts[doc.asset_id] ?? 0) + 1;
+        }
+        if (
+          payload.items.length === 0 ||
+          payload.items.length < DOC_FETCH_PAGE_SIZE ||
+          page * DOC_FETCH_PAGE_SIZE >= payload.total
+        ) {
+          break;
+        }
+        page += 1;
       }
       setDocCounts(counts);
     } catch {
@@ -326,22 +360,35 @@ export function AssetDocumentWorkspace() {
     setAssetsLoading(true);
     setError(null);
     try {
-      const result = await assetOperationsService.listAssets({
-        page: assetPage,
-        page_size: ASSET_PAGE_SIZE,
-        q: assetSearch.trim() || undefined,
-        status: "active",
-      });
-      setAssets(result.items.map(mapAssetRow).filter((a) => a.id));
-      setAssetTotal(result.total);
+      // Match All Assets: no status / operational_status filter; load every page.
+      const collected: AssetListItem[] = [];
+      let page = 1;
+      let total = Infinity;
+      while (page <= 50) {
+        const result = await assetOperationsService.listAssets({
+          page,
+          page_size: ASSET_FETCH_PAGE_SIZE,
+        });
+        total = result.total;
+        collected.push(...result.items.map(mapAssetRow).filter((a) => a.id));
+        if (
+          result.items.length === 0 ||
+          result.items.length < ASSET_FETCH_PAGE_SIZE ||
+          collected.length >= total
+        ) {
+          break;
+        }
+        page += 1;
+      }
+      setAllAssets(collected);
+      setAssetPage(1);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to load assets");
-      setAssets([]);
-      setAssetTotal(0);
+      setAllAssets([]);
     } finally {
       setAssetsLoading(false);
     }
-  }, [assetPage, assetSearch]);
+  }, []);
 
   const loadDocumentsForAsset = useCallback(async (assetId: string) => {
     setDocsLoading(true);
@@ -674,7 +721,7 @@ export function AssetDocumentWorkspace() {
           <CardTitle className="text-base">Assets</CardTitle>
           <Input
             aria-label="Search assets"
-            placeholder="Search by asset name or number…"
+            placeholder="Search by serial, name, or type…"
             value={assetSearch}
             onChange={(e) => {
               setAssetPage(1);
@@ -699,10 +746,8 @@ export function AssetDocumentWorkspace() {
                     <th className={tableSerialHeaderClassName()} scope="col">
                       {TABLE_SERIAL_HEADER_LABEL}
                     </th>
-                    <th className="px-3 py-2 font-medium">Asset</th>
-                    <th className="px-3 py-2 font-medium">Asset No.</th>
+                    <th className="px-3 py-2 font-medium">Asset Serial</th>
                     <th className="px-3 py-2 font-medium">Type</th>
-                    <th className="px-3 py-2 font-medium">Current User</th>
                     <th className="px-3 py-2 font-medium">Documents</th>
                     <th className="px-3 py-2 font-medium">Action</th>
                   </tr>
@@ -721,12 +766,10 @@ export function AssetDocumentWorkspace() {
                         data-testid={`asset-documents-row-${asset.assetCode}`}
                       >
                         <td className={tableSerialCellClassName()}>
-                          {tableRowSerial(assetPage, ASSET_PAGE_SIZE, index)}
+                          {tableRowSerial(safeAssetPage, ASSET_PAGE_SIZE, index)}
                         </td>
-                        <td className="px-3 py-2 font-medium">{asset.assetName}</td>
-                        <td className="px-3 py-2 font-mono text-xs">{asset.assetCode}</td>
+                        <td className="px-3 py-2 font-mono text-xs">{asset.serialNumber}</td>
                         <td className="px-3 py-2">{asset.assetType}</td>
-                        <td className="px-3 py-2 text-muted-foreground">{asset.holder}</td>
                         <td className="px-3 py-2">
                           {count === 0 ? "0 files" : `${count} file${count === 1 ? "" : "s"}`}
                         </td>
@@ -760,14 +803,15 @@ export function AssetDocumentWorkspace() {
           )}
           <div className="mt-3 flex items-center justify-end gap-2 text-sm text-muted-foreground">
             <span>
-              Page {assetPage} · {assetTotal} total
+              Page {safeAssetPage} of {totalAssetPages} · {assetTotal} assets
+              {allAssets.length !== assetTotal ? ` (of ${allAssets.length} total)` : ""}
             </span>
             <Button
               type="button"
               variant="outline"
               size="sm"
               className="cursor-pointer transition-colors duration-200"
-              disabled={assetPage <= 1}
+              disabled={safeAssetPage <= 1}
               onClick={() => setAssetPage((p) => Math.max(1, p - 1))}
             >
               Prev
@@ -777,7 +821,7 @@ export function AssetDocumentWorkspace() {
               variant="outline"
               size="sm"
               className="cursor-pointer transition-colors duration-200"
-              disabled={assetPage * ASSET_PAGE_SIZE >= assetTotal}
+              disabled={safeAssetPage >= totalAssetPages}
               onClick={() => setAssetPage((p) => p + 1)}
             >
               Next

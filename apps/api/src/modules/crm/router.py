@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from modules.crm.routers.members import members_router
 from modules.crm.routers.approval_step_owners import approval_step_owners_router
+from modules.crm.routers.deal_timeline import deal_timeline_router
 from modules.crm.routers import (
     attachments_router,
     blueprint_router,
@@ -38,10 +39,13 @@ from modules.crm.routers import (
 )
 from modules.crm.routers.customer_ledgers import customer_ledgers_router
 from modules.crm.routers.lookups import lookups_router
+from modules.crm.routers.settings import settings_router
 
 crm_router = APIRouter(prefix="/crm")
 crm_router.include_router(members_router)
 crm_router.include_router(approval_step_owners_router)
+crm_router.include_router(deal_timeline_router)
+crm_router.include_router(settings_router)
 crm_router.include_router(lookups_router)
 crm_router.include_router(lead_sources_router)
 crm_router.include_router(leads_router)

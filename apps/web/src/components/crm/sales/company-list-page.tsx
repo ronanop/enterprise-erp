@@ -8,12 +8,19 @@ import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/com
 import { PageHeader } from "@/components/layout/page-header";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import {
-  COMPANY_LIST_COLUMN_LABELS,
+  companyColumnLabel,
+  companyTableColumnDefs,
   CompanyListColumnPicker,
   type CompanyListColumnId,
   useCompanyListVisibleColumns,
 } from "@/components/crm/sales/company-list-columns";
-import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
+import { useCrmSettingsEffective } from "@/hooks/use-crm-settings";
+import {
+  CrmSortableTh,
+  sortRows,
+  useTableSort,
+  type SortValue,
+} from "@/components/crm/sales/crm-table-sort";
 import { ApiClientError } from "@/services/api-client";
 import { safeEntityHref } from "@/lib/html";
 import {
@@ -43,7 +50,8 @@ export function CompanyListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [visibleColumns, setVisibleColumns] = useCompanyListVisibleColumns();
+  const { settings } = useCrmSettingsEffective();
+  const [visibleColumns, setVisibleColumns, columnKeys] = useCompanyListVisibleColumns();
   const { sortBy, sortDir, onSort } = useTableSort<SortKey>("customer_name");
 
   const ownerLabelById = useMemo(() => {
@@ -74,21 +82,11 @@ export function CompanyListPage() {
     void load();
   }, [load]);
 
-  const columnOrder = useMemo(
-    () =>
-      (
-        [
-          "customer_name",
-          "phone",
-          "customer_email",
-          "account_owner",
-          "created_at",
-          "updated_at",
-          "source",
-        ] as const
-      ).filter((id) => visibleColumns.has(id)),
-    [visibleColumns],
-  );
+  const columnOrder = useMemo(() => {
+    const defs = companyTableColumnDefs(settings).map((c) => c.key);
+    const keys = defs.length ? defs : columnKeys;
+    return keys.filter((id) => visibleColumns.has(id));
+  }, [settings, columnKeys, visibleColumns]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -105,22 +103,31 @@ export function CompanyListPage() {
     });
   }, [rows, query, ownerLabelById]);
 
-  const sorted = useMemo(
-    () =>
-      sortRows(filtered, sortBy, sortDir, {
-        customer_name: (r) => r.customer_name,
-        phone: (r) => r.phone,
-        customer_email: (r) => r.customer_email,
-        account_owner: (r) =>
-          r.account_owner_id ? ownerLabelById.get(r.account_owner_id) ?? "" : "",
-        created_at: (r) => r.created_at,
-        updated_at: (r) => r.updated_at,
-        source: (r) => r.source,
-      }),
-    [filtered, sortBy, sortDir, ownerLabelById],
-  );
+  const sorted = useMemo(() => {
+    const accessors: Record<string, (r: Company) => SortValue> = {
+      customer_name: (r) => r.customer_name,
+      phone: (r) => r.phone,
+      customer_email: (r) => r.customer_email,
+      account_owner: (r) =>
+        r.account_owner_id ? ownerLabelById.get(r.account_owner_id) ?? "" : "",
+      created_at: (r) => r.created_at,
+      updated_at: (r) => r.updated_at,
+      source: (r) => r.source,
+    };
+    for (const col of columnOrder) {
+      if (col.startsWith("cf_") && !accessors[col]) {
+        accessors[col] = (r) =>
+          String((r.custom_fields as Record<string, unknown> | undefined)?.[col] ?? "") as SortValue;
+      }
+    }
+    return sortRows(filtered, sortBy, sortDir, accessors);
+  }, [filtered, sortBy, sortDir, ownerLabelById, columnOrder]);
 
   function renderCell(row: Company, col: CompanyListColumnId) {
+    if (col.startsWith("cf_")) {
+      const val = (row.custom_fields as Record<string, unknown> | undefined)?.[col];
+      return val != null && String(val) !== "" ? String(val) : "-";
+    }
     switch (col) {
       case "customer_name":
         return (
@@ -175,7 +182,12 @@ export function CompanyListPage() {
           icon={Building2}
           count={sorted.length}
           actions={
-            <CompanyListColumnPicker visible={visibleColumns} onChange={setVisibleColumns} />
+            <CompanyListColumnPicker
+              visible={visibleColumns}
+              onChange={setVisibleColumns}
+              columnKeys={columnKeys}
+              settings={settings}
+            />
           }
           search={{
             value: query,
@@ -191,7 +203,7 @@ export function CompanyListPage() {
                 {columnOrder.map((col) => (
                   <CrmSortableTh
                     key={col}
-                    label={COMPANY_LIST_COLUMN_LABELS[col]}
+                    label={companyColumnLabel(settings, col)}
                     sortKey={col}
                     activeKey={sortBy}
                     dir={sortDir}

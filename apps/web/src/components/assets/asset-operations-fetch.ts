@@ -2,18 +2,12 @@ import { BRANCH_ALL_VALUE } from "@/components/assets/shared";
 import {
   assetOperationsService,
   type AssetDashboardSummaryDto,
-  type AssetPaginatedListResult,
-  type AssetTransferPaginatedListResult,
 } from "@/services/assets-service";
 
 export type AssetOperationsFetchResult = {
   summary: AssetDashboardSummaryDto | null;
-  transfersList: AssetTransferPaginatedListResult | null;
-  assetsList: AssetPaginatedListResult | null;
   errors: {
     summary?: string;
-    transfers?: string;
-    assets?: string;
   };
 };
 
@@ -38,43 +32,21 @@ async function settle<T>(
   }
 }
 
-/**
- * Loads dashboard summary and transfer list in parallel.
- * UI filter uses location_id for summary KPIs; transfer list is company-scoped
- * (branch RBAC still applied server-side via ctx).
- */
+/** Loads dashboard KPI summary for the Asset Operations home. */
 export async function fetchAssetOperationsData(
   locationId: string,
   deps: {
     getDashboardSummary?: typeof assetOperationsService.getDashboardSummary;
-    listTransfers?: typeof assetOperationsService.listTransfers;
-    listAssets?: typeof assetOperationsService.listAssets;
   } = {},
 ): Promise<AssetOperationsFetchResult> {
   const getDashboardSummary =
     deps.getDashboardSummary ?? assetOperationsService.getDashboardSummary.bind(assetOperationsService);
-  const listTransfers =
-    deps.listTransfers ?? assetOperationsService.listTransfers.bind(assetOperationsService);
-  const listAssets =
-    deps.listAssets ?? assetOperationsService.listAssets.bind(assetOperationsService);
 
   const location_id = locationQueryParam(locationId);
-
-  const [summaryRes, transfersRes, assetsRes] = await Promise.all([
-    settle(getDashboardSummary(location_id ? { location_id } : {})),
-    settle(listTransfers({ page: 1, page_size: 50 })),
-    settle(listAssets({ page: 1, page_size: 200 })),
-  ]);
-
-  const errors: AssetOperationsFetchResult["errors"] = {};
-  if (!summaryRes.ok) errors.summary = summaryRes.error;
-  if (!transfersRes.ok) errors.transfers = transfersRes.error;
-  if (!assetsRes.ok) errors.assets = assetsRes.error;
+  const summaryRes = await settle(getDashboardSummary(location_id ? { location_id } : {}));
 
   return {
     summary: summaryRes.ok ? summaryRes.value : null,
-    transfersList: transfersRes.ok ? transfersRes.value : null,
-    assetsList: assetsRes.ok ? assetsRes.value : null,
-    errors,
+    errors: summaryRes.ok ? {} : { summary: summaryRes.error },
   };
 }

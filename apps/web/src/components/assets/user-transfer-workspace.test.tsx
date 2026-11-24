@@ -72,9 +72,16 @@ describe("UserTransferWorkspace Step 2", () => {
     expect(screen.getByTestId("user-transfer-asset-summary")).toBeInTheDocument();
     expect(screen.getByTestId("user-transfer-assignment")).toBeInTheDocument();
     expect(screen.getByTestId("user-transfer-verification")).toBeInTheDocument();
+    expect(screen.getByTestId("user-transfer-steps")).toBeInTheDocument();
     expect(screen.getByText("AST-003")).toBeInTheDocument();
+    expect(screen.getByText("Active")).toBeInTheDocument();
+    expect(screen.queryByText("active")).not.toBeInTheDocument();
     expect(screen.getAllByText("EMP-01 — Rahul Sharma").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByTestId("no-components")).toBeInTheDocument();
+    expect(screen.queryByTestId("condition-dead")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Continue stays disabled until all required checks/i),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps Continue disabled until all checks complete (no components)", async () => {

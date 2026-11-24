@@ -4,12 +4,15 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  AlertTriangle,
   ArrowLeft,
   Building2,
+  Download,
   FileText,
+  GitBranch,
   MapPin,
+  Pencil,
   Scale,
+  Trash2,
 } from "lucide-react";
 
 import {
@@ -17,7 +20,6 @@ import {
   CrmInfoBanner,
   CrmPage,
   CrmSection,
-  CrmWarnBanner,
 } from "@/components/crm/crm-ui";
 import {
   CrmReadOnlyField,
@@ -28,28 +30,31 @@ import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
 import { CrmEntityRejectionAlert } from "@/components/crm/sales/crm-approval-inbox-listener";
 import { BlueprintActions } from "@/components/crm/sales/blueprint-actions";
 import { resolveSalesStageLabel } from "@/lib/crm/sales-blueprint-stages";
-import { CrmDetailEditLink } from "@/components/crm/sales/crm-detail-edit-link";
-import { CrmRecordActionsMenu } from "@/components/crm/sales/crm-record-actions-menu";
 import { QuoteLineTable } from "@/components/crm/sales/quote-line-table";
 import { QuoteSplitPanel } from "@/components/crm/sales/quote-split-panel";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
-import { cloneQuoteRecord, downloadQuoteExport, printQuotePreview } from "@/lib/crm/crm-record-actions";
+import {
+  buildQuotePrintPdfAttachment,
+  downloadQuoteExport,
+} from "@/lib/crm/crm-record-actions";
 import { formatCrmCode } from "@/lib/crm/format-crm-code";
 import { ApiClientError } from "@/services/api-client";
 import {
   applyOpportunityAction,
   applyQuoteAction,
   approveQuoteInternally,
-  deleteQuote,
+  formatInrPrecise,
   fullName,
   getOpportunity,
   getOpportunityBlueprint,
   getQuote,
   getQuoteBlueprint,
-  getQuoteMargin,
+  discardQuoteCurrentRevision,
+  getQuoteRevisionPrintPayload,
   listContacts,
   listQuoteLines,
+  listQuoteRevisions,
   listQuotes,
   listOvfs,
   sendQuoteForApproval,
@@ -60,8 +65,37 @@ import {
   type Ovf,
   type Quote,
   type QuoteLine,
-  type QuoteMarginSummary,
+  type QuoteRevisionRow,
 } from "@/services/sales-crm-service";
+
+const QUOTE_APPROVED_STAGES = new Set([
+  "approved_internal",
+  "sent_to_customer",
+  "negotiation",
+  "follow_up",
+  "accepted",
+]);
+
+/** Stages where Edit freezes the current version and opens the next draft (same as negotiate). */
+const QUOTE_EDIT_OPENS_NEW_VERSION = new Set([
+  "approved_internal",
+  "sent_to_customer",
+  "negotiation",
+  "follow_up",
+]);
+
+function isQuoteApproved(quote: Quote): boolean {
+  return (
+    quote.approval_status === "approved" || QUOTE_APPROVED_STAGES.has(quote.quote_stage)
+  );
+}
+
+function canShowQuoteEdit(quote: Quote, locked: boolean): boolean {
+  if (locked) return false;
+  if (quote.quote_stage === "accepted" || quote.quote_stage === "lost") return false;
+  if (quote.quote_stage === "internal_approval") return false;
+  return true;
+}
 
 function formatQuoteStage(stage: string): string {
   if (!stage) return "-";
@@ -72,7 +106,6 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   const router = useRouter();
   const [quote, setQuote] = useState<Quote | null>(null);
   const [blueprint, setBlueprint] = useState<BlueprintState | null>(null);
-  const [margin, setMargin] = useState<QuoteMarginSummary | null>(null);
   const [lines, setLines] = useState<QuoteLine[]>([]);
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
   const [oppBlueprint, setOppBlueprint] = useState<BlueprintState | null>(null);
@@ -80,25 +113,28 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   const [existingOvf, setExistingOvf] = useState<Ovf | null>(null);
   const [siblingQuotes, setSiblingQuotes] = useState<Quote[]>([]);
   const [opportunityOvfs, setOpportunityOvfs] = useState<Ovf[]>([]);
+  const [revisions, setRevisions] = useState<QuoteRevisionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [banner, setBanner] = useState<{ text: string; tone: "error" | "success" } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [downloadingRevision, setDownloadingRevision] = useState<number | null>(null);
+  const [removingCurrentRevision, setRemovingCurrentRevision] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [quoteRow, bp, marginRow, lineRows] = await Promise.all([
+      const [quoteRow, bp, lineRows, revisionRows] = await Promise.all([
         getQuote(quoteId),
         getQuoteBlueprint(quoteId),
-        getQuoteMargin(quoteId).catch(() => null),
         listQuoteLines(quoteId).catch(() => []),
+        listQuoteRevisions(quoteId).catch(() => [] as QuoteRevisionRow[]),
       ]);
       setQuote(quoteRow);
       setBlueprint(bp);
-      setMargin(marginRow);
       setLines(lineRows);
+      setRevisions(revisionRows);
       const [opp, ovfRows, oppBp, siblingQuotes] = await Promise.all([
         getOpportunity(quoteRow.opportunity_id).catch(() => null),
         listOvfs({ opportunity_id: quoteRow.opportunity_id }).catch(() => []),
@@ -164,12 +200,27 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         "send_sow_approval",
         "skip_sow",
         "deal_reg",
-        "oem_received",
         "attach_oem_quote",
         "create_ovf",
       ]);
       if (opportunity && oppActions.has(action)) {
-        await applyOpportunityAction(opportunity.id, action, payload);
+        let enrichedPayload = payload;
+        if (action === "attach_po" || action === "send_po_approval") {
+          const q = quote;
+          if (q) {
+            try {
+              const quotationPdf = await buildQuotePrintPdfAttachment(q, lines);
+              enrichedPayload = {
+                ...payload,
+                quotation_pdf_base64: quotationPdf.base64,
+                quotation_pdf_filename: quotationPdf.filename,
+              };
+            } catch {
+              // PO approval still proceeds; email may omit the quote print.
+            }
+          }
+        }
+        await applyOpportunityAction(opportunity.id, action, enrichedPayload);
         await load();
         return;
       }
@@ -181,14 +232,29 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         if (typeof assignedUserId !== "string" || !assignedUserId.trim()) {
           throw new ApiClientError("Select an approver before sending for approval.", 400);
         }
+        const q = quote;
+        let quotationPdf: { filename: string; base64: string } | null = null;
+        if (q) {
+          try {
+            quotationPdf = await buildQuotePrintPdfAttachment(q, lines);
+          } catch {
+            quotationPdf = null;
+          }
+        }
         await sendQuoteForApproval(quoteId, {
           team_role: typeof payload.team_role === "string" ? payload.team_role : undefined,
           assigned_user_id: assignedUserId,
           assigned_user_ids: assignedUserIds.length > 0 ? assignedUserIds : [assignedUserId],
           remarks: typeof payload.remarks === "string" ? payload.remarks : null,
+          quotation_pdf_base64: quotationPdf?.base64 ?? null,
+          quotation_pdf_filename: quotationPdf?.filename ?? null,
         });
       } else if (action === "approve_internally") {
         await approveQuoteInternally(quoteId, { remark: payload.remark });
+      } else if (action === "negotiate") {
+        await applyQuoteAction(quoteId, action, payload);
+        router.push(`/crm/quotes/${quoteId}/edit`);
+        return;
       } else {
         await applyQuoteAction(quoteId, action, payload);
       }
@@ -232,7 +298,9 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
 
   if (!quote || !blueprint) return null;
 
-  const readOnlyLines = quote.locked || ["accepted", "lost", "sent_to_customer", "negotiation", "follow_up"].includes(quote.quote_stage);
+  const readOnlyLines =
+    quote.locked ||
+    ["accepted", "lost", "sent_to_customer", "follow_up"].includes(quote.quote_stage);
   const contact =
     contacts.find((row) => row.id === quote.contact_id) ??
     contacts.find((row) => row.is_primary) ??
@@ -255,14 +323,23 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
     opportunityOvfs.length === 0 &&
     !blueprint.locked;
   const createOvfActions = canCreateOvf ? ["create_ovf"] : [];
-  const createOvfLabels: Record<string, string> = canCreateOvf
-    ? {
-      create_ovf:
-        quotesForOvf.length > 1
-          ? `Create OVF · ${quotesForOvf.length} quotes`
-          : "Create OVF",
-    }
-    : {};
+  const revisionNo = Math.max(1, Number(quote.quote_revision) || 1);
+  const createOvfLabels: Record<string, string> = {
+    ...(canCreateOvf
+      ? {
+        create_ovf:
+          quotesForOvf.length > 1
+            ? `Create OVF · ${quotesForOvf.length} quotes`
+            : "Create OVF",
+      }
+      : {}),
+    ...(revisionNo > 1
+      ? { send_for_approval: `Send V${revisionNo} for Approval` }
+      : {}),
+    negotiate: `Create Quote V${revisionNo + 1}`,
+    accept: "Deal Won",
+    lost: "Deal Lost",
+  };
 
   const oppTransitionActions =
     quote.quote_stage === "accepted" && oppBlueprint
@@ -271,28 +348,147 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
           action !== "create_quote" &&
           action !== "create_ovf" &&
           action !== "quote_accepted" &&
+          action !== "send_po_approval" &&
+          action !== "lost" &&
           !blueprint.allowed_actions.includes(action),
       )
       : [];
 
+  // V1 already sent/approved must not re-offer Send for Approval. After
+  // negotiate, quote_revision >= 2 and draft correctly shows the action again.
+  // Frozen snapshots set snapshotted_at; the live draft stub must leave it null
+  // so brand-new V1 drafts still show Send for Approval.
+  const v1AlreadyApproved =
+    revisionNo <= 1 &&
+    (quote.approval_status === "approved" ||
+      quote.approval_status === "pending" ||
+      ["internal_approval", "approved_internal", "sent_to_customer", "negotiation", "follow_up", "accepted"].includes(
+        quote.quote_stage,
+      ) ||
+      revisions.some((row) => row.revision_no === 1 && Boolean(row.snapshotted_at)));
+  const dealAlreadyWon =
+    quote.quote_stage === "accepted" ||
+    String(opportunity?.status || "").toLowerCase() === "won";
   const blueprintActions = Array.from(
     new Set([
       ...blueprint.allowed_actions,
       ...oppTransitionActions,
       ...createOvfActions,
     ]),
+  ).filter(
+    (action) =>
+      !(action === "send_for_approval" && v1AlreadyApproved) &&
+      !(action === "lost" && dealAlreadyWon),
   );
 
-  async function onPrintPreview() {
-    const q = quote;
-    if (!q) return;
-    await printQuotePreview(q, lines);
+  function canDownloadRevision(row: QuoteRevisionRow): boolean {
+    // Current version: only after internal approval (or later customer stages).
+    if (row.is_current) return isQuoteApproved(quote);
+    // Prior versions exist only after negotiate from an approved/sent quote.
+    return Boolean(row.snapshotted_at);
   }
 
-  async function onExport() {
-    const q = quote;
-    if (!q) return;
-    await downloadQuoteExport(q, lines);
+  function canRemoveCurrentRevision(row: QuoteRevisionRow): boolean {
+    if (!row.is_current) return false;
+    if (row.revision_no <= 1) return false;
+    if (quote.quote_stage === "accepted" || quote.quote_stage === "lost") return false;
+    // Only until this version is approved — then next steps (Vn+1 / won / lost) apply on it.
+    return !isQuoteApproved(quote);
+  }
+
+  async function onRemoveCurrentRevision() {
+    if (!quote) return;
+    const currentRev = Math.max(1, Number(quote.quote_revision) || 1);
+    if (
+      !window.confirm(
+        `Remove V${currentRev} and restore approved V${currentRev - 1}? Create Quote V${currentRev}, Deal Won, and Deal Lost will return.`,
+      )
+    ) {
+      return;
+    }
+    setRemovingCurrentRevision(true);
+    setBusy(true);
+    setBanner(null);
+    try {
+      await discardQuoteCurrentRevision(quoteId);
+      setBanner({
+        text: `V${currentRev} removed. Restored approved V${currentRev - 1}.`,
+        tone: "success",
+      });
+      await load();
+    } catch (err) {
+      setBanner({
+        text: err instanceof ApiClientError ? err.message : "Failed to remove current quote version",
+        tone: "error",
+      });
+    } finally {
+      setRemovingCurrentRevision(false);
+      setBusy(false);
+    }
+  }
+
+  async function onEditQuote() {
+    if (!quote) return;
+    setBusy(true);
+    setBanner(null);
+    try {
+      if (QUOTE_EDIT_OPENS_NEW_VERSION.has(quote.quote_stage)) {
+        await applyQuoteAction(quoteId, "negotiate", {
+          remark: "Edit opened a new quote version for re-approval",
+        });
+      }
+      router.push(`/crm/quotes/${quoteId}/edit`);
+    } catch (err) {
+      setBanner({
+        text: err instanceof ApiClientError ? err.message : "Failed to open quote for edit",
+        tone: "error",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onDownloadRevision(revisionNo: number) {
+    setDownloadingRevision(revisionNo);
+    setBanner(null);
+    try {
+      if (revisionNo === Math.max(1, Number(quote?.quote_revision) || 1) && quote) {
+        await downloadQuoteExport(quote, lines);
+        return;
+      }
+      const payload = await getQuoteRevisionPrintPayload(quoteId, revisionNo);
+      const archivedQuote = {
+        ...payload.quote,
+        quote_revision: payload.revision_no,
+        freight: Number(payload.quote.freight || 0),
+        grand_total: Number(payload.quote.grand_total || 0),
+        avg_margin_pct: Number(payload.quote.avg_margin_pct || 0),
+        total_margin_amount: Number(payload.quote.total_margin_amount || 0),
+        locked: Boolean(payload.quote.locked),
+        version: Number(payload.quote.version || 1),
+      } as Quote;
+      const archivedLines = payload.lines.map((line, index) => ({
+        ...line,
+        line_no: Number(line.line_no || index + 1),
+        qty: Number(line.qty || 0),
+        unit_cost: Number(line.unit_cost || 0),
+        unit_sell: Number(line.unit_sell || 0),
+        margin_pct: Number(line.margin_pct || 0),
+        margin_amount: Number(line.margin_amount || 0),
+        gst_pct: Number(line.gst_pct || 0),
+        gst_amount: Number(line.gst_amount || 0),
+        line_total: Number(line.line_total || 0),
+        version: Number(line.version || 1),
+      })) as QuoteLine[];
+      await downloadQuoteExport(archivedQuote, archivedLines);
+    } catch (err) {
+      setBanner({
+        text: err instanceof ApiClientError ? err.message : `Failed to download V${revisionNo} PDF`,
+        tone: "error",
+      });
+    } finally {
+      setDownloadingRevision(null);
+    }
   }
 
   return (
@@ -307,10 +503,24 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
       <ApprovalBanner locked={blueprint.locked} approvalStatus={blueprint.state} label="This quote" />
 
       <PageHeader
-        title={`${formatCrmCode(quote.quote_no)}${quote.quote_revision > 1 ? ` (Rev ${quote.quote_revision})` : ""}`}
+        title={`${formatCrmCode(quote.quote_no)}${quote.quote_revision > 1 ? ` V${quote.quote_revision}` : ""}`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <CrmDetailEditLink href={`/crm/quotes/${quote.id}/edit`} />
+            {canShowQuoteEdit(quote, blueprint.locked) ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 cursor-pointer gap-1.5 px-2.5 text-[0.8rem] transition-colors duration-200"
+                disabled={busy}
+                onClick={() => void onEditQuote()}
+              >
+                <Pencil className="size-3.5" />
+                {busy && QUOTE_EDIT_OPENS_NEW_VERSION.has(quote.quote_stage)
+                  ? "Opening…"
+                  : "Edit"}
+              </Button>
+            ) : null}
             {existingOvf ? (
               <Link
                 href={`/crm/ovf/${existingOvf.id}`}
@@ -318,24 +528,6 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
               >
                 Open OVF
               </Link>
-            ) : null}
-            {quote ? (
-              <CrmRecordActionsMenu
-                entityType="quote"
-                entityId={quote.id}
-                entityLabel="Quote"
-                entityName={formatCrmCode(quote.quote_no)}
-                shareTitle={formatCrmCode(quote.quote_no)}
-                onClone={() => cloneQuoteRecord(quote, lines, router)}
-                onPrintPreview={onPrintPreview}
-                onExport={onExport}
-                onDelete={() => deleteQuote(quote.id)}
-                onDeleted={() =>
-                  router.push(
-                    opportunity ? `/crm/opportunities/${opportunity.id}` : "/crm/quotes",
-                  )
-                }
-              />
             ) : null}
           </div>
         }
@@ -372,20 +564,106 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
           locked: blueprint.locked,
           quote,
         })}
+        showDealWonBadge={dealAlreadyWon}
         excludeActions={["approve_internally"]}
         actionLabelOverrides={createOvfLabels}
         onAction={onBlueprintAction}
         disabled={busy}
       />
-      {margin?.requires_management_approval && !blueprint.locked ? (
-        <CrmWarnBanner>
-          <span className="flex items-start gap-2">
-            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-            Margin is below the management threshold ({margin.required_threshold_pct}%). Use Send for
-            Approval.
-          </span>
-        </CrmWarnBanner>
-      ) : null}
+      <CrmSection title="Quote Versions" icon={GitBranch}>
+        <div className="erp-scroll min-w-0 overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-border/80 bg-muted/60 text-xs font-semibold tracking-wide text-foreground uppercase">
+                <th className="px-3 py-2">Quote Version</th>
+                <th className="px-3 py-2 text-right">Avg Margin %</th>
+                <th className="px-3 py-2 text-right">Grand Total</th>
+                <th className="px-3 py-2 text-right">Negotiation %</th>
+                <th className="px-3 py-2 text-right">Print PDF</th>
+              </tr>
+            </thead>
+            <tbody>
+              {revisions.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
+                    No quote versions yet.
+                  </td>
+                </tr>
+              ) : (
+                revisions.map((row) => (
+                  <tr
+                    key={row.revision_no}
+                    className={`border-b border-border/50 last:border-0 ${row.is_current ? "bg-primary/5" : ""}`}
+                  >
+                    <td className="px-3 py-2 font-medium">
+                      <span className="inline-flex items-center gap-2">
+                        V{row.revision_no}
+                        {row.is_current ? (
+                          <span className="text-[10px] font-semibold tracking-wide text-primary uppercase">
+                            Current
+                          </span>
+                        ) : null}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {Number(row.avg_margin_pct || 0).toFixed(2)}%
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {formatInrPrecise(row.grand_total)}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {row.revision_no <= 1
+                        ? "—"
+                        : `${Number(row.negotiation_pct || 0) > 0 ? "+" : ""}${Number(row.negotiation_pct || 0).toFixed(2)}%`}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
+                        {canDownloadRevision(row) ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 cursor-pointer gap-1.5 px-2.5 text-[0.8rem] transition-colors duration-200"
+                            disabled={downloadingRevision === row.revision_no || busy}
+                            onClick={() => void onDownloadRevision(row.revision_no)}
+                            aria-label={`Download V${row.revision_no} print PDF`}
+                          >
+                            <Download className="size-3.5" />
+                            {downloadingRevision === row.revision_no ? "…" : "Download"}
+                          </Button>
+                        ) : null}
+                        {canRemoveCurrentRevision(row) ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 cursor-pointer gap-1.5 px-2.5 text-[0.8rem] text-destructive transition-colors duration-200 hover:bg-destructive/10 hover:text-destructive"
+                            disabled={removingCurrentRevision || busy}
+                            onClick={() => void onRemoveCurrentRevision()}
+                            aria-label={`Remove current quote V${row.revision_no} and restore previous approved version`}
+                          >
+                            <Trash2 className="size-3.5" />
+                            {removingCurrentRevision ? "…" : "Remove"}
+                          </Button>
+                        ) : null}
+                        {!canDownloadRevision(row) && !canRemoveCurrentRevision(row) ? (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Negotiation % compares each version grand total against original V1. Moving to negotiation
+          creates the next version and restarts approval. Print PDF download is available after that
+          version is approved. Remove on the current unapproved version restores the prior approved
+          quote so Create Quote Vn+1, Deal Won, and Deal Lost return.
+        </p>
+      </CrmSection>
 
       <CrmSection title="Quote Information" icon={FileText}>
         <div className="grid min-w-0 gap-x-6 gap-y-3 md:grid-cols-2">
@@ -394,7 +672,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
             value={textOrDash(quote.project_title)}
           />
           <CrmReadOnlyField label="Account Name" value={textOrDash(quote.account_name)} />
-          <CrmReadOnlyField label="Valid Until *" value={textOrDash(quote.valid_until)} />
+          <CrmReadOnlyField label="Price Validity Date *" value={textOrDash(quote.valid_until)} />
           <CrmReadOnlyField label="Contact Name" value={contactName} />
           <CrmReadOnlyField label="Quote Owner" value={textOrDash(quote.owner_name)} />
           <CrmReadOnlyField label="Quote No." value={formatCrmCode(quote.quote_no)} />
@@ -402,7 +680,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
             label="Quote Stage"
             value={formatQuoteStage(quote.quote_stage)}
           />
-          <CrmReadOnlyField label="Version" value={String(quote.version ?? 1)} />
+          <CrmReadOnlyField label="Quote Version" value={`V${quote.quote_revision ?? 1}`} />
         </div>
       </CrmSection>
 

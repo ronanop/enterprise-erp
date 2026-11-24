@@ -261,7 +261,7 @@ export function purchaseOrderPdfInputFromOrder(
       tax_rate?: number | null;
     }>;
   },
-  vendor: { name: string; address?: string },
+  vendor: { name: string; address?: string; gstin?: string },
   options?: {
     taxPct?: number;
     billingAddress?: string;
@@ -311,6 +311,7 @@ export function purchaseOrderPdfInputFromOrder(
       name: (vendor.name || "").trim() || "-",
       address: (vendor.address || "").trim() || "-",
     },
+    customerGstin: (vendor.gstin || "").trim() || undefined,
     orderRef: (order.order_ref_cache || "").trim() || undefined,
     poNumber: companyPo || order.document_number || "PO",
     date: order.document_date || new Date().toISOString().slice(0, 10),
@@ -327,7 +328,7 @@ export function purchaseOrderPdfInputFromOrder(
 
 export async function downloadOrderPdf(
   order: Parameters<typeof purchaseOrderPdfInputFromOrder>[0],
-  vendor: { name: string; address?: string },
+  vendor: { name: string; address?: string; gstin?: string },
   fileName?: string,
   options?: { watermark?: boolean },
 ): Promise<void> {
@@ -345,7 +346,7 @@ export async function downloadOrderPdf(
 /** Open PO PDF in a new tab. Draft previews always include the DRAFT PO watermark. */
 export async function previewOrderPdf(
   order: Parameters<typeof purchaseOrderPdfInputFromOrder>[0],
-  vendor: { name: string; address?: string },
+  vendor: { name: string; address?: string; gstin?: string },
   options?: {
     taxPct?: number;
     watermark?: boolean;
@@ -380,8 +381,8 @@ export async function previewPurchaseOrderPdf(
 export async function downloadPurchaseOrderPdf(
   input: PurchaseOrderPdfInput,
   fileName?: string,
-  options?: { preview?: boolean; watermark?: boolean },
-): Promise<void> {
+  options?: { preview?: boolean; watermark?: boolean; asBase64?: boolean },
+): Promise<{ filename: string; base64?: string } | void> {
   const payload: PurchaseOrderPdfInput = {
     ...input,
     company: {
@@ -500,16 +501,15 @@ export async function downloadPurchaseOrderPdf(
   }
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
-  doc.text("Customer GSTIN:", L + 2.5, y + metaH - 4);
+  doc.text("GSTIN:", L + 2.5, y + metaH - 4);
   doc.setFont("helvetica", "normal");
-  doc.text(dash(payload.customerGstin), L + 34, y + metaH - 4);
+  doc.text(dash(payload.customerGstin), L + 18, y + metaH - 4);
 
   // Right meta: stacked "Label: value" (no row/column grid)
   const meta: Array<[string, string]> = [
     ["GST NO:", dash(payload.company.gstin)],
     ["PAN NO:", dash(payload.company.pan)],
     ["Service Tax No.:", dash(payload.company.serviceTaxNo)],
-    ["Order Ref. Cache:", dash(payload.orderRef)],
     ["CACHE Order No.:", dash(payload.poNumber)],
     ["Date:", formatPoDateSlash(payload.date)],
   ];
@@ -789,15 +789,44 @@ export async function downloadPurchaseOrderPdf(
     applyPreviewWatermark(doc);
   }
 
+  const resolvedName = fileName || `PO-${payload.poNumber || "draft"}.pdf`;
+
+  if (options?.asBase64) {
+    const dataUri = doc.output("datauristring") as string;
+    const base64 = dataUri.includes(",") ? dataUri.split(",")[1] : dataUri;
+    return { filename: resolvedName, base64 };
+  }
+
   if (options?.preview) {
     const url = doc.output("bloburl");
     const opened = window.open(url, "_blank", "noopener,noreferrer");
     if (!opened) {
       // Popup blocked - fall back to download so the user still gets the PDF.
-      doc.save(fileName || `PO-${payload.poNumber || "draft"}-preview.pdf`);
+      doc.save(resolvedName.replace(/\.pdf$/i, "-preview.pdf"));
     }
-    return;
+    return { filename: resolvedName };
   }
 
-  doc.save(fileName || `PO-${payload.poNumber || "draft"}.pdf`);
+  doc.save(resolvedName);
+  return { filename: resolvedName };
+}
+
+/** Build PO print PDF as base64 for approval email / API upload. */
+export async function buildOrderPdfBase64(
+  order: Parameters<typeof purchaseOrderPdfInputFromOrder>[0],
+  vendor: { name: string; address?: string; gstin?: string },
+  options?: { watermark?: boolean },
+): Promise<{ filename: string; base64: string }> {
+  const input = purchaseOrderPdfInputFromOrder(order, vendor);
+  const watermark = Boolean(options?.watermark);
+  const safePo = (input.poNumber || "PO").replace(/[\\/:*?"<>|]+/g, "-");
+  const baseName = watermark ? `PO-${safePo}-draft.pdf` : `PO-${safePo}.pdf`;
+  const result = await downloadPurchaseOrderPdf(input, baseName, {
+    watermark,
+    asBase64: true,
+  });
+  if (!result?.base64) {
+    throw new Error("Failed to generate Purchase Order PDF");
+  }
+  return { filename: result.filename, base64: result.base64 };
 }

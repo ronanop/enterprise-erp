@@ -263,10 +263,10 @@ class UserService:
             if row is None or row.is_deleted:
                 return
             mail = OrgAccessEmailService(self._repo.db)
-            module_label = (
-                "All modules"
+            mail_keys = (
+                ["*"]
                 if len(newly_granted) >= len(ERP_MODULE_KEYS)
-                else newly_granted[0]
+                else newly_granted
             )
             if first_module:
                 row.password_hash = PasswordHasher.hash_password(DEFAULT_TEMPORARY_PASSWORD)
@@ -279,7 +279,7 @@ class UserService:
                 mail.notify_welcome(
                     tenant_id=tenant_id,
                     user=row,
-                    module_key=module_label if module_label != "All modules" else "*",
+                    module_keys=mail_keys,
                     role=MODULE_ROLE_ADMIN,
                     temporary_password=DEFAULT_TEMPORARY_PASSWORD,
                     created_by=actor_id,
@@ -288,7 +288,7 @@ class UserService:
                 mail.notify_module_assigned(
                     tenant_id=tenant_id,
                     user=row,
-                    module_key=module_label if module_label != "All modules" else "*",
+                    module_keys=mail_keys,
                     role=MODULE_ROLE_ADMIN,
                     created_by=actor_id,
                 )
@@ -298,11 +298,24 @@ class UserService:
     def list_users(self, tenant_id: UUID):
         # Keep Organization "Module users" in sync with Asset domain memberships.
         from modules.asset.service.domain_membership_service import DomainMembershipService
+        from modules.foundation.domain.erp_modules import ASSET_SUBMODULE_KEYS
+        from modules.foundation.models.security import SecUserModule
+        from sqlalchemy import select
 
-        synced = DomainMembershipService(self._modules.db).sync_all_active_to_org_modules(
-            tenant_id
+        domains = DomainMembershipService(self._modules.db)
+        synced = domains.sync_all_active_to_org_modules(tenant_id)
+        # Demote leftover parent ``assets`` admin when only IT or Non-IT is assigned.
+        submodule_user_ids = set(
+            self._modules.db.scalars(
+                select(SecUserModule.user_id).where(
+                    SecUserModule.tenant_id == tenant_id,
+                    SecUserModule.module_key.in_(tuple(ASSET_SUBMODULE_KEYS)),
+                )
+            ).all()
         )
-        if synced:
+        for uid in submodule_user_ids:
+            domains.reconcile_parent_asset_assignment(tenant_id, uid)
+        if synced or submodule_user_ids:
             self._modules.db.commit()
         return self._repo.list_users(tenant_id)
 

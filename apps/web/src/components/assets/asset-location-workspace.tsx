@@ -30,6 +30,7 @@ import {
   assetLocationService,
 } from "@/services/assets-service";
 import { ApiClientError, resourceService } from "@/services/api-client";
+import { formatDropdownLabel } from "@/components/assets/shared/format-dropdown-label";
 
 type AssetRow = {
   id: string;
@@ -324,7 +325,7 @@ export function AssetLocationWorkspace() {
                   </SelectItem>
                   {STATUS_OPTIONS.filter(Boolean).map((status) => (
                     <SelectItem key={status} value={status} className="cursor-pointer">
-                      {status}
+                      {formatDropdownLabel(status)}
                     </SelectItem>
                   ))}
                 </SelectContent>

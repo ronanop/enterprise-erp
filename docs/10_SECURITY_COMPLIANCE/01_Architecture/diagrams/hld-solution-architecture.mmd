@@ -1,0 +1,73 @@
+%%{init: {"theme": "base", "themeVariables": {"fontFamily": "Segoe UI, Arial, sans-serif", "fontSize": "14px", "primaryColor": "#e2e8f0", "primaryTextColor": "#0f172a", "primaryBorderColor": "#1e3a5f", "lineColor": "#334155", "secondaryColor": "#f1f5f9", "tertiaryColor": "#ffffff"}}}%%
+flowchart TB
+  subgraph USERS["Users"]
+    OFFICE["Office users<br/>Corporate LAN"]
+    REMOTE["Remote users<br/>VPN required"]
+  end
+
+  subgraph ACCESS["Access path"]
+    VPN["Cache Digitech VPN<br/>concentrator"]
+    LAN["Premises LAN / VLANs"]
+  end
+
+  subgraph EDGE["Edge on premises server"]
+    RP["Internal reverse proxy / nginx<br/>TLS termination"]
+  end
+
+  subgraph APP["Application tier — Cache Digitech internal server<br/>Docker Compose · all FE + BE on-prem"]
+    WEB["Admin Web · Next.js<br/>:3000"]
+    ESS["Employee ESS · Next.js<br/>:3001"]
+    API["FastAPI modular monolith<br/>/api/v1 · Auth · RBAC · Tenant"]
+    PLAT["Platform seams<br/>Ports · Outbox · Notify · Audit<br/>Numbering · Encryption"]
+    WRK["Celery Workers"]
+    BEAT["Celery Beat"]
+  end
+
+  subgraph DATA["Data tier — same premises / internal server"]
+    PG[("PostgreSQL<br/>on-prem OLTP")]
+    RD[("Redis<br/>cache · sessions")]
+    RMQ[["RabbitMQ"]]
+    MIN[("MinIO<br/>object storage")]
+  end
+
+  subgraph SEC["Security controls"]
+    AUTH["JWT HttpOnly cookies<br/>bcrypt · TOTP MFA · lockout"]
+    ENC["Fernet field encryption<br/>ClamAV on upload"]
+  end
+
+  OFFICE --> LAN
+  REMOTE --> VPN
+  VPN --> LAN
+  LAN --> RP
+  RP --> WEB
+  RP --> ESS
+  RP --> API
+  WEB --> API
+  ESS --> API
+  API --> PLAT
+  API --> AUTH
+  API --> ENC
+  API --> PG
+  API --> RD
+  API --> MIN
+  API --> RMQ
+  PLAT --> WRK
+  BEAT --> RMQ
+  WRK --> RMQ
+  WRK --> PG
+  WRK --> RD
+  WRK --> MIN
+
+  classDef user fill:#ecfdf5,stroke:#059669,stroke-width:1.5px,color:#064e3b
+  classDef access fill:#eff6ff,stroke:#1d4ed8,stroke-width:1.5px,color:#1e3a8a
+  classDef edge fill:#e0e7ff,stroke:#4338ca,stroke-width:1.5px,color:#312e81
+  classDef app fill:#f8fafc,stroke:#1e3a5f,stroke-width:1.5px,color:#0f172a
+  classDef data fill:#fff7ed,stroke:#c2410c,stroke-width:1.5px,color:#7c2d12
+  classDef sec fill:#fef2f2,stroke:#b91c1c,stroke-width:1.5px,color:#7f1d1d
+
+  class OFFICE,REMOTE user
+  class VPN,LAN access
+  class RP edge
+  class WEB,ESS,API,PLAT,WRK,BEAT app
+  class PG,RD,RMQ,MIN data
+  class AUTH,ENC sec

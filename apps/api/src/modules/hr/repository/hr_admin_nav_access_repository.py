@@ -70,6 +70,7 @@ class HrAdminNavAccessRepository:
         nav_keys: list[str],
         actor_id: UUID | None,
     ) -> HrAdminNavAccess:
+        now = datetime.now(timezone.utc)
         row = self.get_including_deleted(tenant_id, user_id)
         if row is None:
             row = HrAdminNavAccess(
@@ -78,6 +79,8 @@ class HrAdminNavAccessRepository:
                 nav_keys=nav_keys,
                 created_by=actor_id,
                 updated_by=actor_id,
+                created_at=now,
+                updated_at=now,
             )
             self._db.add(row)
             return row
@@ -86,6 +89,7 @@ class HrAdminNavAccessRepository:
         row.deleted_at = None
         row.deleted_by = None
         row.updated_by = actor_id
+        row.updated_at = now
         row.version = int(row.version or 1) + 1
         return row
 

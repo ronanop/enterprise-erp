@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundException, ValidationException
+from core.logging import get_logger
 from modules.foundation.domain.value_objects import TenantContext
 from modules.payroll.domain.exceptions import InvalidSalaryStructureState
 from modules.payroll.domain.salary_structure_calculator import compute_ctc_split
@@ -16,6 +17,8 @@ from modules.payroll.repository.salary_structure_repository import SalaryStructu
 from modules.payroll.service.engines import SalaryStructureEngine
 from modules.payroll.service.payroll_scope_validator import PayrollScopeValidator
 from modules.platform.compat.audit_facade import PlatformAuditFacade
+
+logger = get_logger(__name__)
 
 _SPLIT_INPUTS = (
     "gross_ctc",
@@ -64,7 +67,7 @@ class SalaryStructureService:
         self._audit = PlatformAuditFacade(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
-        cid = self._scope.resolve_list_company_id(ctx, company_id)
+        cid = self._scope.resolve_company_id(ctx, company_id)
         return self._repo.list_rows(ctx, cid)
 
     def get(self, ctx: TenantContext, row_id: UUID) -> PaySalaryStructure:
@@ -85,13 +88,17 @@ class SalaryStructureService:
         fields.setdefault("status", "draft")
         fields = _apply_ctc_split(fields)
         row = self._repo.create(ctx, company_id=cid, **fields)
-        self._audit.log_entity_change(
-            tenant_id=ctx.tenant_id,
-            entity_name="pay_salary_structure",
-            entity_id=row.id,
-            operation="create",
-            performed_by=ctx.user_id,
-        )
+        try:
+            self._audit.log_entity_change(
+                tenant_id=ctx.tenant_id,
+                entity_name="pay_salary_structure",
+                entity_id=row.id,
+                operation="create",
+                performed_by=ctx.user_id,
+            )
+        except Exception:
+            # Never fail structure create because audit write failed
+            logger.exception("pay_salary_structure audit create failed id=%s", row.id)
         return row
 
     def update(self, ctx: TenantContext, row_id: UUID, **fields):

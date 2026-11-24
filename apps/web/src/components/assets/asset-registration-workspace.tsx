@@ -33,6 +33,7 @@ import {
 } from "@/services/assets-service";
 import { listItAssetTypes, type ItAssetType } from "@/services/asset-type-service";
 import { ApiClientError, resourceService } from "@/services/api-client";
+import { formatDropdownLabel } from "@/components/assets/shared/format-dropdown-label";
 
 type AssetRow = {
   id: string;
@@ -332,7 +333,7 @@ export function AssetRegistrationWorkspace() {
                   </SelectItem>
                   {STATUS_OPTIONS.filter(Boolean).map((s) => (
                     <SelectItem key={s} value={s} className="cursor-pointer">
-                      {s}
+                      {formatDropdownLabel(s)}
                     </SelectItem>
                   ))}
                 </SelectContent>

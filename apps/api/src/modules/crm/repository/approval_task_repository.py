@@ -73,7 +73,7 @@ class ApprovalTaskRepository(CrmScopedRepository):
         entity_id: UUID,
         action: str | None,
         *,
-        except_id: UUID,
+        except_id: UUID | None = None,
         tenant_wide: bool = False,
     ) -> None:
         if not action:
@@ -83,9 +83,10 @@ class ApprovalTaskRepository(CrmScopedRepository):
             CrmApprovalTask.entity_id == entity_id,
             CrmApprovalTask.action == action,
             CrmApprovalTask.status == "pending",
-            CrmApprovalTask.id != except_id,
             CrmApprovalTask.is_deleted.is_(False),
         )
+        if except_id is not None:
+            stmt = stmt.where(CrmApprovalTask.id != except_id)
         stmt = self._apply_job_scope(stmt, ctx, tenant_wide=tenant_wide)
         for row in self.db.scalars(stmt).all():
             row.status = "cancelled"

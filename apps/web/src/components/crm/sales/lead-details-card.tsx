@@ -2,20 +2,23 @@
 
 import {
   Building2,
+  Handshake,
   MessageSquareText,
   MapPin,
   Package,
   Truck,
   UserPlus,
-  Users,
 } from "lucide-react";
 
 import { CRM_TABLE_HEAD_CELL, CRM_TABLE_HEAD_ROW, CrmSection } from "@/components/crm/crm-ui";
+import { CrmCustomFieldsReadOnly } from "@/components/crm/sales/crm-custom-fields-section";
 import { FinanceField } from "@/components/finance/journals/finance-form-field";
 import {
   LeadPresalesCallSection,
 } from "@/components/crm/sales/lead-presales-call-section";
+import { useCrmSettingsEffective } from "@/hooks/use-crm-settings";
 import { isEventLeadSourceLabel, isMultiTierLeadSourceLabel } from "@/lib/crm/company-lead-sources";
+import { pageSectionVisible } from "@/lib/crm/crm-settings-ui";
 import {
   displayLeadSourcingChannels,
   leadNeedsHardwareSourcing,
@@ -28,6 +31,7 @@ import {
   parseOemPartnerRows,
   type LeadPartnerRow,
 } from "@/lib/crm/lead-partner-rows";
+
 import {
   formatInr,
   fullName,
@@ -142,6 +146,12 @@ export function LeadDetailsCard({
   showPresalesCallGate = false,
   onLeadUpdated,
 }: Props) {
+  const { settings } = useCrmSettingsEffective();
+  const showSummary = pageSectionVisible(settings, "lead_detail", "summary", true);
+  const showPresales = pageSectionVisible(settings, "lead_detail", "presales_call", true);
+  const showBoqSow = pageSectionVisible(settings, "lead_detail", "boq_sow", true);
+  const showActivity = pageSectionVisible(settings, "lead_detail", "activity", true);
+
   const employeeName = (id: string | null | undefined) => {
     if (!id) return "None";
     return employees.find((employee) => employee.id === id)?.label ?? "-";
@@ -165,182 +175,217 @@ export function LeadDetailsCard({
 
   return (
     <div className="space-y-5">
-      {showPresalesCallGate && onLeadUpdated ? (
+      {showPresales && showPresalesCallGate && onLeadUpdated ? (
         <LeadPresalesCallSection lead={lead} onSaved={onLeadUpdated} />
       ) : null}
 
-      <CrmSection title={title} icon={UserPlus}>
-        <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
-          <LeadReadOnlyField label="DR Number" value={textOrDash(lead.dr_number || lead.lead_code)} />
-          <LeadReadOnlyField label="Company" value={companyName} />
-          <LeadReadOnlyField label="Project Title *" value={textOrDash(lead.project_title)} />
+      {showSummary ? (
+        <>
+          <CrmSection title={title} icon={UserPlus}>
+            <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
+              <LeadReadOnlyField label="DR Number" value={textOrDash(lead.dr_number || lead.lead_code)} />
+              <LeadReadOnlyField label="Company" value={companyName} />
+              <LeadReadOnlyField label="Project Title *" value={textOrDash(lead.project_title)} />
 
-          {mergeFullName ? (
-            <LeadReadOnlyField
-              label="Full Name *"
-              value={textOrDash(displayFullName)}
-            />
-          ) : (
-            <>
-              <LeadReadOnlyField label="First Name *" value={textOrDash(lead.first_name)} />
-              <LeadReadOnlyField label="Last Name *" value={textOrDash(lead.last_name)} />
-            </>
-          )}
-
-          <LeadReadOnlyField label="Email *" value={textOrDash(lead.email)} />
-          <LeadReadOnlyField label="Mobile *" value={textOrDash(lead.mobile)} />
-
-          <LeadReadOnlyField label="Designation *" value={textOrDash(lead.designation)} />
-          <LeadReadOnlyField label="Lead Source *" value={leadSourceName(lead.lead_source_id)} />
-          {isMultiTierLeadSourceLabel(leadSourceName(lead.lead_source_id)) ? (
-            <LeadReadOnlyField label="Partner Names *" value={textOrDash(lead.partner_names)} />
-          ) : null}
-          {isEventLeadSourceLabel(leadSourceName(lead.lead_source_id)) ? (
-            <LeadReadOnlyField
-              label="Event *"
-              value={textOrDash(
-                marketingEvents.find((event) => event.id === lead.marketing_event_id)?.label,
+              {mergeFullName ? (
+                <LeadReadOnlyField
+                  label="Full Name *"
+                  value={textOrDash(displayFullName)}
+                />
+              ) : (
+                <>
+                  <LeadReadOnlyField label="First Name *" value={textOrDash(lead.first_name)} />
+                  <LeadReadOnlyField label="Last Name *" value={textOrDash(lead.last_name)} />
+                </>
               )}
-            />
-          ) : null}
 
-          <LeadReadOnlyField label="Product Type *" value={textOrDash(lead.product_type)} />
+              <LeadReadOnlyField label="Email *" value={textOrDash(lead.email)} />
+              <LeadReadOnlyField label="Mobile *" value={textOrDash(lead.mobile)} />
 
-          <LeadReadOnlyField
-            label="Sub Product Category *"
-            value={textOrDash(lead.sub_product_category)}
+              <LeadReadOnlyField label="Designation *" value={textOrDash(lead.designation)} />
+              <LeadReadOnlyField label="Lead Source *" value={leadSourceName(lead.lead_source_id)} />
+              {isMultiTierLeadSourceLabel(leadSourceName(lead.lead_source_id)) ? (
+                <LeadReadOnlyField label="Partner Names *" value={textOrDash(lead.partner_names)} />
+              ) : null}
+              {isEventLeadSourceLabel(leadSourceName(lead.lead_source_id)) ? (
+                <LeadReadOnlyField
+                  label="Event *"
+                  value={textOrDash(
+                    marketingEvents.find((event) => event.id === lead.marketing_event_id)?.label,
+                  )}
+                />
+              ) : null}
+
+              <LeadReadOnlyField label="Product Type *" value={textOrDash(lead.product_type)} />
+
+              <LeadReadOnlyField
+                label="Sub Product Category *"
+                value={textOrDash(lead.sub_product_category)}
+              />
+              <LeadReadOnlyField label="Requirement Type *" value={textOrDash(lead.requirement_type)} />
+
+              <LeadReadOnlyField label="Sub Product" value={textOrDash(lead.sub_product)} />
+              <LeadReadOnlyField label="Purchase Model *" value={textOrDash(lead.purchase_model)} />
+
+              <LeadReadOnlyField
+                label="Engagement Score"
+                value={
+                  lead.engagement_score != null ? `${lead.engagement_score}%` : textOrDash(lead.engagement_score)
+                }
+              />
+
+              {showHardwareSourcing ? (
+                <LeadReadOnlyField
+                  label="Hardware Sourcing Channel *"
+                  value={
+                    sourcingChannels.hardware && sourcingChannels.hardware.length > 0
+                      ? sourcingChannels.hardware.join(", ")
+                      : "-"
+                  }
+                />
+              ) : null}
+              {showServiceSourcing ? (
+                <LeadReadOnlyField
+                  label="Service Sourcing Channel *"
+                  value={textOrDash(sourcingChannels.service)}
+                />
+              ) : null}
+              {!showHardwareSourcing && !showServiceSourcing ? (
+                <LeadReadOnlyField
+                  label="Sourcing Channel"
+                  value={displayLeadSourcingChannels(lead.deal_type, lead.product_type)}
+                />
+              ) : null}
+              <LeadReadOnlyField label="Lead Owner *" value={employeeName(lead.owner_employee_id)} />
+
+              <LeadReadOnlyField
+                label="Expected Order Value *"
+                value={lead.expected_amount != null ? formatInr(lead.expected_amount) : "-"}
+              />
+              <LeadReadOnlyField label="Status" value={formatLeadStatus(lead)} />
+
+              <LeadReadOnlyField
+                label="Expected Closure Date *"
+                value={textOrDash(lead.expected_closure_date)}
+              />
+              <LeadReadOnlyField
+                label="Presales Owner"
+                value={employeeName(lead.presales_owner_id)}
+              />
+            </div>
+          </CrmSection>
+
+          <CrmSection title="Customer Address Information" icon={MapPin}>
+            <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
+              <LeadReadOnlyField label="Street" value={textOrDash(lead.street)} />
+              <LeadReadOnlyField label="City" value={textOrDash(lead.city)} />
+              <LeadReadOnlyField label="State" value={textOrDash(lead.state)} />
+              <LeadReadOnlyField label="Zip Code" value={textOrDash(lead.zip)} />
+              <LeadReadOnlyField label="Country" value={textOrDash(lead.country)} />
+              <LeadReadOnlyField label="GST Number" value={textOrDash(companyGstin)} />
+            </div>
+          </CrmSection>
+
+          <PartnerRowsReadOnly
+            title="OEM Information"
+            icon={Package}
+            nameLabel="OEM Name"
+            rows={parseOemPartnerRows(lead).filter((row) => row.name.trim())}
           />
-          <LeadReadOnlyField label="Requirement Type *" value={textOrDash(lead.requirement_type)} />
 
-          <LeadReadOnlyField label="Sub Product" value={textOrDash(lead.sub_product)} />
-          <LeadReadOnlyField label="Purchase Model *" value={textOrDash(lead.purchase_model)} />
-
-          <LeadReadOnlyField
-            label="Engagement Score"
-            value={
-              lead.engagement_score != null ? `${lead.engagement_score}%` : textOrDash(lead.engagement_score)
-            }
+          <PartnerRowsReadOnly
+            title="Distributor Information"
+            icon={Truck}
+            nameLabel="Distributor Name"
+            rows={parseDistributorPartnerRows(lead).filter((row) => row.name.trim())}
           />
 
-          {showHardwareSourcing ? (
+          <CrmSection title="Sale Type" icon={Handshake}>
+            <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
+              <LeadReadOnlyField
+                label="Sale Type *"
+                value={
+                  (lead.sale_type || "").trim().toLowerCase() === "sell_to"
+                    ? "Sell To"
+                    : (lead.sale_type || "").trim().toLowerCase() === "sell_through"
+                      ? "Sell Through"
+                      : lead.end_customer_name
+                        ? companyName &&
+                          lead.end_customer_name.trim().toLowerCase() ===
+                          companyName.trim().toLowerCase()
+                          ? "Sell To"
+                          : "Sell Through"
+                        : "-"
+                }
+              />
+              {(lead.sale_type || "").trim().toLowerCase() === "sell_to" ||
+                (companyName &&
+                  (lead.end_customer_name || "").trim().toLowerCase() ===
+                  companyName.trim().toLowerCase()) ? (
+                <LeadReadOnlyField label="Account Name" value={textOrDash(companyName)} />
+              ) : (
+                <LeadReadOnlyField
+                  label="End Customer Name *"
+                  value={textOrDash(lead.end_customer_name)}
+                />
+              )}
+            </div>
+          </CrmSection>
+
+          <CrmSection title="Cache Legal Entity" icon={Building2}>
+            <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
+              <LeadReadOnlyField label="Entity Name *" value={textOrDash(lead.entity_name)} />
+              <LeadReadOnlyField label="Entity Email" value={textOrDash(lead.entity_email)} />
+              <LeadReadOnlyField label="Entity Address *" value={textOrDash(lead.entity_address)} />
+              <LeadReadOnlyField label="Organization" value={companyName} />
+              <LeadReadOnlyField label="Entity GST No." value={textOrDash(lead.entity_gst)} />
+              <LeadReadOnlyField
+                label="Entity Contact Number"
+                value={textOrDash(lead.entity_contact)}
+              />
+            </div>
+          </CrmSection>
+        </>
+      ) : null}
+
+      {showBoqSow ? (
+        <CrmSection title="BOQ & SOW Requirements" icon={Package}>
+          <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
             <LeadReadOnlyField
-              label="Hardware Sourcing Channel *"
+              label="BOQ required"
               value={
-                sourcingChannels.hardware && sourcingChannels.hardware.length > 0
-                  ? sourcingChannels.hardware.join(", ")
-                  : "-"
+                lead.requires_boq
+                  ? lead.boq_attached
+                    ? "Yes — attached"
+                    : "Yes — awaiting attachment"
+                  : "No"
               }
             />
-          ) : null}
-          {showServiceSourcing ? (
             <LeadReadOnlyField
-              label="Service Sourcing Channel *"
-              value={textOrDash(sourcingChannels.service)}
+              label="SOW required"
+              value={
+                lead.requires_sow
+                  ? lead.sow_attached
+                    ? "Yes — attached"
+                    : "Yes — awaiting attachment"
+                  : "No"
+              }
             />
-          ) : null}
-          {!showHardwareSourcing && !showServiceSourcing ? (
-            <LeadReadOnlyField
-              label="Sourcing Channel"
-              value={displayLeadSourcingChannels(lead.deal_type, lead.product_type)}
-            />
-          ) : null}
-          <LeadReadOnlyField label="Lead Owner *" value={employeeName(lead.owner_employee_id)} />
-
-          <LeadReadOnlyField
-            label="Expected Order Value *"
-            value={lead.expected_amount != null ? formatInr(lead.expected_amount) : "-"}
-          />
-          <LeadReadOnlyField label="Status" value={formatLeadStatus(lead)} />
-
-          <LeadReadOnlyField
-            label="Expected Closure Date *"
-            value={textOrDash(lead.expected_closure_date)}
-          />
-          <LeadReadOnlyField
-            label="Presales Owner"
-            value={employeeName(lead.presales_owner_id)}
-          />
-        </div>
-      </CrmSection>
-
-      <CrmSection title="Customer Address Information" icon={MapPin}>
-        <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
-          <LeadReadOnlyField label="Street" value={textOrDash(lead.street)} />
-          <LeadReadOnlyField label="City" value={textOrDash(lead.city)} />
-          <LeadReadOnlyField label="State" value={textOrDash(lead.state)} />
-          <LeadReadOnlyField label="Zip Code" value={textOrDash(lead.zip)} />
-          <LeadReadOnlyField label="Country" value={textOrDash(lead.country)} />
-          <LeadReadOnlyField label="GST Number" value={textOrDash(companyGstin)} />
-        </div>
-      </CrmSection>
-
-      <PartnerRowsReadOnly
-        title="OEM Information"
-        icon={Package}
-        nameLabel="OEM Name"
-        rows={parseOemPartnerRows(lead).filter((row) => row.name.trim())}
-      />
-
-      <PartnerRowsReadOnly
-        title="Distributor Information"
-        icon={Truck}
-        nameLabel="Distributor Name"
-        rows={parseDistributorPartnerRows(lead).filter((row) => row.name.trim())}
-      />
-
-      <CrmSection title="End Customer Detail" icon={Users}>
-        <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
-          <LeadReadOnlyField label="End Customer *" value={textOrDash(lead.end_customer_name)} />
-          <LeadReadOnlyField label="Industry" value={textOrDash(lead.industry) || "None"} />
-        </div>
-      </CrmSection>
-
-      <CrmSection title="Cache Legal Entity" icon={Building2}>
-        <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
-          <LeadReadOnlyField label="Entity Name *" value={textOrDash(lead.entity_name)} />
-          <LeadReadOnlyField label="Entity Email" value={textOrDash(lead.entity_email)} />
-          <LeadReadOnlyField label="Entity Address *" value={textOrDash(lead.entity_address)} />
-          <LeadReadOnlyField label="Organization" value={companyName} />
-          <LeadReadOnlyField label="Entity GST No." value={textOrDash(lead.entity_gst)} />
-          <LeadReadOnlyField
-            label="Entity Contact Number"
-            value={textOrDash(lead.entity_contact)}
-          />
-        </div>
-      </CrmSection>
-
-      <CrmSection title="BOQ & SOW Requirements" icon={Package}>
-        <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
-          <LeadReadOnlyField
-            label="BOQ required"
-            value={
-              lead.requires_boq
-                ? lead.boq_attached
-                  ? "Yes — attached"
-                  : "Yes — awaiting attachment"
-                : "No"
-            }
-          />
-          <LeadReadOnlyField
-            label="SOW required"
-            value={
-              lead.requires_sow
-                ? lead.sow_attached
-                  ? "Yes — attached"
-                  : "Yes — awaiting attachment"
-                : "No"
-            }
-          />
-        </div>
-      </CrmSection>
-
-      <CrmSection title="Lead Remarks" icon={MessageSquareText}>
-        <FinanceField label="Remarks">
-          <div className="flex min-h-[96px] w-full rounded-lg border border-input bg-muted/20 px-2.5 py-2 text-sm whitespace-pre-wrap text-foreground">
-            {textOrDash(lead.notes)}
           </div>
-        </FinanceField>
-      </CrmSection>
+        </CrmSection>
+      ) : null}
+
+      <CrmCustomFieldsReadOnly entity="lead" values={lead.custom_fields} />
+
+      {showActivity ? (
+        <CrmSection title="Lead Remarks" icon={MessageSquareText}>
+          <FinanceField label="Remarks">
+            <div className="flex min-h-[96px] w-full rounded-lg border border-input bg-muted/20 px-2.5 py-2 text-sm whitespace-pre-wrap text-foreground">
+              {textOrDash(lead.notes)}
+            </div>
+          </FinanceField>
+        </CrmSection>
+      ) : null}
     </div>
   );
 }

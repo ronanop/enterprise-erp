@@ -7,6 +7,8 @@ from __future__ import annotations
 APPROVAL_STEP_CATALOG: dict[str, tuple[str, str, tuple[str, ...]]] = {
     "boq_attachment": ("BOQ attachment", "presales", ()),
     "sow_attachment": ("SOW attachment", "presales", ()),
+    "boq_approval": ("BOQ approval", "presales", ()),
+    "sow_approval": ("SOW approval", "presales", ()),
     "cloud_discount": ("Cloud discount", "management", ()),
     "quote_send_for_approval": (
         "Quote — Send for approval",
@@ -25,6 +27,11 @@ APPROVAL_STEP_CATALOG: dict[str, tuple[str, str, tuple[str, ...]]] = {
     "ovf_provide_supporting_items": (
         "OVF — Provide supporting items",
         "project",
+        (),
+    ),
+    "ovf_price_supporting_items": (
+        "OVF — Price supporting items",
+        "scm",
         (),
     ),
     "ovf_provide_service_visits": (
@@ -48,6 +55,10 @@ ACTION_TO_STEP_KEY: dict[str, str] = {
     "send_cloud_discount_approval": "cloud_discount",
     "send_boq_for_attachment": "boq_attachment",
     "send_sow_for_attachment": "sow_attachment",
+    "send_boq_approval": "boq_approval",
+    "send_sow_approval": "sow_approval",
+    "approve_boq": "boq_approval",
+    "approve_sow": "sow_approval",
 }
 
 PINNED_STEP_KEYS = frozenset(

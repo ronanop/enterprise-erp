@@ -117,6 +117,25 @@ def _grant(conn, now, tenant_id, role_id, perm_id):
     )
 
 
+def _resolve_perm_id(conn, now, perm_ids: dict[str, str], perm_code: str) -> str | None:
+    if perm_code in perm_ids:
+        return perm_ids[perm_code]
+    existing = conn.execute(
+        sa.text("SELECT id FROM foundation.sec_permission WHERE permission_code = :code"),
+        {"code": perm_code},
+    ).first()
+    if existing:
+        perm_ids[perm_code] = str(existing[0])
+        return perm_ids[perm_code]
+    # Cross-module grants (e.g. master.employee:read) may not be in ASSET_PERMISSIONS.
+    resource, _, action = perm_code.partition(":")
+    module = resource.split(".", 1)[0] if resource else "asset"
+    perm_ids[perm_code] = _ensure_permission(
+        conn, now, perm_code, resource or perm_code, action or "read", module
+    )
+    return perm_ids[perm_code]
+
+
 def upgrade() -> None:
     conn = op.get_bind()
     now = datetime.now(timezone.utc)
@@ -131,7 +150,9 @@ def upgrade() -> None:
         for role_code, role_name, perms in ROLE_SPECS:
             role_id = _ensure_role(conn, now, tid, role_code, role_name)
             for perm_code in perms:
-                _grant(conn, now, tid, role_id, perm_ids[perm_code])
+                perm_id = _resolve_perm_id(conn, now, perm_ids, perm_code)
+                if perm_id:
+                    _grant(conn, now, tid, role_id, perm_id)
 
 
 def downgrade() -> None:

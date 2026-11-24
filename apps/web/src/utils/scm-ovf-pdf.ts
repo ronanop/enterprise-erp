@@ -12,6 +12,10 @@ import {
   loadLetterheadLogos,
   pdfImageFormat,
 } from "@/utils/pdf-letterhead";
+import {
+  deriveScmOvfQueueStatus,
+  type ScmOvfQueueStatus,
+} from "@/utils/scm-queue-ovf-status";
 
 const MARGIN = 12;
 const PAGE_W = 210;
@@ -19,24 +23,27 @@ const PAGE_H = 297;
 const CONTENT_W = PAGE_W - MARGIN * 2;
 const FOOTER_Y = PAGE_H - MARGIN;
 
-type ScmOvfQueueStatus = "open" | "close" | "hold" | "draft";
-
 function deriveQueueStatus(preview: ScmOvfPreview): ScmOvfQueueStatus {
-  const poStatus = (preview.purchase_order_status || "").toLowerCase();
-  if (poStatus === "draft" && preview.purchase_order_id && !preview.can_create_po) {
-    return "draft";
-  }
-  if (preview.scm_on_hold || poStatus === "hold" || poStatus === "cancelled") return "hold";
-  if (!preview.purchase_order_id || preview.can_create_po) return "open";
-  if (poStatus === "submitted" || poStatus === "") return "open";
-  return "close";
+  return deriveScmOvfQueueStatus(preview);
 }
 
 function queueStatusLabel(status: ScmOvfQueueStatus): string {
-  if (status === "open") return "Open";
-  if (status === "close") return "Close";
-  if (status === "draft") return "Draft";
-  return "Hold";
+  switch (status) {
+    case "open":
+      return "Open";
+    case "partial":
+      return "Partial";
+    case "close":
+      return "Close";
+    case "draft":
+      return "Draft";
+    case "hold":
+      return "Hold";
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
+  }
 }
 
 function wrap(doc: jsPDF, text: string, maxWidth: number): string[] {
@@ -271,10 +278,33 @@ function drawLineTable(
   return y + footH + 6;
 }
 
+function ovfPdfFileName(preview: ScmOvfPreview, fileName?: string): string {
+  return (
+    fileName ||
+    `OVF-${(preview.ovf_no || preview.ovf_id).replace(/[^\w.-]+/g, "_")}.pdf`
+  );
+}
+
+/** Build the same OVF PDF used by View OVF → Download PDF (as a Blob for upload). */
+export async function buildScmOvfPdfBlob(
+  preview: ScmOvfPreview,
+  fileName?: string,
+): Promise<{ blob: Blob; fileName: string }> {
+  const doc = await renderScmOvfPdfDocument(preview);
+  const safeName = ovfPdfFileName(preview, fileName);
+  const blob = doc.output("blob");
+  return { blob, fileName: safeName };
+}
+
 export async function downloadScmOvfPdf(
   preview: ScmOvfPreview,
   fileName?: string,
 ): Promise<void> {
+  const doc = await renderScmOvfPdfDocument(preview);
+  doc.save(ovfPdfFileName(preview, fileName));
+}
+
+async function renderScmOvfPdfDocument(preview: ScmOvfPreview): Promise<jsPDF> {
   const { cache: cacheLogo, womenOwned: womenLogo } = await loadLetterheadLogos();
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   let y = MARGIN;
@@ -419,8 +449,5 @@ export async function downloadScmOvfPdf(
     { label: "Finance %", value: pct(preview.finance_cost_pct) },
   ]);
 
-  const safeName =
-    fileName ||
-    `OVF-${(preview.ovf_no || preview.ovf_id).replace(/[^\w.-]+/g, "_")}.pdf`;
-  doc.save(safeName);
+  return doc;
 }

@@ -8,7 +8,12 @@ from uuid import UUID, uuid4
 from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session, load_only
 
-from core.exceptions import ConflictException, NotFoundException, ValidationException
+from core.exceptions import (
+    ConflictException,
+    ForbiddenException,
+    NotFoundException,
+    ValidationException,
+)
 from modules.crm.service.ovf_service import resolve_scm_hold_started_at
 from modules.foundation.domain.enums import WorkflowStatus
 from modules.foundation.domain.value_objects import TenantContext
@@ -19,8 +24,14 @@ from modules.procurement.adapters.master_data_adapter import (
     ProcurementMasterDataAdapter,
     scm_line_product_code,
 )
+from modules.crm.domain.lead_sourcing_channels import (
+    SERVICE_CHANNEL_CACHE,
+    normalize_service_sourcing_channel,
+)
+from modules.procurement.domain.approval_step_owners import APPROVAL_STEP_CATALOG, STAGE_TO_STEP_KEY
 from modules.procurement.domain.enums import OrderStatus
 from modules.procurement.domain.exceptions import InvalidDocumentState
+from modules.procurement.domain.service_po import ORDER_KIND_PRODUCT
 from modules.procurement.models.inventory_adjustment import ProcInventoryStockAdjustment
 from modules.procurement.models.inventory_import import ProcInventoryImportLine
 from modules.procurement.models.inventory_stock import ProcInventoryStockUnit
@@ -32,9 +43,13 @@ from modules.procurement.models.receipt_batch import (
 )
 from modules.procurement.repository.base import ProcScopedRepository, utcnow
 from modules.procurement.repository.order_repository import OrderRepository
+from modules.procurement.service.approval_step_owner_service import ProcApprovalStepOwnerService
 from modules.procurement.service.company_po_number_service import (
     normalize_entity_code,
     peek_next_company_po_number,
+)
+from modules.procurement.service.invoice_generation_task_service import (
+    ProcInvoiceGenerationTaskService,
 )
 from modules.procurement.service.engines.receipt_reversal import (
     assert_batch_reversible,
@@ -106,6 +121,7 @@ class ScmHandoffService:
         self._scope = ProcurementScopeValidator(db)
         self._audit = PlatformAuditFacade(db)
         self._users = UserRepository(db)
+        self._approvers = ProcApprovalStepOwnerService(db)
 
     def _resolve_user_names(
         self, tenant_id: UUID, user_ids: set[UUID]
@@ -416,6 +432,28 @@ class ScmHandoffService:
             or getattr(vendor, "display_name", None)
         )
 
+    @staticmethod
+    def _order_total_qty(order) -> float:
+        total = 0.0
+        for ln in getattr(order, "lines", None) or []:
+            if getattr(ln, "is_deleted", False):
+                continue
+            total += float(getattr(ln, "quantity", 0) or 0)
+        return round(total, 4)
+
+    @classmethod
+    def _required_po_qty(cls, vendor_lines: list) -> float:
+        total = 0.0
+        for ln in vendor_lines or []:
+            if cls._is_in_stock_line(ln):
+                continue
+            total += float(ln.get("qty") or 0)
+        return round(total, 4)
+
+    @staticmethod
+    def _vendor_rejected_order(order) -> bool:
+        return (getattr(order, "fulfillment_stage", None) or "") == "vendor_rejected"
+
     def _serialize_linked_pos(self, ctx: TenantContext, orders: list) -> list[dict]:
         out: list[dict] = []
         for order in orders:
@@ -427,6 +465,8 @@ class ScmHandoffService:
                     "document_number": order.document_number,
                     "company_po_number": order.company_po_number,
                     "status": order.status,
+                    "fulfillment_stage": getattr(order, "fulfillment_stage", None),
+                    "total_qty": self._order_total_qty(order),
                 }
             )
         return out
@@ -446,43 +486,66 @@ class ScmHandoffService:
                 grouped[key] = {
                     "distributor_name": (ln.get("distributor_name") or "").strip() or None,
                     "line_count": 0,
+                    "required_qty": 0.0,
+                    "ordered_qty": 0.0,
                     "has_po": False,
                     "purchase_order_id": None,
                 }
             grouped[key]["line_count"] += 1
+            grouped[key]["required_qty"] = round(
+                float(grouped[key]["required_qty"]) + float(ln.get("qty") or 0),
+                4,
+            )
 
         unused = list(orders)
-        for key, group in grouped.items():
-            needle = " ".join(str(group["distributor_name"] or "").strip().lower().split())
-            match_idx = None
-            for idx, order in enumerate(unused):
-                name = " ".join(
-                    str(self._vendor_display_name(ctx, order.vendor_id) or "").strip().lower().split()
-                )
-                if needle and name and (needle == name or needle in name or name in needle):
-                    match_idx = idx
-                    break
-                if key == "__unassigned__" or needle in {"", "vendor", "unassigned"}:
-                    match_idx = idx
-                    break
-            if match_idx is not None:
-                order = unused.pop(match_idx)
-                group["has_po"] = True
+
+        def _attach_order(group: dict, order) -> None:
+            qty = self._order_total_qty(order)
+            ordered = round(float(group.get("ordered_qty") or 0) + qty, 4)
+            group["ordered_qty"] = ordered
+            # Fully covered only when ordered qty meets required demand.
+            # A partial Create PO must keep the group open for remainder rows.
+            required = float(group.get("required_qty") or 0)
+            if required <= 1e-9:
+                group["has_po"] = ordered > 0
+            else:
+                group["has_po"] = ordered + 1e-9 >= required
+            if not group.get("purchase_order_id"):
                 group["purchase_order_id"] = order.id
                 group["document_number"] = order.document_number
                 group["company_po_number"] = order.company_po_number
                 group["status"] = order.status
-        # Any leftover POs cover remaining unmatched distributor groups so a
-        # created PO cannot leave the OVF stuck Open due to name mismatch.
+
+        for key, group in grouped.items():
+            needle = " ".join(str(group["distributor_name"] or "").strip().lower().split())
+            # Attach every matching vendor PO (supports multiple partial POs).
+            still_unused: list = []
+            for order in unused:
+                if self._vendor_rejected_order(order):
+                    continue
+                name = " ".join(
+                    str(self._vendor_display_name(ctx, order.vendor_id) or "").strip().lower().split()
+                )
+                matched = False
+                if needle and name and (needle == name or needle in name or name in needle):
+                    matched = True
+                elif key == "__unassigned__" or needle in {"", "vendor", "unassigned"}:
+                    matched = True
+                if matched:
+                    _attach_order(group, order)
+                else:
+                    still_unused.append(order)
+            unused = still_unused
+        # Leftover POs (name mismatch) still count toward unmatched groups' ordered qty.
         for group in grouped.values():
             if group.get("has_po") or not unused:
                 continue
+            while unused and self._vendor_rejected_order(unused[0]):
+                unused.pop(0)
+            if not unused:
+                continue
             order = unused.pop(0)
-            group["has_po"] = True
-            group["purchase_order_id"] = order.id
-            group["document_number"] = order.document_number
-            group["company_po_number"] = order.company_po_number
-            group["status"] = order.status
+            _attach_order(group, order)
         return list(grouped.values())
 
     def _open_distributor_names(self, groups: list[dict]) -> list[str]:
@@ -510,6 +573,7 @@ class ScmHandoffService:
                     .upper()
                     or "INR",
                     "tax_rate": float(ln.get("tax_rate") or 0),
+                    "description": str(ln.get("description") or "").strip() or None,
                 }
                 for ln in lines
                 if str(ln.get("product_name") or "").strip()
@@ -735,20 +799,37 @@ class ScmHandoffService:
                 allocations=alloc_map.get(ovf.id, []),
             )
             remaining_demand = float(stock["remaining_demand_qty"] or 0)
-            po_groups = self._ovf_po_groups(ctx, handoff.get("vendor_lines") or [], existing_orders)
+            vendor_lines = handoff.get("vendor_lines") or []
+            required_po_qty = self._required_po_qty(vendor_lines)
+            po_groups = self._ovf_po_groups(ctx, vendor_lines, existing_orders)
             open_distributors = self._open_distributor_names(po_groups)
             has_draft = any(
                 order.status == OrderStatus.DRAFT.value for order in existing_orders
             )
             item_plan = self._item_plan(
-                handoff.get("vendor_lines") or [],
+                vendor_lines,
                 stock["stock_availability"],
             )
             has_plan_actions = any(
                 str(ln.get("action") or "") in {"book_stock", "stock_short", "create_po"}
                 for ln in (item_plan.get("lines") or [])
             )
-            can_create = bool(open_distributors) or has_draft or has_plan_actions
+            ordered_po_qty = round(
+                sum(
+                    self._order_total_qty(order)
+                    for order in existing_orders
+                    if not self._vendor_rejected_order(order)
+                ),
+                4,
+            )
+            # Keep Create PO available while ordered qty is still short of demand.
+            has_remaining_po_qty = required_po_qty > ordered_po_qty + 1e-9
+            can_create = (
+                bool(open_distributors)
+                or has_draft
+                or has_plan_actions
+                or has_remaining_po_qty
+            )
             items.append(
                 {
                     "ovf_id": ovf.id,
@@ -771,7 +852,7 @@ class ScmHandoffService:
                     "oem_name": oem_name,
                     "distributor_name": distributor_name,
                     "project_title": project_title,
-                    "vendor_line_count": len(handoff.get("vendor_lines", [])),
+                    "vendor_line_count": len(vendor_lines),
                     "vendor_qty": vendor_qty,
                     "vendor_total": vendor_total,
                     "customer_total": customer_total,
@@ -807,6 +888,7 @@ class ScmHandoffService:
                     "open_distributor_names": open_distributors,
                     "po_groups": po_groups,
                     "purchase_orders": self._serialize_linked_pos(ctx, existing_orders),
+                    "required_po_qty": required_po_qty,
                     "stock_fulfillment_status": stock["stock_fulfillment_status"],
                     "remaining_demand_qty": remaining_demand,
                     "stock_availability": stock["stock_availability"],
@@ -825,9 +907,85 @@ class ScmHandoffService:
         return items
 
     def hold_ovf(self, ctx: TenantContext, ovf_id: UUID, *, remark: str) -> dict:
-        """Put OVF on Hold without creating a vendor PO (vendor not required)."""
-        self._crm.set_scm_on_hold(ctx, ovf_id, on_hold=True, remark=remark)
+        """Request a hold. The OVF stays open until a Hold approver accepts it."""
+        self._crm.request_scm_hold(ctx, ovf_id, remark=remark)
         return self.get_ovf_preview(ctx, ovf_id)
+
+    def _ensure_can_decide_step(self, ctx: TenantContext, step_key: str, message: str) -> None:
+        if self._approvers.can_decide_step(ctx, step_key):
+            return
+        raise ForbiddenException(message)
+
+    def accept_ovf_hold(self, ctx: TenantContext, ovf_id: UUID) -> dict:
+        self._ensure_can_decide_step(
+            ctx,
+            "hold_decision",
+            "You are not assigned to approve or reject OVF holds",
+        )
+        self._crm.decide_scm_hold(ctx, ovf_id, accept=True)
+        return self.get_ovf_preview(ctx, ovf_id)
+
+    def reject_ovf_hold(self, ctx: TenantContext, ovf_id: UUID) -> dict:
+        self._ensure_can_decide_step(
+            ctx,
+            "hold_decision",
+            "You are not assigned to approve or reject OVF holds",
+        )
+        self._crm.decide_scm_hold(ctx, ovf_id, accept=False)
+        return self.get_ovf_preview(ctx, ovf_id)
+
+    def list_hold_requests(self, ctx: TenantContext) -> list[dict]:
+        rows = self._crm.list_scm_hold_requests(ctx)
+        names = self._resolve_user_names(
+            ctx.tenant_id,
+            {row.scm_hold_requested_by for row in rows if row.scm_hold_requested_by},
+        )
+        payload = []
+        for row in rows:
+            payload.append(
+                {
+                    "id": row.id,
+                    "ovf_id": row.id,
+                    "ovf_no": row.ovf_no,
+                    "customer_name": row.customer_name or row.account_name,
+                    "owner_name": row.owner_name,
+                    "status": row.scm_hold_request_status,
+                    "remark": row.scm_hold_request_remark,
+                    "requested_at": row.scm_hold_requested_at,
+                    "requested_by_name": names.get(row.scm_hold_requested_by)
+                    if row.scm_hold_requested_by
+                    else None,
+                }
+            )
+        payload.sort(key=lambda item: str(item.get("requested_at") or ""), reverse=True)
+        return payload
+
+    def list_charge_requests(self, ctx: TenantContext) -> list[dict]:
+        rows = self._crm.list_scm_charge_requests(ctx)
+        names = self._resolve_user_names(
+            ctx.tenant_id,
+            {row.scm_charge_requested_by for row in rows if row.scm_charge_requested_by},
+        )
+        payload = []
+        for row in rows:
+            payload.append(
+                {
+                    "id": row.id,
+                    "ovf_id": row.id,
+                    "ovf_no": row.ovf_no,
+                    "customer_name": row.customer_name or row.account_name,
+                    "owner_name": row.owner_name,
+                    "status": row.scm_charge_request_status,
+                    "freight": float(row.scm_charge_request_freight or 0),
+                    "finance_cost_pct": float(row.scm_charge_request_finance_pct or 0),
+                    "requested_at": row.scm_charge_requested_at,
+                    "requested_by_name": names.get(row.scm_charge_requested_by)
+                    if row.scm_charge_requested_by
+                    else None,
+                }
+            )
+        payload.sort(key=lambda item: str(item.get("requested_at") or ""), reverse=True)
+        return payload
 
     def release_ovf_hold(self, ctx: TenantContext, ovf_id: UUID) -> dict:
         """Remove SCM hold without creating a PO (one-time hold cycle)."""
@@ -843,7 +1001,7 @@ class ScmHandoffService:
         additional_charges: float = 0,
         finance_cost_pct: float = 0,
     ) -> dict:
-        """SCM edits freight / finance on the shared OVF; Sales sees the same CRM fields."""
+        """Queue freight / finance. Live CRM values change only after an approver accepts."""
         existing = self._orders.find_by_source(
             ctx,
             source_module=self.SOURCE_MODULE,
@@ -854,13 +1012,30 @@ class ScmHandoffService:
             raise ConflictException(
                 "Freight and finance cannot be changed after a vendor purchase order is created"
             )
-        self._crm.update_scm_charges(
+        self._crm.request_scm_charge_change(
             ctx,
             ovf_id,
             freight=freight,
-            additional_charges=additional_charges,
             finance_cost_pct=finance_cost_pct,
         )
+        return self.get_ovf_preview(ctx, ovf_id)
+
+    def accept_ovf_charges(self, ctx: TenantContext, ovf_id: UUID) -> dict:
+        self._ensure_can_decide_step(
+            ctx,
+            "freight_finance",
+            "You are not assigned to approve freight and finance changes",
+        )
+        self._crm.decide_scm_charge_change(ctx, ovf_id, accept=True)
+        return self.get_ovf_preview(ctx, ovf_id)
+
+    def reject_ovf_charges(self, ctx: TenantContext, ovf_id: UUID) -> dict:
+        self._ensure_can_decide_step(
+            ctx,
+            "freight_finance",
+            "You are not assigned to approve freight and finance changes",
+        )
+        self._crm.decide_scm_charge_change(ctx, ovf_id, accept=False)
         return self.get_ovf_preview(ctx, ovf_id)
 
     def update_item_plan_vendor(
@@ -896,8 +1071,18 @@ class ScmHandoffService:
             allocations=allocations,
         )
         remaining_demand = float(stock["remaining_demand_qty"] or 0)
-        po_groups = self._ovf_po_groups(ctx, handoff.get("vendor_lines") or [], existing_orders)
+        vendor_lines = handoff.get("vendor_lines") or []
+        required_po_qty = self._required_po_qty(vendor_lines)
+        po_groups = self._ovf_po_groups(ctx, vendor_lines, existing_orders)
         open_distributors = self._open_distributor_names(po_groups)
+        ordered_po_qty = round(
+            sum(
+                self._order_total_qty(order)
+                for order in existing_orders
+                if not self._vendor_rejected_order(order)
+            ),
+            4,
+        )
         handoff["purchase_order_id"] = existing.id if existing else None
         handoff["purchase_order_number"] = (
             None if is_cancelled else (existing.document_number if existing else None)
@@ -932,17 +1117,22 @@ class ScmHandoffService:
         handoff["open_distributor_names"] = open_distributors
         handoff["po_groups"] = po_groups
         handoff["purchase_orders"] = self._serialize_linked_pos(ctx, existing_orders)
+        handoff["required_po_qty"] = required_po_qty
         handoff["item_plan"] = self._item_plan(
-            handoff.get("vendor_lines") or [],
+            vendor_lines,
             stock["stock_availability"],
         )
         has_plan_actions = any(
             str(ln.get("action") or "") in {"book_stock", "stock_short", "create_po"}
             for ln in (handoff["item_plan"].get("lines") or [])
         )
-        handoff["can_create_po"] = bool(open_distributors) or (
-            existing is not None and existing.status == OrderStatus.DRAFT.value
-        ) or has_plan_actions
+        has_remaining_po_qty = required_po_qty > ordered_po_qty + 1e-9
+        handoff["can_create_po"] = (
+            bool(open_distributors)
+            or (existing is not None and existing.status == OrderStatus.DRAFT.value)
+            or has_plan_actions
+            or has_remaining_po_qty
+        )
         return handoff
 
     def fulfill_ovf_from_stock(
@@ -1261,6 +1451,16 @@ class ScmHandoffService:
             unit.updated_at = now
         return len(units)
 
+    def consume_inventory_stock_units_for_document(
+        self,
+        ctx: TenantContext,
+        stock_unit_ids: list[UUID],
+        company_id: UUID | None = None,
+    ) -> int:
+        """Public entry: remove GRN warehouse units after billing / DC selection."""
+        cid = self._scope.resolve_company_id(ctx, company_id)
+        return self._consume_inventory_stock_units(ctx, cid, stock_unit_ids)
+
     def _consume_inventory_import_lines(
         self,
         ctx: TenantContext,
@@ -1328,12 +1528,14 @@ class ScmHandoffService:
                 raise ConflictException(
                     f"Vendor line '{product_name}' needs qty and unit cost > 0"
                 )
+            description = str(line.get("description") or "").strip() or None
             payloads.append(
                 {
                     "line_number": idx,
                     "product_id": product.id,
                     "product_code": scm_line_product_code(product),
                     "product_name": product_name[:255],
+                    "description": description[:4000] if description else None,
                     "quantity": qty,
                     "uom_id": getattr(product, "uom_id", None) or uom_id,
                     "unit_cost": unit_cost,
@@ -1359,6 +1561,7 @@ class ScmHandoffService:
         hold: bool = False,
         lines: list[dict] | None = None,
         distributor_name: str | None = None,
+        force_new: bool = False,
     ) -> ProcOrderHeader:
         if finalize and hold:
             raise ConflictException("Cannot finalize and hold a purchase order at the same time")
@@ -1367,26 +1570,27 @@ class ScmHandoffService:
                 "PO finalization requires approval. Create the PO as a draft and have an administrator issue it from Approval."
             )
         handoff = self._crm.get_handoff(ctx, ovf_id)
+        self._assert_ovf_allows_product_po(ctx, handoff)
         linked = self._orders.list_by_source(
             ctx,
             source_module=self.SOURCE_MODULE,
             source_document_type=self.SOURCE_DOC_TYPE,
             source_document_id=ovf_id,
         )
-        existing = next(
-            (
-                row
-                for row in linked
-                if row.vendor_id == vendor_id and row.status != OrderStatus.CANCELLED.value
-            ),
-            None,
-        )
+        # Reuse only an open draft for this vendor. Issued/finalized POs do not block
+        # another draft. force_new skips reuse (partial qty / remainder from item plan).
+        existing = None
+        if not force_new:
+            existing = next(
+                (
+                    row
+                    for row in linked
+                    if row.vendor_id == vendor_id and row.status == OrderStatus.DRAFT.value
+                ),
+                None,
+            )
         order_ref = (order_ref_cache or "").strip() or None
-        if existing is not None and existing.status != OrderStatus.CANCELLED.value:
-            if existing.status != OrderStatus.DRAFT.value:
-                raise ConflictException(
-                    f"Vendor PO already exists for this distributor ({existing.document_number})"
-                )
+        if existing is not None:
             # Re-edit draft (e.g. after approval reject) - reassign company PO when entity changes.
             code = normalize_entity_code(entity_code)
             self._master.get_vendor(ctx, vendor_id)
@@ -1466,7 +1670,9 @@ class ScmHandoffService:
                     raise ConflictException("Failed to put purchase order on hold")
                 order = held
             elif finalize:
-                order = self.finalize_scm_po(ctx, order.id, order=order)
+                order = self.finalize_scm_po(
+                    ctx, order.id, order=order, require_management_stage=False
+                )
 
             self._audit.log_entity_change(
                 tenant_id=ctx.tenant_id,
@@ -1557,7 +1763,9 @@ class ScmHandoffService:
                 raise ConflictException("Failed to put purchase order on hold")
             order = updated
         elif finalize:
-            order = self.finalize_scm_po(ctx, order.id, order=order)
+            order = self.finalize_scm_po(
+                ctx, order.id, order=order, require_management_stage=False
+            )
 
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
@@ -1580,6 +1788,37 @@ class ScmHandoffService:
         return (
             getattr(order, "source_module", None) == self.SOURCE_MODULE
             and getattr(order, "source_document_type", None) == self.SOURCE_DOC_TYPE
+        )
+
+    def _sales_pack_linked_to_service_po(
+        self,
+        ctx: TenantContext,
+        *,
+        entity_type: str,
+        entity_id: UUID,
+    ) -> bool:
+        """True when a CRM service PO references this opportunity (or its quote)."""
+        from modules.crm.models.quote import CrmQuote
+        from modules.procurement.domain.service_po import SOURCE_DOC_TYPE_OPPORTUNITY_SERVICE
+
+        opportunity_id: UUID | None = None
+        if entity_type == "opportunity":
+            opportunity_id = entity_id
+        elif entity_type == "quote":
+            quote = self._db.get(CrmQuote, entity_id)
+            if quote is not None and not getattr(quote, "is_deleted", False):
+                opportunity_id = quote.opportunity_id
+        if opportunity_id is None:
+            return False
+        linked = self._orders.list_by_source(
+            ctx,
+            source_module=self.SOURCE_MODULE,
+            source_document_type=SOURCE_DOC_TYPE_OPPORTUNITY_SERVICE,
+            source_document_id=opportunity_id,
+        )
+        return any(
+            row.status != OrderStatus.CANCELLED.value
+            for row in linked
         )
 
     def _negotiation_savings(self, order: ProcOrderHeader) -> float:
@@ -1758,13 +1997,50 @@ class ScmHandoffService:
         )
         return self.negotiation_summary(ctx, order_id)
 
+    def _assert_ovf_allows_product_po(self, ctx: TenantContext, handoff: dict) -> None:
+        """Cache Service deals use Internal Service PO only — no OVF product PO."""
+        opp_id = handoff.get("opportunity_id")
+        if opp_id is None:
+            return
+        brief = self._crm.get_opportunity_brief(ctx, opp_id)
+        if brief is None:
+            return
+        channel = normalize_service_sourcing_channel(
+            brief.get("service_sourcing_channel")
+        )
+        if channel != SERVICE_CHANNEL_CACHE:
+            return
+        raise ConflictException(
+            "This opportunity uses Cache Service sourcing. "
+            "Use the Internal Service purchase order created on Customer PO approval "
+            "— do not create a product PO from OVF."
+        )
+
     def _is_scm_finalizable(self, order: ProcOrderHeader) -> bool:
-        """CRM OVF handoff POs and inventory/manual draft POs share SCM finalize."""
+        """CRM OVF / service POs and inventory/manual draft POs share SCM finalize."""
+        from modules.procurement.domain.service_po import (
+            SERVICE_ORDER_KINDS,
+            SOURCE_DOC_TYPE_OPPORTUNITY_SERVICE,
+        )
+
+        kind = (getattr(order, "order_kind", None) or ORDER_KIND_PRODUCT).strip().lower()
+        if kind in SERVICE_ORDER_KINDS:
+            return True
         module = (getattr(order, "source_module", None) or "").strip().lower()
         doc_type = (getattr(order, "source_document_type", None) or "").strip().lower()
         if module == self.SOURCE_MODULE and doc_type == self.SOURCE_DOC_TYPE:
             return True
+        if module == self.SOURCE_MODULE and doc_type == SOURCE_DOC_TYPE_OPPORTUNITY_SERVICE:
+            return True
         return module == "procurement" and doc_type == "inventory_initiated"
+
+    def _finalize_requester_user_id(
+        self, order: ProcOrderHeader, *, approval_status: str
+    ):
+        """Who sent the PO for approval (pending: updated_by; else PO creator)."""
+        if approval_status == "pending":
+            return getattr(order, "updated_by", None) or getattr(order, "created_by", None)
+        return getattr(order, "created_by", None) or getattr(order, "updated_by", None)
 
     def _serialize_finalize_approval(
         self,
@@ -1773,10 +2049,19 @@ class ScmHandoffService:
         *,
         approval_status: str,
         customer_name: str | None = None,
+        requested_by_name: str | None = None,
     ) -> dict:
         decided_at = None
         if approval_status in {"accepted", "rejected"}:
             decided_at = getattr(order, "updated_at", None)
+        stage = getattr(order, "scm_approval_stage", None) or None
+        if approval_status == "pending" and not stage:
+            stage = "accept_po"
+        step_key = STAGE_TO_STEP_KEY.get(stage or "")
+        stage_label = APPROVAL_STEP_CATALOG[step_key][0] if step_key else None
+        requested_by_id = self._finalize_requester_user_id(
+            order, approval_status=approval_status
+        )
         return {
             "id": order.id,
             "kind": "finalize",
@@ -1794,18 +2079,196 @@ class ScmHandoffService:
             "decided_at": decided_at,
             "order_status": order.status,
             "workflow_status": getattr(order, "workflow_status", None),
+            "scm_approval_stage": stage if approval_status == "pending" else None,
+            "stage_label": stage_label if approval_status == "pending" else None,
+            "requested_by_id": requested_by_id,
+            "requested_by_name": requested_by_name,
         }
 
+    def _ensure_can_decide_stage(self, ctx: TenantContext, stage: str | None) -> None:
+        if self._approvers.can_decide_stage(ctx, stage):
+            return
+        raise ForbiddenException("You are not assigned to approve this PO stage")
+
+    def _po_label(self, order: ProcOrderHeader) -> str:
+        return (
+            (getattr(order, "company_po_number", None) or "").strip()
+            or (getattr(order, "document_number", None) or "").strip()
+            or "Purchase Order"
+        )
+
+    def _store_po_print_pdf(
+        self,
+        ctx: TenantContext,
+        order: ProcOrderHeader,
+        *,
+        po_pdf_base64: str | None,
+        po_pdf_filename: str | None,
+    ) -> None:
+        content = (po_pdf_base64 or "").strip()
+        if not content:
+            return
+        filename = (po_pdf_filename or "").strip() or f"PO_{self._po_label(order)}.pdf"
+        if not filename.lower().endswith(".pdf"):
+            filename = f"{filename}.pdf"
+        branch_id = getattr(order, "branch_id", None)
+        if branch_id is None:
+            return
+        # Nested transaction so a category/storage failure cannot poison the PO submit.
+        try:
+            with self._db.begin_nested():
+                self.attach_po_document(
+                    ctx,
+                    order.id,
+                    file_name=filename,
+                    content_base64=content,
+                    content_type="application/pdf",
+                    branch_id=branch_id,
+                    company_id=getattr(order, "company_id", None),
+                    category="po_pdf",
+                    remarks="Auto-generated PO print for approval email",
+                )
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _po_print_email_attachments(
+        self,
+        ctx: TenantContext,
+        order_id: UUID,
+        *,
+        po_pdf_base64: str | None = None,
+        po_pdf_filename: str | None = None,
+        exclude_draft: bool = False,
+    ) -> list[dict]:
+        """Prefer freshly supplied PDF, else stored po_pdf / first PO PDF attachment."""
+        import base64
+
+        content = (po_pdf_base64 or "").strip()
+        if content:
+            order = self._order_service.get_order(ctx, order_id)
+            filename = (po_pdf_filename or "").strip() or f"PO_{self._po_label(order)}.pdf"
+            if not filename.lower().endswith(".pdf"):
+                filename = f"{filename}.pdf"
+            if exclude_draft:
+                lowered = filename.lower()
+                if lowered.endswith("-draft.pdf"):
+                    filename = f"{filename[: -len('-draft.pdf')]}.pdf"
+            return [
+                {
+                    "filename": filename,
+                    "content_base64": content,
+                    "content_type": "application/pdf",
+                }
+            ]
+
+        from modules.crm.service.attachment_service import AttachmentService
+
+        attachment_svc = AttachmentService(self._db)
+        rows = ProcurementCrmAdapter(self._db).list_attachments(
+            ctx,
+            entity_filters=[(self.PO_ATTACHMENT_ENTITY, order_id)],
+        )
+        preferred = sorted(
+            rows,
+            key=lambda row: 0 if (row.category or "").lower() == "po_pdf" else 1,
+        )
+        for row in preferred:
+            name = (row.file_name or "").lower()
+            ctype = (row.content_type or "").lower()
+            if "pdf" not in ctype and not name.endswith(".pdf"):
+                continue
+            # Vendor issue mail must never reuse a draft-watermark print.
+            if exclude_draft and "-draft" in name:
+                continue
+            try:
+                download = attachment_svc.resolve_download(ctx, row.id)
+            except Exception:  # noqa: BLE001
+                continue
+            raw = download.content
+            if raw is None and download.path is not None:
+                raw = download.path.read_bytes()
+            if not raw:
+                continue
+            return [
+                {
+                    "filename": row.file_name or "Purchase_Order.pdf",
+                    "content_base64": base64.b64encode(raw).decode("ascii"),
+                    "content_type": row.content_type or "application/pdf",
+                }
+            ]
+        return []
+
+    def _notify_po_step_owners(
+        self,
+        ctx: TenantContext,
+        order: ProcOrderHeader,
+        *,
+        step_key: str,
+        remarks: str | None = None,
+        attachments: list[dict] | None = None,
+        jobs_path: str = "/procurement",
+    ) -> None:
+        owner_ids = self._approvers.list_user_ids(ctx, step_key)
+        if not owner_ids:
+            return
+        label, _team = APPROVAL_STEP_CATALOG.get(step_key, (step_key, "scm"))
+        po_label = self._po_label(order)
+        try:
+            from modules.procurement.service.proc_email_notification_service import (
+                ProcEmailNotificationService,
+            )
+
+            ProcEmailNotificationService(self._db).notify_step_approvers(
+                tenant_id=ctx.tenant_id,
+                recipient_user_ids=owner_ids,
+                approval_type=label,
+                record_title=f"{label} · {po_label}",
+                requested_by=ctx.user_id,
+                remarks=remarks,
+                jobs_path=jobs_path,
+                attachments=attachments or None,
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
     def request_finalize_approval(
-        self, ctx: TenantContext, order_id: UUID
+        self,
+        ctx: TenantContext,
+        order_id: UUID,
+        *,
+        po_pdf_base64: str | None = None,
+        po_pdf_filename: str | None = None,
+        remarks: str | None = None,
     ) -> ProcOrderHeader:
-        """Mark a draft SCM PO as submitted so any admin can see it on Approval."""
+        """Mark a draft SCM PO as submitted for Accept PO (then Management)."""
         order = self._order_service.get_order(ctx, order_id)
         if not self._is_scm_finalizable(order):
             raise InvalidDocumentState(
                 "Only CRM OVF or inventory-initiated POs can request finalize approval"
             )
         if order.status == OrderStatus.SUBMITTED.value:
+            if not getattr(order, "scm_approval_stage", None):
+                order.scm_approval_stage = "accept_po"
+                self._db.flush()
+            self._store_po_print_pdf(
+                ctx,
+                order,
+                po_pdf_base64=po_pdf_base64,
+                po_pdf_filename=po_pdf_filename,
+            )
+            attachments = self._po_print_email_attachments(
+                ctx,
+                order_id,
+                po_pdf_base64=po_pdf_base64,
+                po_pdf_filename=po_pdf_filename,
+            )
+            self._notify_po_step_owners(
+                ctx,
+                order,
+                step_key="accept_po",
+                remarks=remarks,
+                attachments=attachments,
+            )
             return order
         if order.status != OrderStatus.DRAFT.value:
             raise InvalidDocumentState("Only draft SCM POs can be sent for admin approval")
@@ -1824,6 +2287,59 @@ class ScmHandoffService:
                 )
         order.status = OrderStatus.SUBMITTED.value
         order.workflow_status = WorkflowStatus.IN_PROGRESS.value
+        order.scm_approval_stage = "accept_po"
+        order.updated_at = utcnow()
+        order.updated_by = ctx.user_id
+        order.version = int(getattr(order, "version", 0) or 0) + 1
+        self._db.flush()
+        self._store_po_print_pdf(
+            ctx,
+            order,
+            po_pdf_base64=po_pdf_base64,
+            po_pdf_filename=po_pdf_filename,
+        )
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="proc_order_header",
+            entity_id=order_id,
+            operation="scm_request_finalize_approval",
+            performed_by=ctx.user_id,
+            new_value={
+                "status": order.status,
+                "workflow_status": order.workflow_status,
+                "scm_approval_stage": order.scm_approval_stage,
+            },
+        )
+        attachments = self._po_print_email_attachments(
+            ctx,
+            order_id,
+            po_pdf_base64=po_pdf_base64,
+            po_pdf_filename=po_pdf_filename,
+        )
+        self._notify_po_step_owners(
+            ctx,
+            order,
+            step_key="accept_po",
+            remarks=remarks,
+            attachments=attachments,
+        )
+        return order
+
+    def accept_po_approval(self, ctx: TenantContext, order_id: UUID) -> ProcOrderHeader:
+        """Accept PO stage → forward to Management (does not issue)."""
+        order = self._order_service.get_order(ctx, order_id)
+        if not self._is_scm_finalizable(order):
+            raise InvalidDocumentState(
+                "Only CRM OVF or inventory-initiated POs can use Accept PO approval"
+            )
+        if order.status != OrderStatus.SUBMITTED.value:
+            raise InvalidDocumentState("Only submitted SCM POs can be accepted")
+        stage = getattr(order, "scm_approval_stage", None) or "accept_po"
+        if stage != "accept_po":
+            raise InvalidDocumentState("This PO is not awaiting Accept PO")
+        self._ensure_can_decide_stage(ctx, "accept_po")
+        order.scm_approval_stage = "management"
+        order.workflow_status = WorkflowStatus.IN_PROGRESS.value
         order.updated_at = utcnow()
         order.updated_by = ctx.user_id
         order.version = int(getattr(order, "version", 0) or 0) + 1
@@ -1832,16 +2348,24 @@ class ScmHandoffService:
             tenant_id=ctx.tenant_id,
             entity_name="proc_order_header",
             entity_id=order_id,
-            operation="scm_request_finalize_approval",
+            operation="scm_accept_po_approval",
             performed_by=ctx.user_id,
-            new_value={"status": order.status, "workflow_status": order.workflow_status},
+            new_value={"scm_approval_stage": order.scm_approval_stage},
+        )
+        attachments = self._po_print_email_attachments(ctx, order_id)
+        self._notify_po_step_owners(
+            ctx,
+            order,
+            step_key="management_po",
+            remarks="Accepted by SCM — awaiting Management issue",
+            attachments=attachments,
         )
         return order
 
     def reject_finalize_approval(
         self, ctx: TenantContext, order_id: UUID
     ) -> ProcOrderHeader:
-        """Return a submitted SCM PO to draft after admin rejection."""
+        """Return a submitted SCM PO to draft after rejection at Accept or Management."""
         order = self._order_service.get_order(ctx, order_id)
         if not self._is_scm_finalizable(order):
             raise InvalidDocumentState(
@@ -1849,8 +2373,11 @@ class ScmHandoffService:
             )
         if order.status != OrderStatus.SUBMITTED.value:
             raise InvalidDocumentState("Only submitted SCM POs can be rejected")
+        stage = getattr(order, "scm_approval_stage", None) or "accept_po"
+        self._ensure_can_decide_stage(ctx, stage)
         order.status = OrderStatus.DRAFT.value
         order.workflow_status = WorkflowStatus.REJECTED.value
+        order.scm_approval_stage = None
         order.updated_at = utcnow()
         order.updated_by = ctx.user_id
         order.version = int(getattr(order, "version", 0) or 0) + 1
@@ -1861,7 +2388,11 @@ class ScmHandoffService:
             entity_id=order_id,
             operation="scm_reject_finalize_approval",
             performed_by=ctx.user_id,
-            new_value={"status": order.status, "workflow_status": order.workflow_status},
+            new_value={
+                "status": order.status,
+                "workflow_status": order.workflow_status,
+                "scm_approval_stage": None,
+            },
         )
         return order
 
@@ -1878,7 +2409,8 @@ class ScmHandoffService:
             if self._is_ovf_sourced(order) and order.source_document_id is not None
         ]
         ovf_meta = self._crm.get_ovf_display_meta(ctx, ovf_ids) if ovf_ids else {}
-        result: list[dict] = []
+        candidates: list[tuple[ProcOrderHeader, str, str | None]] = []
+        requester_ids: set = set()
         for order in orders:
             if not self._is_scm_finalizable(order):
                 continue
@@ -1903,12 +2435,28 @@ class ScmHandoffService:
                 customer_name = (ovf_meta.get(order.source_document_id) or {}).get(
                     "customer_name"
                 )
+            requester_id = self._finalize_requester_user_id(
+                order, approval_status=approval_status
+            )
+            if requester_id is not None:
+                requester_ids.add(requester_id)
+            candidates.append((order, approval_status, customer_name))
+
+        requester_names = self._resolve_user_names(ctx.tenant_id, requester_ids)
+        result: list[dict] = []
+        for order, approval_status, customer_name in candidates:
+            requester_id = self._finalize_requester_user_id(
+                order, approval_status=approval_status
+            )
             result.append(
                 self._serialize_finalize_approval(
                     ctx,
                     order,
                     approval_status=approval_status,
                     customer_name=customer_name,
+                    requested_by_name=(
+                        requester_names.get(requester_id) if requester_id else None
+                    ),
                 )
             )
         result.sort(
@@ -1922,8 +2470,12 @@ class ScmHandoffService:
         ctx: TenantContext,
         order_id: UUID,
         order: ProcOrderHeader | None = None,
+        *,
+        require_management_stage: bool = True,
+        po_pdf_base64: str | None = None,
+        po_pdf_filename: str | None = None,
     ) -> ProcOrderHeader:
-        """Issue vendor PO - draft/submitted → sent (CRM OVF or inventory-initiated)."""
+        """Issue vendor PO - submitted (management stage) → sent."""
         if order is None or order.id != order_id:
             order = self._order_service.get_order(ctx, order_id)
         if not self._is_scm_finalizable(order):
@@ -1950,6 +2502,15 @@ class ScmHandoffService:
                 raise InvalidDocumentState(
                     "Negotiated price was rejected. Re-negotiate before issuing this PO."
                 )
+        stage = getattr(order, "scm_approval_stage", None)
+        if require_management_stage and order.status == OrderStatus.SUBMITTED.value:
+            # Approval inbox path: must be at Management stage.
+            effective = stage or "accept_po"
+            if effective != "management":
+                raise InvalidDocumentState(
+                    "Accept PO first; Management approval issues the PO."
+                )
+            self._ensure_can_decide_stage(ctx, "management")
         if not order.entity_code:
             raise InvalidDocumentState("Entity code is required to assign company PO number")
         if not order.company_po_number:
@@ -1961,19 +2522,167 @@ class ScmHandoffService:
         # In-place status flip - avoid a second locked reload of the same draft.
         order.status = OrderStatus.SENT.value
         order.workflow_status = WorkflowStatus.APPROVED.value
+        order.scm_approval_stage = None
         order.updated_at = utcnow()
         order.updated_by = ctx.user_id
         order.version = int(getattr(order, "version", 0) or 0) + 1
+        # CRM product/OVF and outsourced service POs enter the fulfillment wizard.
+        from modules.procurement.domain.service_po import (
+            ORDER_KIND_INTERNAL_SERVICE,
+            ORDER_KIND_VENDOR_SERVICE,
+        )
+
+        order_kind = (getattr(order, "order_kind", None) or "product").strip().lower()
+        if self._is_ovf_sourced(order) or order_kind == ORDER_KIND_VENDOR_SERVICE:
+            from modules.procurement.service.scm_fulfillment_service import ScmFulfillmentService
+
+            ScmFulfillmentService(self._db).initialize_on_issue(order)
         self._db.flush()
+        # Prefer the issued (non-draft) PDF for vendor mail; replace any draft print.
+        self._store_po_print_pdf(
+            ctx,
+            order,
+            po_pdf_base64=po_pdf_base64,
+            po_pdf_filename=po_pdf_filename,
+        )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name="proc_order_header",
             entity_id=order_id,
             operation="scm_finalize",
             performed_by=ctx.user_id,
-            new_value={"company_po_number": order.company_po_number},
+            new_value={
+                "company_po_number": order.company_po_number,
+                "order_kind": order_kind,
+            },
         )
+        # Cache Service internal POs go straight to Projects PO Queue (manual Create Project).
+        if order_kind == ORDER_KIND_INTERNAL_SERVICE:
+            self._share_internal_service_po_to_projects(ctx, order)
+        # Non-CRM inventory POs still get the best-effort vendor issue mail.
+        # CRM OVF / vendor_service POs use the fulfillment "Send PO to vendor" step instead.
+        elif not self._is_ovf_sourced(order) and order_kind != ORDER_KIND_VENDOR_SERVICE:
+            self._notify_vendor_po_issued(
+                ctx,
+                order,
+                po_pdf_base64=po_pdf_base64,
+                po_pdf_filename=po_pdf_filename,
+            )
         return order
+
+    def _share_internal_service_po_to_projects(
+        self, ctx: TenantContext, order: ProcOrderHeader
+    ) -> None:
+        """After Management issues a Cache Service PO, enqueue Projects PO Queue."""
+        from modules.project.adapters.crm_port import ProjectCrmAdapter
+        from modules.project.schemas import ProjectPoQueueShareCreate
+        from modules.project.service.project_po_queue_service import ProjectPoQueueService
+
+        remarks_parts = ["Internal Service PO (Cache Service) — create project in PM."]
+        project_name = "Service project"
+        circle_name = "TBD"
+        site_name = "TBD"
+        opp_id = getattr(order, "source_document_id", None)
+        if opp_id is not None:
+            crm_ctx = ProjectCrmAdapter(self._db).resolve_opportunity_project_context(
+                ctx, opp_id
+            )
+            project_name = (
+                (crm_ctx.get("project_title") or "").strip() or project_name
+            )
+            circle_name = (crm_ctx.get("circle_name") or "").strip() or circle_name
+            site_name = (crm_ctx.get("site_name") or "").strip() or site_name
+            customer_hint = (crm_ctx.get("customer_name") or "").strip()
+            customer_po = (crm_ctx.get("customer_po_number") or "").strip()
+            channel = (crm_ctx.get("service_sourcing_channel") or "").strip()
+            remarks_parts.append(f"Opportunity: {opp_id}")
+            if channel:
+                remarks_parts.append(f"Channel: {channel}")
+            if customer_hint:
+                remarks_parts.append(f"Customer: {customer_hint}")
+            if customer_po:
+                remarks_parts.append(f"Customer PO: {customer_po}")
+
+        line_names = [
+            (getattr(ln, "product_name", None) or "").strip()
+            for ln in (order.lines or [])
+            if not getattr(ln, "is_deleted", False)
+            and (getattr(ln, "product_name", None) or "").strip()
+        ]
+        if line_names:
+            remarks_parts.append("Services: " + ", ".join(line_names[:10]))
+
+        payload = ProjectPoQueueShareCreate(
+            order_id=order.id,
+            challan_id=None,
+            project_name=project_name[:255],
+            circle_name=circle_name[:255],
+            site_name=site_name[:255],
+            contact_person="TBD",
+            contact_number="TBD",
+            # Leave qty editable for SCM/Projects — digitsOnly treats non-digits as empty.
+            rack_quantity="-",
+            server_quantity="-",
+            server_type="-",
+            remarks="\n".join(remarks_parts),
+        )
+        try:
+            ProjectPoQueueService(self._db).share_to_queue(ctx, payload)
+        except Exception:  # noqa: BLE001
+            # Do not roll back PO issue if queue share races (already shared / already linked).
+            existing = ProjectPoQueueService(self._db).get_handoff(ctx, order.id)
+            if existing is None:
+                raise
+
+    def _notify_vendor_po_issued(
+        self,
+        ctx: TenantContext,
+        order: ProcOrderHeader,
+        *,
+        po_pdf_base64: str | None = None,
+        po_pdf_filename: str | None = None,
+    ) -> None:
+        """Email the vendor master contact with the issued PO PDF (best-effort)."""
+        try:
+            vendor = self._master.get_vendor(ctx, order.vendor_id)
+        except Exception:  # noqa: BLE001
+            return
+        to_address = (getattr(vendor, "email", None) or "").strip()
+        if not to_address:
+            return
+        vendor_name = (getattr(vendor, "vendor_name", None) or "").strip() or "Vendor"
+        attachments = self._po_print_email_attachments(
+            ctx,
+            order.id,
+            po_pdf_base64=po_pdf_base64,
+            po_pdf_filename=po_pdf_filename,
+            exclude_draft=True,
+        )
+        customer_ref = None
+        if self._is_ovf_sourced(order) and order.source_document_id is not None:
+            try:
+                meta = self._crm.get_ovf_display_meta(ctx, [order.source_document_id])
+                customer_ref = (meta.get(order.source_document_id) or {}).get("customer_name")
+            except Exception:  # noqa: BLE001
+                customer_ref = None
+        try:
+            from modules.procurement.service.proc_email_notification_service import (
+                ProcEmailNotificationService,
+            )
+
+            ProcEmailNotificationService(self._db).notify_vendor_po_issued(
+                tenant_id=ctx.tenant_id,
+                to_address=to_address,
+                vendor_name=str(vendor_name),
+                po_number=self._po_label(order),
+                document_date=str(order.document_date or "") or None,
+                customer_reference=customer_ref,
+                order_id=order.id,
+                created_by=ctx.user_id,
+                attachments=attachments or None,
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
     def list_vendor_pos(self, ctx: TenantContext, company_id: UUID | None = None) -> list[dict]:
         cid = self._scope.resolve_list_company_id(ctx, company_id)
@@ -2107,6 +2816,7 @@ class ScmHandoffService:
         billing: bool = True,
         billing_quantity: float | None = None,
         delivery_challan_quantity: float | None = None,
+        vendor_dispatch_id: UUID | None = None,
     ) -> ProcOrderHeader:
         order = self._order_service.get_order(ctx, order_id)
         if order.status in {
@@ -2145,6 +2855,18 @@ class ScmHandoffService:
         else:
             line_status = "open" if received == 0 else (
                 "received" if received >= qty else "partially_received"
+            )
+
+        if received > previous_received:
+            from modules.procurement.service.scm_fulfillment_service import ScmFulfillmentService
+
+            ScmFulfillmentService(self._db).assert_grn_allowed(
+                ctx,
+                order,
+                line_id=line_id,
+                target_received_qty=received,
+                previous_received_qty=previous_received,
+                vendor_dispatch_id=vendor_dispatch_id,
             )
 
         delta = received - previous_received
@@ -2216,6 +2938,11 @@ class ScmHandoffService:
                     getattr(existing_batch, "reversal_status", "posted") == "reversed"
                 ):
                     starting_new_batch = True
+                elif vendor_dispatch_id is not None and getattr(
+                    existing_batch, "vendor_dispatch_id", None
+                ) != vendor_dispatch_id:
+                    # Different dispatch wave → always open a dedicated GRN batch.
+                    starting_new_batch = True
             if starting_new_batch:
                 batch_id = uuid4()
                 next_seq = int(getattr(order, "grn_sequence", 0) or 0) + 1
@@ -2251,7 +2978,21 @@ class ScmHandoffService:
                     billing=line_billing,
                     billing_quantity=bill_qty,
                     delivery_challan_quantity=dc_qty,
+                    vendor_dispatch_id=vendor_dispatch_id,
                 )
+                if float(bill_qty) > 1e-9 and batch_id is not None:
+                    # Fan out Accounts My Jobs for invoice generation (idempotent per
+                    # batch+assignee). Soft-fail when no Invoice generation owners exist.
+                    try:
+                        ProcInvoiceGenerationTaskService(self._db).create_for_billing_receipt(
+                            ctx,
+                            order_id=order_id,
+                            receipt_batch_id=batch_id,
+                            vendor_name="",
+                            customer_name=str(getattr(order, "customer_name", "") or ""),
+                        )
+                    except (ConflictException, NotFoundException, ValidationException):
+                        pass
         else:
             line.last_receipt_qty = 0
             line.last_receipt_at = None
@@ -2279,6 +3020,9 @@ class ScmHandoffService:
             order.received_amount = float(received_amount)
 
         self._db.flush()
+        from modules.procurement.service.scm_fulfillment_service import ScmFulfillmentService
+
+        ScmFulfillmentService(self._db).mark_grn_progress(ctx, order)
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name="proc_order_line",
@@ -2307,6 +3051,7 @@ class ScmHandoffService:
         billing: bool = True,
         billing_quantity: float = 0,
         delivery_challan_quantity: float = 0,
+        vendor_dispatch_id: UUID | None = None,
     ) -> None:
         if starting_new_batch:
             header = ProcOrderReceiptBatch(
@@ -2315,6 +3060,7 @@ class ScmHandoffService:
                 sequence=sequence,
                 grn_number=grn_number,
                 receipt_at=receipt_at,
+                vendor_dispatch_id=vendor_dispatch_id,
                 tenant_id=order.tenant_id,
                 company_id=order.company_id,
                 branch_id=order.branch_id,
@@ -2322,6 +3068,10 @@ class ScmHandoffService:
                 updated_by=ctx.user_id,
             )
             self._db.add(header)
+        elif vendor_dispatch_id is not None:
+            existing = self._db.get(ProcOrderReceiptBatch, batch_id)
+            if existing is not None and getattr(existing, "vendor_dispatch_id", None) is None:
+                existing.vendor_dispatch_id = vendor_dispatch_id
 
         batch_line = (
             self._db.query(ProcOrderReceiptBatchLine)
@@ -2447,16 +3197,19 @@ class ScmHandoffService:
 
         _ = remarks  # reserved for future metadata; CRM attachment model has no remarks column
         preview = self.get_ovf_preview(ctx, ovf_id)
+        category_key = (category or "other").strip().lower() or "other"
         return AttachmentService(self._db).create(
             ctx,
             entity_type=self.OVF_ATTACHMENT_ENTITY,
             entity_id=ovf_id,
             file_name=file_name,
-            category=category or "other",
+            category=category_key,
             branch_id=branch_id,
             company_id=company_id or preview.get("company_id"),
             content_base64=content_base64,
             content_type=content_type,
+            # Keep a single auto-generated OVF PDF slot (Download PDF / approval pack).
+            replace_existing_category=category_key == "ovf_pdf",
         )
 
     def list_po_attachments(self, ctx: TenantContext, order_id: UUID) -> list[dict]:
@@ -2486,15 +3239,15 @@ class ScmHandoffService:
 
         _ = remarks  # reserved for future metadata; CRM attachment model has no remarks column
         order = self._order_service.get_order(ctx, order_id)
-        # Preset document slots (Customer PO / Vendor Quote) replace prior file.
+        # Preset document slots (Customer PO / Vendor Quote / print PDF) replace prior file.
         category_key = (category or "other").strip().lower() or "other"
-        replace = category_key in {"customer_po", "vendor_quote"}
+        replace = category_key in {"customer_po", "vendor_quote", "po_pdf"}
         if not replace:
             existing = self.list_po_attachments(ctx, order_id)
             if len(existing) >= PO_MAX_ATTACHMENTS:
                 raise ValidationException(
-                    f"Purchase Order allows at most {PO_MAX_ATTACHMENTS} attachments "
-                    "(Customer PO and Vendor Quote). Replace an existing slot instead of adding more."
+                    f"Purchase Order allows at most {PO_MAX_ATTACHMENTS} attachments. "
+                    "Remove a file before adding another."
                 )
         return AttachmentService(self._db).create(
             ctx,
@@ -2509,17 +3262,57 @@ class ScmHandoffService:
             replace_existing_category=replace,
         )
 
+    def list_opportunity_service_attachments(
+        self, ctx: TenantContext, opportunity_id: UUID
+    ) -> list[dict]:
+        """CRM quote + opportunity files for Cache/Outsourced service POs (no OVF)."""
+        from modules.crm.repository.quote_repository import QuoteRepository
+
+        entity_filters: list[tuple[str, UUID]] = [("opportunity", opportunity_id)]
+        quotes = QuoteRepository(self._db).list_quotes(
+            ctx, None, opportunity_id=opportunity_id
+        )
+        accepted = next((q for q in quotes if q.quote_stage == "accepted"), None)
+        if accepted is not None:
+            entity_filters.append(("quote", accepted.id))
+        elif quotes:
+            entity_filters.append(("quote", quotes[0].id))
+        rows = ProcurementCrmAdapter(self._db).list_attachments(
+            ctx, entity_filters=entity_filters
+        )
+        seen: set = set()
+        out: list[dict] = []
+        for row in rows:
+            if row.id in seen:
+                continue
+            seen.add(row.id)
+            out.append(self._attachment_summary(row))
+        return out
+
     def list_commercial_documents_for_order(
         self, ctx: TenantContext, order_id: UUID
     ) -> list[dict]:
-        """OVF pack + PO-specific files for approval / SCM review."""
+        """OVF/sales pack + PO-specific files for approval / SCM review."""
+        from modules.procurement.domain.service_po import (
+            SOURCE_DOC_TYPE_OPPORTUNITY_SERVICE,
+            SERVICE_ORDER_KINDS,
+        )
+
         order = self._order_service.get_order(ctx, order_id)
         docs: list[dict] = []
         source_module = (getattr(order, "source_module", None) or "").strip().lower()
+        source_type = (getattr(order, "source_document_type", None) or "").strip().lower()
         source_id = getattr(order, "source_document_id", None)
+        order_kind = (getattr(order, "order_kind", None) or ORDER_KIND_PRODUCT).strip().lower()
         if source_module == "crm" and source_id is not None:
             try:
-                docs.extend(self.list_ovf_attachments(ctx, source_id))
+                if (
+                    source_type == SOURCE_DOC_TYPE_OPPORTUNITY_SERVICE
+                    or order_kind in SERVICE_ORDER_KINDS
+                ):
+                    docs.extend(self.list_opportunity_service_attachments(ctx, source_id))
+                else:
+                    docs.extend(self.list_ovf_attachments(ctx, source_id))
             except Exception:
                 pass
         docs.extend(self.list_po_attachments(ctx, order_id))
@@ -2551,9 +3344,12 @@ class ScmHandoffService:
             linked_ovf_id = crm.find_ovf_id_for_sales_pack(
                 ctx, entity_type=row.entity_type, entity_id=row.entity_id
             )
-            if linked_ovf_id is None:
+            if linked_ovf_id is not None:
+                self.get_ovf_preview(ctx, linked_ovf_id)
+            elif not self._sales_pack_linked_to_service_po(
+                ctx, entity_type=row.entity_type, entity_id=row.entity_id
+            ):
                 raise NotFoundException("Attachment not found")
-            self.get_ovf_preview(ctx, linked_ovf_id)
         else:
             raise NotFoundException("Attachment not found")
 
@@ -2801,9 +3597,25 @@ class ScmHandoffService:
             }
             creator_names = self._resolve_user_names(ctx.tenant_id, creator_ids)
             result: list[dict] = []
+            dispatch_ids = {
+                getattr(batch, "vendor_dispatch_id", None)
+                for batch in sorted_batches
+                if getattr(batch, "vendor_dispatch_id", None)
+            }
+            dispatch_seq_by_id: dict[UUID, int] = {}
+            if dispatch_ids:
+                from modules.procurement.models.vendor_dispatch import ProcVendorDispatch
+
+                for disp in (
+                    self._db.query(ProcVendorDispatch)
+                    .filter(ProcVendorDispatch.id.in_(list(dispatch_ids)))
+                    .all()
+                ):
+                    dispatch_seq_by_id[disp.id] = int(disp.sequence)
             for batch in sorted_batches:
                 batch_lines = lines_by_batch.get(batch.id, [])
                 created_by = getattr(batch, "created_by", None)
+                dispatch_id = getattr(batch, "vendor_dispatch_id", None)
                 result.append(
                     {
                         "id": batch.id,
@@ -2812,6 +3624,10 @@ class ScmHandoffService:
                         "receipt_at": batch.receipt_at,
                         "created_by": created_by,
                         "created_by_name": creator_names.get(created_by) if created_by else None,
+                        "vendor_dispatch_id": dispatch_id,
+                        "vendor_dispatch_sequence": (
+                            dispatch_seq_by_id.get(dispatch_id) if dispatch_id else None
+                        ),
                         "lines": self._receipt_batch_line_payload(batch_lines, line_by_id),
                         "attachments": attachments_by_batch.get(batch.id, []),
                         **self._vendor_invoice_batch_fields(batch),
@@ -3430,17 +4246,24 @@ class ScmHandoffService:
     def _inventory_order_headers(
         self,
         ctx: TenantContext,
-        company_id: UUID,
+        company_id: UUID | None,
         order_ids: list[UUID],
     ) -> dict[UUID, ProcOrderHeader]:
+        """Load PO headers for inventory enrichment (company optional; not branch-gated).
+
+        On-hand stock is company/tenant ledger state (same as Aging). Branch-scoping the
+        PO join dropped units whose orders lived on another branch.
+        """
         if not order_ids:
             return {}
         stmt = select(ProcOrderHeader).where(
-            ProcOrderHeader.company_id == company_id,
+            ProcOrderHeader.tenant_id == ctx.tenant_id,
             ProcOrderHeader.is_deleted.is_(False),
             ProcOrderHeader.id.in_(order_ids),
         )
-        stmt = ProcScopedRepository.apply_proc_filter(stmt, ProcOrderHeader, ctx, branch_scoped=True)
+        stmt = ProcScopedRepository.apply_optional_company_filter(
+            stmt, ProcOrderHeader, company_id
+        )
         stmt = stmt.options(
             load_only(
                 ProcOrderHeader.id,
@@ -3463,10 +4286,10 @@ class ScmHandoffService:
         if not line_ids:
             return {}
         stmt = select(ProcOrderLine).where(
+            ProcOrderLine.tenant_id == ctx.tenant_id,
             ProcOrderLine.is_deleted.is_(False),
             ProcOrderLine.id.in_(line_ids),
         )
-        stmt = ProcScopedRepository.apply_proc_filter(stmt, ProcOrderLine, ctx, branch_scoped=True)
         stmt = stmt.options(
             load_only(
                 ProcOrderLine.id,
@@ -3483,28 +4306,139 @@ class ScmHandoffService:
         rows = list(self._db.scalars(stmt).all())
         return {row.id: row for row in rows}
 
+    def repair_wave_grn_batches_into_stock(
+        self, ctx: TenantContext, company_id: UUID | None = None
+    ) -> int:
+        """Move fully-billed wave GRNs with no stock rows into inventory.
+
+        Wave Record GRN briefly posted 100% as billed (no warehouse leftover).
+        Correct path is GRN → stock, then billing/DC later. Idempotent.
+        """
+        if not self._inventory_stock_table_exists() or not self._receipt_batch_tables_exist():
+            return 0
+        cid = self._scope.resolve_list_company_id(ctx, company_id)
+        batch_q = (
+            self._db.query(ProcOrderReceiptBatch)
+            .join(ProcOrderHeader, ProcOrderReceiptBatch.order_header_id == ProcOrderHeader.id)
+            .filter(
+                ProcOrderReceiptBatch.tenant_id == ctx.tenant_id,
+                ProcOrderReceiptBatch.is_deleted.is_(False),
+                ProcOrderReceiptBatch.vendor_dispatch_id.isnot(None),
+                ProcOrderReceiptBatch.reversal_status != "reversed",
+                ProcOrderHeader.is_deleted.is_(False),
+            )
+        )
+        if cid is not None:
+            batch_q = batch_q.filter(ProcOrderReceiptBatch.company_id == cid)
+        batches = batch_q.all()
+        if not batches:
+            return 0
+
+        batch_ids = [b.id for b in batches]
+        existing_stock_batch_ids = {
+            row[0]
+            for row in (
+                self._db.query(ProcInventoryStockUnit.receipt_batch_id)
+                .filter(
+                    ProcInventoryStockUnit.receipt_batch_id.in_(batch_ids),
+                    ProcInventoryStockUnit.is_deleted.is_(False),
+                )
+                .distinct()
+                .all()
+            )
+            if row[0] is not None
+        }
+        lines = (
+            self._db.query(ProcOrderReceiptBatchLine)
+            .filter(
+                ProcOrderReceiptBatchLine.receipt_batch_id.in_(batch_ids),
+                ProcOrderReceiptBatchLine.is_deleted.is_(False),
+            )
+            .all()
+        )
+        lines_by_batch: dict[UUID, list[ProcOrderReceiptBatchLine]] = defaultdict(list)
+        for bl in lines:
+            lines_by_batch[bl.receipt_batch_id].append(bl)
+
+        order_ids = list({b.order_header_id for b in batches})
+        orders = {
+            o.id: o
+            for o in self._db.query(ProcOrderHeader)
+            .filter(
+                ProcOrderHeader.id.in_(order_ids),
+                ProcOrderHeader.tenant_id == ctx.tenant_id,
+                ProcOrderHeader.is_deleted.is_(False),
+            )
+            .all()
+        }
+        line_ids = list({bl.order_line_id for bl in lines})
+        order_lines = self._inventory_order_lines(ctx, line_ids) if line_ids else {}
+
+        repaired = 0
+        for batch in batches:
+            if batch.id in existing_stock_batch_ids:
+                continue
+            order = orders.get(batch.order_header_id)
+            if order is None:
+                continue
+            for bl in lines_by_batch.get(batch.id, []):
+                qty = float(bl.quantity or 0)
+                if qty <= 1e-9:
+                    continue
+                bill = float(getattr(bl, "billing_quantity", 0) or 0)
+                dc = float(getattr(bl, "delivery_challan_quantity", 0) or 0)
+                # Only rewrite fully-billed wave lines with no DC split.
+                if bill + 1e-9 < qty or dc > 1e-9:
+                    continue
+                ol = order_lines.get(bl.order_line_id)
+                if ol is None:
+                    continue
+                bl.billing = False
+                bl.billing_quantity = 0.0
+                bl.updated_by = ctx.user_id
+                bl.updated_at = utcnow()
+                if hasattr(ol, "last_receipt_billing"):
+                    ol.last_receipt_billing = False
+                if hasattr(ol, "last_receipt_billing_quantity"):
+                    ol.last_receipt_billing_quantity = 0.0
+                self._append_stock_units_for_receipt(
+                    ctx,
+                    order=order,
+                    line=ol,
+                    batch_id=batch.id,
+                    grn_number=str(batch.grn_number or ""),
+                    receipt_at=batch.receipt_at,
+                    receive_qty=qty,
+                    billing_quantity=0.0,
+                    serial_numbers=list(bl.serial_numbers or []),
+                    delivery_challan_quantity=0.0,
+                )
+                repaired += 1
+        if repaired:
+            self._db.flush()
+        return repaired
+
     def list_procurement_inventory(
         self, ctx: TenantContext, company_id: UUID | None = None
     ) -> list[dict]:
         """One row per stock unit on hand (ledger) plus optional Excel import lines."""
+        # Heal wave GRNs that were posted as 100% billed (no inventory rows).
+        self.repair_wave_grn_batches_into_stock(ctx, company_id)
         cid = self._scope.resolve_list_company_id(ctx, company_id)
         order_cache: dict[UUID, ProcOrderHeader] = {}
         result: list[dict] = []
 
         if self._inventory_stock_table_exists():
-            stock_rows = (
-                self._db.query(ProcInventoryStockUnit)
-                .filter(
-                    ProcInventoryStockUnit.tenant_id == ctx.tenant_id,
-                    ProcInventoryStockUnit.company_id == cid,
-                    ProcInventoryStockUnit.is_deleted.is_(False),
-                )
-                .order_by(
-                    ProcInventoryStockUnit.receipt_at.desc(),
-                    ProcInventoryStockUnit.grn_number.desc(),
-                )
-                .all()
+            stock_q = self._db.query(ProcInventoryStockUnit).filter(
+                ProcInventoryStockUnit.tenant_id == ctx.tenant_id,
+                ProcInventoryStockUnit.is_deleted.is_(False),
             )
+            if cid is not None:
+                stock_q = stock_q.filter(ProcInventoryStockUnit.company_id == cid)
+            stock_rows = stock_q.order_by(
+                ProcInventoryStockUnit.receipt_at.desc(),
+                ProcInventoryStockUnit.grn_number.desc(),
+            ).all()
             order_ids = list({row.order_header_id for row in stock_rows})
             order_cache = self._inventory_order_headers(ctx, cid, order_ids)
             line_by_id = self._inventory_order_lines(
@@ -3513,23 +4447,28 @@ class ScmHandoffService:
             )
             for stock in stock_rows:
                 order = order_cache.get(stock.order_header_id)
-                if order is None:
-                    continue
                 ol = line_by_id.get(stock.order_line_id)
-                po_number = (order.company_po_number or order.document_number or "").strip() or "-"
+                po_number = (
+                    (
+                        (order.company_po_number or order.document_number or "").strip()
+                        if order
+                        else ""
+                    )
+                    or "-"
+                )
                 unit_cost = float(getattr(ol, "unit_cost", 0) or 0) if ol else 0.0
                 line_number = int(ol.line_number) if ol else 0
                 product_code = (getattr(ol, "product_code", None) or "").strip() if ol else ""
                 stock_qty = float(getattr(stock, "quantity", None) or 1)
                 result.append(
                     {
-                        "order_id": order.id,
+                        "order_id": order.id if order else stock.order_header_id,
                         "order_line_id": stock.order_line_id,
                         "receipt_batch_id": stock.receipt_batch_id,
                         "grn_number": stock.grn_number,
                         "receipt_at": stock.receipt_at,
                         "company_po_number": po_number,
-                        "vendor_id": order.vendor_id,
+                        "vendor_id": order.vendor_id if order else None,
                         "product_name": stock.product_name,
                         "line_number": line_number,
                         "unit_index": stock.unit_index,
@@ -3548,21 +4487,21 @@ class ScmHandoffService:
                     }
                 )
         else:
-            batches = (
+            batch_q = (
                 self._db.query(ProcOrderReceiptBatch)
                 .join(ProcOrderHeader, ProcOrderReceiptBatch.order_header_id == ProcOrderHeader.id)
                 .filter(
                     ProcOrderReceiptBatch.tenant_id == ctx.tenant_id,
-                    ProcOrderReceiptBatch.company_id == cid,
                     ProcOrderReceiptBatch.is_deleted.is_(False),
                     ProcOrderHeader.is_deleted.is_(False),
                 )
-                .order_by(
-                    ProcOrderReceiptBatch.receipt_at.desc(),
-                    ProcOrderReceiptBatch.grn_number.desc(),
-                )
-                .all()
             )
+            if cid is not None:
+                batch_q = batch_q.filter(ProcOrderReceiptBatch.company_id == cid)
+            batches = batch_q.order_by(
+                ProcOrderReceiptBatch.receipt_at.desc(),
+                ProcOrderReceiptBatch.grn_number.desc(),
+            ).all()
 
             batch_ids = [batch.id for batch in batches]
             all_batch_lines: list[ProcOrderReceiptBatchLine] = []
@@ -3646,16 +4585,13 @@ class ScmHandoffService:
                         )
 
         if self._inventory_adjustment_table_exists():
-            adjustments = (
-                self._db.query(ProcInventoryStockAdjustment)
-                .filter(
-                    ProcInventoryStockAdjustment.tenant_id == ctx.tenant_id,
-                    ProcInventoryStockAdjustment.company_id == cid,
-                    ProcInventoryStockAdjustment.is_deleted.is_(False),
-                )
-                .order_by(ProcInventoryStockAdjustment.created_at.desc())
-                .all()
+            adj_q = self._db.query(ProcInventoryStockAdjustment).filter(
+                ProcInventoryStockAdjustment.tenant_id == ctx.tenant_id,
+                ProcInventoryStockAdjustment.is_deleted.is_(False),
             )
+            if cid is not None:
+                adj_q = adj_q.filter(ProcInventoryStockAdjustment.company_id == cid)
+            adjustments = adj_q.order_by(ProcInventoryStockAdjustment.created_at.desc()).all()
             missing_order_ids = [
                 row.order_header_id
                 for row in adjustments
@@ -3667,22 +4603,27 @@ class ScmHandoffService:
             adj_lines = self._inventory_order_lines(ctx, line_ids)
             for adj in adjustments:
                 order = order_cache.get(adj.order_header_id)
-                if order is None:
-                    continue
                 ol = adj_lines.get(adj.order_line_id)
-                po_number = (order.company_po_number or order.document_number or "").strip() or "-"
+                po_number = (
+                    (
+                        (order.company_po_number or order.document_number or "").strip()
+                        if order
+                        else ""
+                    )
+                    or "-"
+                )
                 unit_cost = float(getattr(ol, "unit_cost", 0) or 0) if ol else 0.0
                 line_number = int(ol.line_number) if ol else 0
                 product_code = (getattr(ol, "product_code", None) or "").strip() if ol else ""
                 result.append(
                     {
-                        "order_id": order.id,
+                        "order_id": order.id if order else adj.order_header_id,
                         "order_line_id": adj.order_line_id,
                         "receipt_batch_id": adj.receipt_batch_id,
                         "grn_number": adj.grn_number,
                         "receipt_at": adj.created_at,
                         "company_po_number": po_number,
-                        "vendor_id": order.vendor_id,
+                        "vendor_id": order.vendor_id if order else None,
                         "product_name": adj.product_name,
                         "line_number": line_number,
                         "unit_index": adj.unit_index,
@@ -3699,16 +4640,13 @@ class ScmHandoffService:
                 )
 
         if self._inventory_import_table_exists():
-            imports = (
-                self._db.query(ProcInventoryImportLine)
-                .filter(
-                    ProcInventoryImportLine.tenant_id == ctx.tenant_id,
-                    ProcInventoryImportLine.company_id == cid,
-                    ProcInventoryImportLine.is_deleted.is_(False),
-                )
-                .order_by(ProcInventoryImportLine.created_at.desc())
-                .all()
+            import_q = self._db.query(ProcInventoryImportLine).filter(
+                ProcInventoryImportLine.tenant_id == ctx.tenant_id,
+                ProcInventoryImportLine.is_deleted.is_(False),
             )
+            if cid is not None:
+                import_q = import_q.filter(ProcInventoryImportLine.company_id == cid)
+            imports = import_q.order_by(ProcInventoryImportLine.created_at.desc()).all()
             for row in imports:
                 vendor_id = None
                 po_label = (row.company_po_number or "").strip() or "Without PO"

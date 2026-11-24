@@ -9,7 +9,8 @@ import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { PageHeader } from "@/components/layout/page-header";
-import { Badge } from "@/components/ui/badge";
+import { SalesStageBadge } from "@/components/crm/sales/sales-stage-badge";
+import { resolveSalesStageLabel } from "@/lib/crm/sales-blueprint-stages";
 import { setCrmSidebarFocus } from "@/lib/crm-sidebar-focus";
 import { formatCrmCode } from "@/lib/crm/format-crm-code";
 import { ApiClientError } from "@/services/api-client";
@@ -147,18 +148,15 @@ export function OpportunityListPage({
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
-                      <Badge
-                        variant="outline"
-                        className={
-                          row.current_stage === "won"
-                            ? "border-emerald-200 bg-emerald-50 capitalize text-emerald-800"
-                            : "capitalize"
-                        }
-                      >
-                        {row.current_stage === "won"
-                          ? "Deal won"
-                          : row.current_stage.replaceAll("_", " ")}
-                      </Badge>
+                      <SalesStageBadge
+                        label={resolveSalesStageLabel({
+                          entityType: "opportunity",
+                          blueprintState: row.blueprint_state || row.current_stage,
+                          opportunity: row,
+                        })}
+                        state={row.blueprint_state || row.current_stage}
+                        entityType="opportunity"
+                      />
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground">
                       {row.status === "won" && row.deal_won_amount != null

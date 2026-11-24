@@ -142,6 +142,68 @@ function detectStorage(text: string): string {
   return "";
 }
 
+function shortenProcessorForDisplay(processor: string): string {
+  const p = processor.trim();
+  if (!p) return "";
+  const intelI = /^(?:intel\s+)?(?:core\s+)?(i[3579])$/i.exec(p);
+  if (intelI) return intelI[1]!.toLowerCase();
+  const apple = /^apple\s+(m[1-4])$/i.exec(p);
+  if (apple) return apple[1]!.replace(/^m/i, "M");
+  const ryzen = /^amd\s+(ryzen\s+[3579])$/i.exec(p);
+  if (ryzen) return ryzen[1]!.replace(/\bryzen\b/i, "Ryzen");
+  const intelOther = /^intel\s+(celeron|pentium)$/i.exec(p);
+  if (intelOther) {
+    const name = intelOther[1]!;
+    return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+  }
+  return p;
+}
+
+function formatRamSlashStorage(ram: string, storage: string): string {
+  const ramM = ram.trim().match(/(\d+)\s*(GB|TB)?/i);
+  const storM = storage.trim().match(/(\d+)\s*(GB|TB)/i);
+  if (ramM && storM) {
+    return `${ramM[1]}/${storM[1]}${storM[2]!.toUpperCase()}`;
+  }
+  if (ramM && !storM) {
+    return `${ramM[1]}${(ramM[2] ?? "GB").toUpperCase()}`;
+  }
+  if (!ramM && storM) {
+    return `${storM[1]}${storM[2]!.toUpperCase()}`;
+  }
+  return "";
+}
+
+/**
+ * Inventory Configuration column: compact IT style, e.g. `i5 10th GEN 16/512GB`.
+ * Accepts labeled Add Asset strings or already-compact free text.
+ */
+export function formatCompactConfigurationDisplay(
+  configuration?: string | null,
+): string {
+  const text = (configuration ?? "").trim();
+  if (!text || text === "—") return "—";
+
+  const parsed = parseConfigurationString(text);
+  if (!parsed.processor && !parsed.generation && !parsed.ram && !parsed.storage) {
+    return text;
+  }
+
+  const bits: string[] = [];
+  const proc = shortenProcessorForDisplay(parsed.processor);
+  if (proc) bits.push(proc);
+
+  const genRaw = parsed.generation.trim().replace(/\s*gen(?:eration)?$/i, "").trim();
+  if (genRaw && genRaw.toLowerCase() !== "other") {
+    bits.push(`${genRaw} GEN`);
+  }
+
+  const ramStorage = formatRamSlashStorage(parsed.ram, parsed.storage);
+  if (ramStorage) bits.push(ramStorage);
+
+  return bits.length > 0 ? bits.join(" ") : text;
+}
+
 /** Best-effort parse of stored configuration back into form fields. */
 export function parseConfigurationString(configuration?: string | null): {
   processor: string;
@@ -154,10 +216,10 @@ export function parseConfigurationString(configuration?: string | null): {
   if (!text) return empty;
 
   const labeled = {
-    processor: text.match(/Processor:\s*([^;]+)/i)?.[1]?.trim() ?? "",
-    generation: text.match(/Generation:\s*([^;]+)/i)?.[1]?.trim() ?? "",
-    ram: text.match(/RAM:\s*([^;]+)/i)?.[1]?.trim() ?? "",
-    storage: text.match(/Storage:\s*([^;]+)/i)?.[1]?.trim() ?? "",
+    processor: text.match(/Processor:\s*([^;\n]+)/i)?.[1]?.trim() ?? "",
+    generation: text.match(/Generation:\s*([^;\n]+)/i)?.[1]?.trim() ?? "",
+    ram: text.match(/RAM:\s*([^;\n]+)/i)?.[1]?.trim() ?? "",
+    storage: text.match(/Storage:\s*([^;\n]+)/i)?.[1]?.trim() ?? "",
   };
   if (labeled.processor || labeled.ram || labeled.storage || labeled.generation) {
     return {

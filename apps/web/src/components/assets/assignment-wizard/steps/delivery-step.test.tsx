@@ -14,12 +14,11 @@ describe("DeliveryStep", () => {
     render(
       <DeliveryStep state={EMPTY_ASSIGNMENT_WIZARD_STATE} onChange={vi.fn()} />,
     );
-    expect(screen.getByText("Delivery Challan")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Create DC now/i })).toBeTruthy();
     expect(screen.queryByLabelText(/DC Number/i)).toBeNull();
     expect(screen.queryByLabelText(/DC Status/i)).toBeNull();
     expect(screen.queryByLabelText(/^Signature/i)).toBeNull();
-    expect(screen.getByTestId("dc-handle-later-hint")).toHaveTextContent(/Pending · Not signed/i);
-    expect(screen.getByLabelText(/Assignment remarks/i)).toBeTruthy();
+    expect(screen.queryByLabelText(/Assignment remarks/i)).not.toBeInTheDocument();
   });
 
   it("resets delivery reference defaults when selecting Handle later", async () => {
@@ -79,19 +78,13 @@ describe("DeliveryStep", () => {
     expect(onChange.mock.calls.some((c) => c[0].deliveryReferenceNumber === "X")).toBe(true);
   });
 
-  it("shows three DC modes for employee allocation", () => {
+  it("shows Create DC now and Handle later for employee allocation", () => {
     render(
       <DeliveryStep state={EMPTY_ASSIGNMENT_WIZARD_STATE} onChange={vi.fn()} />,
     );
     expect(screen.getByRole("button", { name: /Create DC now/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Link existing/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Link existing/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Handle later/i })).toBeTruthy();
-    expect(
-      screen.getByText(/Most assets don't need a DC at handover/i),
-    ).toBeTruthy();
-    expect(screen.getByText(/Needs DC before or at handover/i)).toBeTruthy();
-    expect(screen.getByText(/Attach a challan prepared in advance/i)).toBeTruthy();
-    expect(screen.getByText(/create DC from Operations later/i)).toBeTruthy();
   });
 
   it("keeps Handle later as the default selected mode", () => {
@@ -99,7 +92,34 @@ describe("DeliveryStep", () => {
       <DeliveryStep state={EMPTY_ASSIGNMENT_WIZARD_STATE} onChange={vi.fn()} />,
     );
     const later = screen.getByRole("button", { name: /Handle later/i });
-    expect(later.getAttribute("class")).toMatch(/0369A1|rgba\(3,\s*105,\s*161/);
+    expect(later.getAttribute("class")).toMatch(/border-primary|bg-primary/);
+  });
+
+  it("calls onCreateDcNow when Create DC now is clicked", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const onCreateDcNow = vi.fn();
+    render(
+      <DeliveryStep
+        state={{
+          ...EMPTY_ASSIGNMENT_WIZARD_STATE,
+          assetId: "asset-1",
+        }}
+        onChange={onChange}
+        onCreateDcNow={onCreateDcNow}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /Create DC now/i }));
+    expect(onChange).toHaveBeenCalledWith({
+      dcChallanMode: "create_now",
+      dcChallanId: "",
+    });
+    expect(onCreateDcNow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assetId: "asset-1",
+        dcChallanMode: "create_now",
+      }),
+    );
   });
 
   it("hides Create DC modes for warehouse allocation", () => {
@@ -110,7 +130,6 @@ describe("DeliveryStep", () => {
       />,
     );
     expect(screen.queryByRole("button", { name: /Create DC now/i })).toBeNull();
-    expect(screen.getByText(/employee-only/i)).toBeTruthy();
     expect(screen.getByLabelText(/DC Number/i)).toBeTruthy();
   });
 });

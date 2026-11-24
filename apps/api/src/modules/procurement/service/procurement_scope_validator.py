@@ -4,17 +4,13 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import ForbiddenException, NotFoundException
+from core.exceptions import NotFoundException
 from modules.foundation.domain.org_data_scope import (
-    effective_company_ids,
-    has_module_wide_data_access,
-    is_platform_admin,
     resolve_list_company_id as shared_resolve_list_company_id,
     resolve_write_company_id as shared_resolve_write_company_id,
 )
 from modules.foundation.domain.value_objects import TenantContext
 from modules.organization.repository.base import OrgScopedRepository
-from modules.organization.repository.branch_repository import BranchRepository
 from modules.organization.repository.company_repository import CompanyRepository
 
 PROCUREMENT_MODULE_KEY = "procurement"
@@ -23,7 +19,6 @@ PROCUREMENT_MODULE_KEY = "procurement"
 class ProcurementScopeValidator:
     def __init__(self, db: Session) -> None:
         self._company_repo = CompanyRepository(db)
-        self._branch_repo = BranchRepository(db)
 
     def resolve_list_company_id(
         self, ctx: TenantContext, company_id: UUID | None
@@ -51,26 +46,12 @@ class ProcurementScopeValidator:
             raise NotFoundException("Company not found")
 
     def validate_branch_access(self, ctx: TenantContext, branch_id: UUID) -> None:
-        """Allow any branch under companies the user can access.
+        """Do not isolate by session branch.
 
-        Session branch must not block SCM Create PO / approval on an OVF from
-        another company or branch (e.g. CT OVF while parked on CDPL HQ).
+        Parking on CDPL HQ used to raise ``Branch scope mismatch`` for CT/VAPL
+        POs (Create PO, approval, and Projects PO Queue enrichment). Company
+        separation stays on list filters / ``validate_company_access``; branch
+        alone must never block cross-entity or cross-module reads.
         """
-        if has_module_wide_data_access(ctx, PROCUREMENT_MODULE_KEY) or is_platform_admin(ctx):
-            return
-
-        allowed = effective_company_ids(ctx, module_key=PROCUREMENT_MODULE_KEY)
-        if allowed is None:
-            return
-        if not allowed:
-            raise ForbiddenException("Branch scope mismatch")
-
-        branch = self._branch_repo.get_by_id(ctx, branch_id)
-        company_id = getattr(branch, "company_id", None) if branch is not None else None
-        if company_id is not None and company_id in allowed:
-            return
-
-        if ctx.branch_id and ctx.branch_id == branch_id:
-            return
-
-        raise ForbiddenException("Branch scope mismatch")
+        _ = (ctx, branch_id)
+        return

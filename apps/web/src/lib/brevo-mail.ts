@@ -5,7 +5,7 @@ import nodemailer, { type Transporter } from "nodemailer";
 
 let envLoaded = false;
 
-function loadBrevoEnv(): void {
+function loadMailEnv(): void {
   if (envLoaded) return;
   const root = process.cwd();
   config({ path: path.join(root, ".env.local") });
@@ -14,41 +14,99 @@ function loadBrevoEnv(): void {
   envLoaded = true;
 }
 
-export function getBrevoConfig(): { from: string; smtpKey: string } | null {
-  loadBrevoEnv();
-  const from =
+type SmtpRuntimeConfig = {
+  from: string;
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  pass: string;
+};
+
+/** Prefer Hostinger/generic SMTP_*; fall back to Brevo relay credentials. */
+export function getSmtpRuntimeConfig(): SmtpRuntimeConfig | null {
+  loadMailEnv();
+
+  const smtpHost = process.env.SMTP_HOST?.trim() || "";
+  const smtpUser = process.env.SMTP_USER?.trim() || "";
+  const smtpPass = process.env.SMTP_PASSWORD?.trim() || "";
+  const smtpFrom =
+    process.env.SMTP_FROM_ADDRESS?.trim() ||
+    process.env.SMTP_FROM?.trim() ||
+    smtpUser;
+  if (smtpHost && smtpUser && smtpPass && smtpFrom) {
+    const port = Number(process.env.SMTP_PORT || "465") || 465;
+    const useTls = (process.env.SMTP_USE_TLS || "true").toLowerCase() !== "false";
+    return {
+      from: smtpFrom,
+      host: smtpHost,
+      port,
+      secure: port === 465 || useTls,
+      user: smtpUser,
+      pass: smtpPass,
+    };
+  }
+
+  const brevoFrom =
     process.env.BREVO_EMAIL?.trim() ||
     process.env.brevo_email?.trim() ||
     "";
-  const smtpKey =
+  const brevoKey =
     process.env.BREVO_SMTP_KEY?.trim() ||
     process.env.BREVO_SMTP_PASS?.trim() ||
     process.env.brevo_smtp_key?.trim() ||
     "";
-  if (!from || !smtpKey) return null;
-  return { from, smtpKey };
+  if (brevoFrom && brevoKey) {
+    return {
+      from: brevoFrom,
+      host: "smtp-relay.brevo.com",
+      port: 587,
+      secure: false,
+      user: brevoFrom,
+      pass: brevoKey,
+    };
+  }
+
+  return null;
+}
+
+/** @deprecated Use getSmtpRuntimeConfig — kept for older call sites. */
+export function getBrevoConfig(): { from: string; smtpKey: string } | null {
+  const cfg = getSmtpRuntimeConfig();
+  if (!cfg) return null;
+  return { from: cfg.from, smtpKey: cfg.pass };
 }
 
 let transporter: Transporter | null = null;
 
 function getTransporter(): Transporter {
   if (transporter) return transporter;
-  const brevo = getBrevoConfig();
-  if (!brevo) {
-    throw new Error("Brevo SMTP is not configured (BREVO_EMAIL and BREVO_SMTP_KEY).");
+  const cfg = getSmtpRuntimeConfig();
+  if (!cfg) {
+    throw new Error(
+      "SMTP is not configured (set SMTP_HOST/SMTP_USER/SMTP_PASSWORD/SMTP_FROM_ADDRESS, or BREVO_EMAIL/BREVO_SMTP_KEY).",
+    );
   }
   transporter = nodemailer.createTransport({
-    host: "smtp-relay.brevo.com",
-    port: 587,
-    secure: false,
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.secure,
     connectionTimeout: 15_000,
     greetingTimeout: 15_000,
     auth: {
-      user: brevo.from,
-      pass: brevo.smtpKey,
+      user: cfg.user,
+      pass: cfg.pass,
     },
   });
   return transporter;
+}
+
+function requireSmtpFrom(): string {
+  const cfg = getSmtpRuntimeConfig();
+  if (!cfg) {
+    throw new Error("SMTP is not configured.");
+  }
+  return cfg.from;
 }
 
 export type DeliveryReminderMailInput = {
@@ -61,10 +119,7 @@ export type DeliveryReminderMailInput = {
 export async function sendDeliveryReminderMail(
   input: DeliveryReminderMailInput,
 ): Promise<void> {
-  const brevo = getBrevoConfig();
-  if (!brevo) {
-    throw new Error("Brevo SMTP is not configured.");
-  }
+  const fromAddress = requireSmtpFrom();
 
   const po = input.purchaseOrderNumber.trim() || "-";
   const subject = `Delivery tomorrow - ${input.challanNumber} (${po})`;
@@ -92,7 +147,7 @@ export async function sendDeliveryReminderMail(
   `;
 
   await getTransporter().sendMail({
-    from: `"iConnect Plus" <${brevo.from}>`,
+    from: `"iConnect Plus" <${fromAddress}>`,
     to: input.to.trim(),
     subject,
     text,
@@ -164,15 +219,26 @@ function buildItemsTableText(lines: DeliveryDispatchLineItem[]): string {
   return `Items:\n${linesText}\n`;
 }
 
-export async function sendDeliveryDispatchMail(input: DeliveryDispatchMailInput): Promise<void> {
-  const brevo = getBrevoConfig();
-  if (!brevo) {
-    throw new Error("Brevo SMTP is not configured.");
-  }
+export type DeliveryDeliveredMailInput = {
+  to: string;
+  challanNumber: string;
+  purchaseOrderNumber: string;
+  grnSummary: string;
+  customerName: string;
+  vendorName: string;
+  actualDeliveryDate: string;
+  trackingNumber?: string;
+  lines: DeliveryDispatchLineItem[];
+};
+
+export async function sendDeliveryDeliveredMail(
+  input: DeliveryDeliveredMailInput,
+): Promise<void> {
+  const fromAddress = requireSmtpFrom();
 
   const po = input.purchaseOrderNumber.trim() || "-";
   const grn = input.grnSummary.trim() || "-";
-  const subject = `Your order has been dispatched - ${input.challanNumber} (${po})`;
+  const subject = `Your order has been delivered - ${input.challanNumber} (${po})`;
 
   const metaLines = [
     `Challan: ${input.challanNumber}`,
@@ -180,21 +246,16 @@ export async function sendDeliveryDispatchMail(input: DeliveryDispatchMailInput)
     `GRN: ${grn}`,
     `Customer: ${input.customerName.trim() || "-"}`,
     `Vendor: ${input.vendorName.trim() || "-"}`,
-    `Shipment status: ${input.shipmentStatus}`,
-    `Dispatch date: ${input.dispatchDate || "-"}`,
-    `Expected delivery: ${input.expectedDeliveryDate || "-"}`,
+    `Delivered on: ${input.actualDeliveryDate.trim() || "-"}`,
   ];
   if (input.trackingNumber?.trim()) {
     metaLines.push(`Tracking: ${input.trackingNumber.trim()}`);
-  }
-  if (input.courierTransportDetails?.trim()) {
-    metaLines.push(`Courier / transport: ${input.courierTransportDetails.trim()}`);
   }
 
   const text = [
     "Hello,",
     "",
-    "Your items have been dispatched. Details are below.",
+    "Your items have been delivered. Details are below.",
     "",
     ...metaLines,
     "",
@@ -204,17 +265,15 @@ export async function sendDeliveryDispatchMail(input: DeliveryDispatchMailInput)
 
   const html = `
     <div style="font-family:system-ui,-apple-system,sans-serif;color:#0f172a;line-height:1.5;max-width:640px">
-      <p>Hello,</p>
-      <p>Your items have been <strong>dispatched</strong>. Summary:</p>
+      <p>Hello${input.customerName.trim() ? ` ${escapeHtml(input.customerName.trim())}` : ""},</p>
+      <p>Your items have been <strong>delivered</strong>. Summary:</p>
       <table style="font-size:14px;margin:16px 0">
         <tr><td style="padding:4px 12px 4px 0;color:#64748b">Challan</td><td><strong>${escapeHtml(input.challanNumber)}</strong></td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#64748b">PO</td><td>${escapeHtml(po)}</td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#64748b">GRN</td><td>${escapeHtml(grn)}</td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#64748b">Customer</td><td>${escapeHtml(input.customerName.trim() || "-")}</td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#64748b">Vendor</td><td>${escapeHtml(input.vendorName.trim() || "-")}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0;color:#64748b">Status</td><td>${escapeHtml(input.shipmentStatus)}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0;color:#64748b">Dispatch date</td><td>${escapeHtml(input.dispatchDate || "-")}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0;color:#64748b">Expected delivery</td><td>${escapeHtml(input.expectedDeliveryDate || "-")}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b">Delivered on</td><td>${escapeHtml(input.actualDeliveryDate.trim() || "-")}</td></tr>
         ${input.trackingNumber?.trim() ? `<tr><td style="padding:4px 12px 4px 0;color:#64748b">Tracking</td><td>${escapeHtml(input.trackingNumber.trim())}</td></tr>` : ""}
       </table>
       <p style="margin:16px 0 8px;font-weight:600">Items</p>
@@ -224,7 +283,186 @@ export async function sendDeliveryDispatchMail(input: DeliveryDispatchMailInput)
   `;
 
   await getTransporter().sendMail({
-    from: `"iConnect Plus" <${brevo.from}>`,
+    from: `"iConnect Plus" <${fromAddress}>`,
+    to: input.to.trim(),
+    subject,
+    text,
+    html,
+  });
+}
+
+export type DeliveryOutcomeMailInput = {
+  to: string;
+  challanNumber: string;
+  purchaseOrderNumber: string;
+  grnSummary: string;
+  customerName: string;
+  vendorName: string;
+  outcome: "Delivered" | "Failed delivery" | "Delayed";
+  dispatchDate?: string;
+  actualDeliveryDate?: string;
+  trackingNumber?: string;
+  remarks?: string;
+  lines: DeliveryDispatchLineItem[];
+};
+
+export async function sendDeliveryOutcomeMail(input: DeliveryOutcomeMailInput): Promise<void> {
+  const fromAddress = requireSmtpFrom();
+
+  const po = input.purchaseOrderNumber.trim() || "-";
+  const grn = input.grnSummary.trim() || "-";
+  const outcome = input.outcome;
+  const remarks = (input.remarks || "").trim();
+  const subject =
+    outcome === "Delivered"
+      ? `Your order has been delivered - ${input.challanNumber} (${po})`
+      : outcome === "Delayed"
+        ? `Your delivery is delayed - ${input.challanNumber} (${po})`
+        : `Delivery update: failed - ${input.challanNumber} (${po})`;
+
+  const headline =
+    outcome === "Delivered"
+      ? "Your order has been delivered."
+      : outcome === "Delayed"
+        ? "Your delivery has been delayed."
+        : "Delivery of your order could not be completed.";
+
+  const metaLines = [
+    `Challan: ${input.challanNumber}`,
+    `PO: ${po}`,
+    `GRN: ${grn}`,
+    `Customer: ${input.customerName.trim() || "-"}`,
+    `Vendor: ${input.vendorName.trim() || "-"}`,
+    `Outcome: ${outcome === "Failed delivery" ? "Failed" : outcome}`,
+  ];
+  if (input.dispatchDate?.trim()) {
+    metaLines.push(`Dispatch date: ${input.dispatchDate.trim()}`);
+  }
+  if (outcome === "Delivered" && input.actualDeliveryDate?.trim()) {
+    metaLines.push(`Delivered on: ${input.actualDeliveryDate.trim()}`);
+  }
+  if (input.trackingNumber?.trim()) {
+    metaLines.push(`AWB / Tracking: ${input.trackingNumber.trim()}`);
+  }
+  if ((outcome === "Delayed" || outcome === "Failed delivery") && remarks) {
+    metaLines.push(`Remarks: ${remarks}`);
+  }
+
+  const text = [
+    "Hello,",
+    "",
+    headline,
+    "",
+    ...metaLines,
+    "",
+    buildItemsTableText(input.lines),
+    "- iConnect Plus Procurement",
+  ].join("\n");
+
+  const customerGreeting = input.customerName.trim()
+    ? ` ${escapeHtml(input.customerName.trim())}`
+    : "";
+  const outcomeLabel =
+    outcome === "Failed delivery" ? "Failed" : escapeHtml(outcome);
+
+  const html = `
+    <div style="font-family:system-ui,-apple-system,sans-serif;color:#0f172a;line-height:1.5;max-width:640px">
+      <p>Hello${customerGreeting},</p>
+      <p>${escapeHtml(headline)}</p>
+      <table style="font-size:14px;margin:16px 0">
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b">Challan</td><td><strong>${escapeHtml(input.challanNumber)}</strong></td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b">PO</td><td>${escapeHtml(po)}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b">GRN</td><td>${escapeHtml(grn)}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b">Customer</td><td>${escapeHtml(input.customerName.trim() || "-")}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b">Vendor</td><td>${escapeHtml(input.vendorName.trim() || "-")}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b">Outcome</td><td><strong>${outcomeLabel}</strong></td></tr>
+        ${input.dispatchDate?.trim() ? `<tr><td style="padding:4px 12px 4px 0;color:#64748b">Dispatch date</td><td>${escapeHtml(input.dispatchDate.trim())}</td></tr>` : ""}
+        ${outcome === "Delivered" && input.actualDeliveryDate?.trim() ? `<tr><td style="padding:4px 12px 4px 0;color:#64748b">Delivered on</td><td>${escapeHtml(input.actualDeliveryDate.trim())}</td></tr>` : ""}
+        ${input.trackingNumber?.trim() ? `<tr><td style="padding:4px 12px 4px 0;color:#64748b">AWB / Tracking</td><td>${escapeHtml(input.trackingNumber.trim())}</td></tr>` : ""}
+        ${(outcome === "Delayed" || outcome === "Failed delivery") && remarks ? `<tr><td style="padding:4px 12px 4px 0;color:#64748b;vertical-align:top">Remarks</td><td>${escapeHtml(remarks).replace(/\n/g, "<br/>")}</td></tr>` : ""}
+      </table>
+      <p style="margin:16px 0 8px;font-weight:600">Items</p>
+      ${buildItemsTableHtml(input.lines)}
+      <p style="color:#64748b;font-size:12px;margin-top:24px">iConnect Plus Procurement</p>
+    </div>
+  `;
+
+  await getTransporter().sendMail({
+    from: `"iConnect Plus" <${fromAddress}>`,
+    to: input.to.trim(),
+    subject,
+    text,
+    html,
+  });
+}
+
+export async function sendDeliveryDispatchMail(input: DeliveryDispatchMailInput): Promise<void> {
+  const fromAddress = requireSmtpFrom();
+
+  const po = input.purchaseOrderNumber.trim() || "-";
+  const grn = input.grnSummary.trim() || "-";
+  const awb = (input.trackingNumber || "").trim();
+  const courier = (input.courierTransportDetails || "").trim();
+  const subject = `Your order is out for delivery - ${input.challanNumber} (${po})`;
+
+  const metaLines = [
+    `Challan: ${input.challanNumber}`,
+    `PO: ${po}`,
+    `GRN: ${grn}`,
+    `Customer: ${input.customerName.trim() || "-"}`,
+    `Vendor: ${input.vendorName.trim() || "-"}`,
+    `Status: Out for delivery`,
+    `Dispatch date: ${input.dispatchDate || "-"}`,
+  ];
+  if (input.expectedDeliveryDate?.trim()) {
+    metaLines.push(`Expected delivery: ${input.expectedDeliveryDate.trim()}`);
+  }
+  if (courier) {
+    metaLines.push(`Courier: ${courier}`);
+  }
+  if (awb) {
+    metaLines.push(`AWB / Docket number: ${awb}`);
+  }
+
+  const text = [
+    "Hello,",
+    "",
+    "Your order is out for delivery. Details are below.",
+    "",
+    ...metaLines,
+    "",
+    buildItemsTableText(input.lines),
+    "- iConnect Plus Procurement",
+  ].join("\n");
+
+  const customerGreeting = input.customerName.trim()
+    ? ` ${escapeHtml(input.customerName.trim())}`
+    : "";
+
+  const html = `
+    <div style="font-family:system-ui,-apple-system,sans-serif;color:#0f172a;line-height:1.5;max-width:640px">
+      <p>Hello${customerGreeting},</p>
+      <p>Your order is <strong>out for delivery</strong>. Summary:</p>
+      <table style="font-size:14px;margin:16px 0">
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b">Challan</td><td><strong>${escapeHtml(input.challanNumber)}</strong></td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b">PO</td><td>${escapeHtml(po)}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b">GRN</td><td>${escapeHtml(grn)}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b">Customer</td><td>${escapeHtml(input.customerName.trim() || "-")}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b">Vendor</td><td>${escapeHtml(input.vendorName.trim() || "-")}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b">Status</td><td>Out for delivery</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b">Dispatch date</td><td>${escapeHtml(input.dispatchDate || "-")}</td></tr>
+        ${input.expectedDeliveryDate?.trim() ? `<tr><td style="padding:4px 12px 4px 0;color:#64748b">Expected delivery</td><td>${escapeHtml(input.expectedDeliveryDate.trim())}</td></tr>` : ""}
+        ${courier ? `<tr><td style="padding:4px 12px 4px 0;color:#64748b">Courier</td><td>${escapeHtml(courier)}</td></tr>` : ""}
+        ${awb ? `<tr><td style="padding:4px 12px 4px 0;color:#64748b">AWB / Docket number</td><td><strong>${escapeHtml(awb)}</strong></td></tr>` : ""}
+      </table>
+      <p style="margin:16px 0 8px;font-weight:600">Items</p>
+      ${buildItemsTableHtml(input.lines)}
+      <p style="color:#64748b;font-size:12px;margin-top:24px">iConnect Plus Procurement</p>
+    </div>
+  `;
+
+  await getTransporter().sendMail({
+    from: `"iConnect Plus" <${fromAddress}>`,
     to: input.to.trim(),
     subject,
     text,

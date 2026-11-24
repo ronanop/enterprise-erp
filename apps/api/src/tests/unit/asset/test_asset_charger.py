@@ -142,6 +142,88 @@ def test_sync_yes_updates_existing_code() -> None:
     )
 
 
+def test_sync_yes_noop_when_form_echoes_auto_component_code() -> None:
+    """Form may load CHARGER-0001 while serial is the real unique charger id."""
+    db = MagicMock()
+    svc = AssetChargerService(db)
+    ctx = _ctx()
+    asset = MagicMock()
+    asset.id = uuid4()
+    existing = MagicMock()
+    existing.id = uuid4()
+    existing.component_code = "CHARGER-0001"
+    existing.serial_number = "CHG-1001"
+    with (
+        patch.object(svc, "find_active_charger", return_value=existing),
+        patch("modules.asset.service.asset_charger_service.ComponentService") as mock_cls,
+    ):
+        result = svc.sync(ctx, asset, charger_available=True, charger_code="CHARGER-0001")
+    assert result is existing
+    mock_cls.return_value.update_charger_identity.assert_not_called()
+    mock_cls.return_value.install.assert_not_called()
+
+
+def test_sync_yes_noop_when_form_echoes_serial() -> None:
+    db = MagicMock()
+    svc = AssetChargerService(db)
+    ctx = _ctx()
+    asset = MagicMock()
+    asset.id = uuid4()
+    existing = MagicMock()
+    existing.id = uuid4()
+    existing.component_code = "CHARGER-0001"
+    existing.serial_number = "CHG-1001"
+    with (
+        patch.object(svc, "find_active_charger", return_value=existing),
+        patch("modules.asset.service.asset_charger_service.ComponentService") as mock_cls,
+    ):
+        result = svc.sync(ctx, asset, charger_available=True, charger_code="CHG-1001")
+    assert result is existing
+    mock_cls.return_value.update_charger_identity.assert_not_called()
+
+
+def test_sync_yes_noop_when_serial_already_on_same_asset() -> None:
+    """Edit re-send must not re-install when the asset already owns the charger serial."""
+    db = MagicMock()
+    svc = AssetChargerService(db)
+    ctx = _ctx()
+    asset = MagicMock()
+    asset.id = uuid4()
+    asset.company_id = ctx.company_id
+    asset.branch_id = ctx.branch_id
+    existing = MagicMock()
+    existing.id = uuid4()
+    existing.asset_id = asset.id
+    existing.component_code = "CHG-8888"
+    existing.serial_number = "CHG-8888"
+    with (
+        patch.object(svc, "find_active_charger", return_value=None),
+        patch.object(svc._components, "find_active_by_serial", return_value=existing),
+        patch("modules.asset.service.asset_charger_service.ComponentService") as mock_cls,
+    ):
+        result = svc.sync(ctx, asset, charger_available=True, charger_code="CHG-8888")
+    assert result is existing
+    mock_cls.return_value.install.assert_not_called()
+    mock_cls.return_value.update_charger_identity.assert_not_called()
+
+
+def test_sync_yes_rejects_serial_owned_by_other_asset() -> None:
+    db = MagicMock()
+    svc = AssetChargerService(db)
+    ctx = _ctx()
+    asset = MagicMock()
+    asset.id = uuid4()
+    asset.company_id = ctx.company_id
+    other = MagicMock()
+    other.asset_id = uuid4()
+    with (
+        patch.object(svc, "find_active_charger", return_value=None),
+        patch.object(svc._components, "find_active_by_serial", return_value=other),
+        pytest.raises(RegistrationValidationError, match="already used on another asset"),
+    ):
+        svc.sync(ctx, asset, charger_available=True, charger_code="CHG-8888")
+
+
 def test_create_rolls_back_when_charger_fails() -> None:
     """Charger install failure must propagate so the request transaction rolls back."""
     db = MagicMock()

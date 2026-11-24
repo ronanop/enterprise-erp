@@ -39,7 +39,7 @@ export function JobStatusBadge({
 
   if (isFilled) {
     return (
-      <span className="inline-flex rounded-full bg-[#F5F3FF] px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-[#7C3AED] uppercase">
+      <span className="inline-flex rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-primary uppercase">
         Filled
       </span>
     );
@@ -78,7 +78,7 @@ export function JobStatusBadge({
 
 export function PriorityBadge({ priority }: { priority: string }) {
   const key = priority.toLowerCase();
-  let tone = "bg-[#F5F3FF] text-[#7C3AED]";
+  let tone = "bg-primary/10 text-primary";
   let label = priority;
   switch (key) {
     case "high":
@@ -91,7 +91,7 @@ export function PriorityBadge({ priority }: { priority: string }) {
       label = "Medium";
       break;
     case "low":
-      tone = "bg-[#F5F3FF] text-[#7C3AED]";
+      tone = "bg-primary/10 text-primary";
       label = "Low";
       break;
     default:
@@ -111,27 +111,27 @@ export function StageBadge({
   stage: PipelineStage;
   label?: string;
 }) {
-  let tone = "bg-[#F5F3FF] text-[#7C3AED]";
+  let tone = "bg-primary/10 text-primary";
   let text = label ?? stage;
   switch (stage) {
     case "sourced":
-      tone = "bg-[#F5F3FF] text-[#7C3AED]";
+      tone = "bg-primary/10 text-primary";
       text = label ?? "Applied";
       break;
     case "screening":
-      tone = "bg-[#F4EDFB] text-[#7C3AED]";
+      tone = "bg-primary/10 text-primary";
       text = label ?? "Screening";
       break;
     case "interview_round_1":
-      tone = "bg-[#F5F3FF] text-[#7C3AED]";
+      tone = "bg-primary/10 text-primary";
       text = label ?? "Interview";
       break;
     case "interview_round_2":
-      tone = "bg-[#F5F3FF] text-[#7C3AED]";
+      tone = "bg-primary/10 text-primary";
       text = label ?? "Interview";
       break;
     case "hr_discussion":
-      tone = "bg-[#F5F3FF] text-[#7C3AED]";
+      tone = "bg-primary/10 text-primary";
       text = label ?? "Interview";
       break;
     case "background_check":
@@ -159,7 +159,7 @@ export function StageBadge({
 }
 
 const AVATAR_TONES = [
-  "bg-[#F4EDFB] text-[#9B5BB8]",
+  "bg-primary/10 text-primary",
   "bg-[#FCE7F3] text-[#DB2777]",
   "bg-[#EEF6FF] text-[#155DFD]",
   "bg-[#FFF4E5] text-[#C2410C]",

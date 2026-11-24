@@ -13,9 +13,9 @@
 - **Structure:** App shell + assets workspace (page header → KPI strip → lifecycle funnel → workspace groups → activity panels)
 - **Max Width:** Full workspace (`max-w-none` under AppShell for `/assets`); standalone module nav is a docked full-height sidebar (`72px` collapsed / `260px` expanded) that **pushes** content — never an overlay rail
 - **KPI cards:** Clickable — each opens All Assets with matching inventory operational-status preset (`all` / `ready` / `assigned` / `in_use_as_component` / `retired` / `pending_disposal` / `disposed`)
-- **Header chrome:** Primary actions only (All assets, Add asset); no placeholder notification/profile controls on the IT dashboard
-- **Operations layout:** Full-width Transfer list table (document, asset, from/to location, branches, effective date, reason, status); Ready/Disposal/Assignments queues removed from IT dashboard
-- **Surfaces:** Soft atmosphere wash, accent left-rail on transfer table, tonal KPI hover rings; density remains high
+- **Header chrome:** Primary actions only (All assets, Add asset); no Reports header button (reports embed on the dashboard); no placeholder notification/profile controls; no location selector on the IT dashboard
+- **Operations layout:** Hero KPI strip (operational status) + quick-actions panel; Ready/Disposal/Assignments queues and Transfer list removed from IT dashboard
+- **Surfaces:** Soft atmosphere wash, CRM-rail hero KPI tiles, accent left-rail on quick-actions panel; density remains high
 - **Do not** use event/conference heroes, oversized display type, or dark themes
 
 - **Grid:** 12-col for KPIs; dense tables for register / transfers / maintenance / disposal
@@ -45,15 +45,13 @@
 - Secondary nav (current scope): Assets · Configuration · Operations (Assignment, **DC Challan**, Transfers, Maintenance) · Lifecycle (Disposal) · Extended (Components, Documents, QR, Reports)
 - Module sidebar: docked, opaque, `bg-sidebar`; collapse toggle (not hover overlay); icons ~16px; row height ~40px
 - Lifecycle funnel: Category → Asset → Assignment → Maintenance → Depreciation → Disposal
-- **Inventory chrome:** Search field + operational-status dropdown (replaces preset pills and advanced Filters popover). Removed advanced filters: lifecycle, branch, department, assignment, location. Header location selector remains.
+- **Inventory chrome:** Search field + operational-status segmented filter bar (status-colored selected chips; location BranchSelector pattern). Removed advanced Filters popover fields: lifecycle, branch, department, assignment, location. Header location selector remains.
 
 ### Section Order
 
-1. Page header + actions (Refresh, Assets, Maintenance)
-2. KPI strip (live API aggregates)
-3. Asset lifecycle funnel
-4. Quick links + workspace resource groups
-5. Recent assets + maintenance watch + asset status mix
+1. Page header + actions (All assets, Add asset)
+2. Hero KPI strip (Total / Ready / Assigned / In Use as Component / Disposed)
+3. Quick actions panel (Register, Assign, Return, Discovery, Information Portal)
 
 ### Avoid
 

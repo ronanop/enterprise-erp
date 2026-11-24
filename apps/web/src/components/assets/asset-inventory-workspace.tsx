@@ -20,7 +20,6 @@ import { canCreateDcChallanFromInventory, isOpenDcChallanStatus } from "@/compon
 import { pickLinkedDcChallan } from "@/components/assets/dc-challan/dc-challan-document";
 import { dcChallanService, type DcChallanRow } from "@/services/assets-service";
 import {
-  INVENTORY_PRESETS,
   PRESET_EMPTY_COPY,
   PRESET_OPERATIONAL_STATUS,
   type InventoryPresetId,
@@ -92,7 +91,6 @@ export type AssetInventoryWorkspaceProps = {
   errorMessage?: string | null;
   onRetry?: () => void;
   actionPermissions?: Partial<InventoryActionPermissions>;
-  onViewRow?: (row: InventoryRowViewModel) => void;
   onMenuAction?: (action: InventoryMenuActionId, row: InventoryRowViewModel) => void;
   drawerOpen?: boolean;
   onDrawerOpenChange?: (open: boolean) => void;
@@ -111,13 +109,13 @@ export type AssetInventoryWorkspaceProps = {
 };
 
 const TABLE_COLUMNS = [
+  "Asset Serial",
   "Asset Name",
-  "S/N",
   "Make",
   "Model",
   "Configuration",
   "Charger",
-  "Assignee",
+  "Assigned",
   "Employee ID",
   "Operational Status",
   "Location",
@@ -126,7 +124,7 @@ const TABLE_COLUMNS = [
 
 export function AssetInventoryWorkspace({
   preset,
-  onPresetChange,
+  onPresetChange: _onPresetChange,
   headerLocationId,
   onHeaderLocationChange,
   siteLocations,
@@ -154,7 +152,6 @@ export function AssetInventoryWorkspace({
   errorMessage,
   onRetry,
   actionPermissions,
-  onViewRow,
   onMenuAction,
   drawerOpen = false,
   onDrawerOpenChange,
@@ -168,8 +165,8 @@ export function AssetInventoryWorkspace({
   exportSuccess,
   onExportExcel,
   onExportCsv,
-  pageTitle = "IT Asset Inventory",
-  pageDescription = "Search, filter, and manage the enterprise IT asset register.",
+  pageTitle = "All Assets",
+  pageDescription,
 }: AssetInventoryWorkspaceProps) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const emptyCopy = PRESET_EMPTY_COPY[preset];
@@ -252,9 +249,9 @@ export function AssetInventoryWorkspace({
       />
 
       <Card className={ASSETS_SURFACE_CARD}>
-        <div className="space-y-3 border-b border-border/50 p-4">
+        <div className="space-y-3 border-b border-border/50 bg-muted/20 p-4">
           <div
-            className="flex flex-col gap-2 sm:flex-row sm:items-center"
+            className="flex flex-col gap-3"
             data-testid="inventory-search-filter-row"
           >
             <InventorySearchTypeahead
@@ -262,7 +259,7 @@ export function AssetInventoryWorkspace({
               onValueChange={onQuickSearchChange}
               onSubmit={onQuickSearchSubmit}
               onSelectSuggestion={(suggestion) => onSelectSearchSuggestion?.(suggestion)}
-              className="w-full min-w-0 sm:max-w-md lg:max-w-lg sm:flex-none"
+              className="w-full min-w-0 sm:max-w-md lg:max-w-lg"
               locationId={
                 headerLocationId !== BRANCH_ALL_VALUE ? headerLocationId : undefined
               }
@@ -271,19 +268,6 @@ export function AssetInventoryWorkspace({
               }
               placeholder="Asset tag, name, serial, make, model, employee, status…"
             />
-            <select
-              aria-label="Filter by operational status"
-              data-testid="inventory-status-filter"
-              className="flex h-9 w-full cursor-pointer rounded-md border border-input bg-background px-3 text-sm transition-colors duration-200 sm:w-[13.5rem] sm:shrink-0"
-              value={preset}
-              onChange={(e) => onPresetChange(e.target.value as InventoryPresetId)}
-            >
-              {INVENTORY_PRESETS.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
           </div>
           <InventoryActiveFilterChips
             filters={currentApplied}
@@ -373,7 +357,6 @@ export function AssetInventoryWorkspace({
                   row={row}
                   serial={tableRowSerial(page, pageSize, index)}
                   actionPermissions={actionPermissions}
-                  onViewRow={onViewRow}
                   onMenuAction={onMenuAction}
                 />
               ))
@@ -412,7 +395,6 @@ export function AssetInventoryWorkspace({
               key={row.id}
               row={row}
               actionPermissions={actionPermissions}
-              onViewRow={onViewRow}
               onMenuAction={onMenuAction}
             />
           ))
@@ -472,17 +454,51 @@ export function AssetInventoryWorkspace({
   );
 }
 
+const INVENTORY_EMPTY_PLACEHOLDER = "—";
+
+/** Empty inventory cells use the shared em dash placeholder. */
+function isInventoryEmpty(value: string | null | undefined): boolean {
+  const trimmed = value?.trim() ?? "";
+  return !trimmed || trimmed === "-" || trimmed === "–" || trimmed === "—";
+}
+
+/** Shared empty-cell look so dashes match across mono and proportional columns. */
+function InventoryEmptyCell({
+  value,
+  className,
+  mono,
+  testId,
+}: {
+  value: string | null | undefined;
+  className?: string;
+  mono?: boolean;
+  testId?: string;
+}) {
+  const empty = isInventoryEmpty(value);
+  return (
+    <td
+      className={cn(
+        "px-3 py-2.5",
+        !empty && mono && "font-mono text-xs",
+        empty && "text-sm text-muted-foreground",
+        className,
+      )}
+      data-testid={testId}
+    >
+      {empty ? INVENTORY_EMPTY_PLACEHOLDER : String(value).trim()}
+    </td>
+  );
+}
+
 function InventoryTableRow({
   row,
   serial,
   actionPermissions,
-  onViewRow,
   onMenuAction,
 }: {
   row: InventoryRowViewModel;
   serial: number;
   actionPermissions?: Partial<InventoryActionPermissions>;
-  onViewRow?: (row: InventoryRowViewModel) => void;
   onMenuAction?: (action: InventoryMenuActionId, row: InventoryRowViewModel) => void;
 }) {
   const asset = inventoryRowToAssetRef(row);
@@ -517,36 +533,39 @@ function InventoryTableRow({
       data-testid={`inventory-row-${row.id}`}
     >
       <td className={tableSerialCellClassName()}>{serial}</td>
+      <InventoryEmptyCell value={row.serialNumber} mono />
       <td className="px-3 py-2.5 font-medium" data-testid="inventory-asset-name-cell">
         {row.laptopName}
       </td>
-      <td className="px-3 py-2.5 font-mono text-xs">{row.serialNumber}</td>
-      <td className="px-3 py-2.5">{row.manufacturer}</td>
-      <td className="px-3 py-2.5">{row.model}</td>
+      <InventoryEmptyCell value={row.manufacturer} />
+      <InventoryEmptyCell value={row.model} />
       <td
         className="px-3 py-2.5 whitespace-pre-line text-xs leading-snug"
         data-testid="inventory-configuration-cell"
       >
-        {row.configuration}
+        {isInventoryEmpty(row.configuration) ? (
+          <span className="text-sm text-muted-foreground">{INVENTORY_EMPTY_PLACEHOLDER}</span>
+        ) : (
+          row.configuration
+        )}
       </td>
-      <td
-        className="px-3 py-2.5 font-mono text-xs"
-        data-testid="inventory-charger-cell"
-      >
-        {row.chargerCode}
-      </td>
-      <td className="px-3 py-2.5" data-testid="inventory-assignee-cell">
-        {row.currentHolder}
-      </td>
-      <td className="px-3 py-2.5 font-mono text-xs">{row.employeeId}</td>
+      <InventoryEmptyCell
+        value={row.chargerCode}
+        mono
+        testId="inventory-charger-cell"
+      />
+      <InventoryEmptyCell
+        value={row.currentHolder}
+        testId="inventory-assignee-cell"
+      />
+      <InventoryEmptyCell value={row.employeeId} mono testId="inventory-employee-id-cell" />
       <td className="px-3 py-2.5 text-center">{opsBadge}</td>
-      <td className="px-3 py-2.5">{row.location}</td>
-      <td className="px-3 py-2.5 whitespace-nowrap text-right">{row.issueDate}</td>
+      <InventoryEmptyCell value={row.location} />
+      <InventoryEmptyCell value={row.issueDate} className="whitespace-nowrap text-right" />
       <td className="px-3 py-2.5 text-right">
         <InventoryActionMenu
           asset={asset}
           permissions={rowPermissions}
-          onView={() => onViewRow?.(row)}
           onMenuAction={(action) => onMenuAction?.(action, row)}
         />
       </td>
@@ -557,12 +576,10 @@ function InventoryTableRow({
 function InventoryMobileCard({
   row,
   actionPermissions,
-  onViewRow,
   onMenuAction,
 }: {
   row: InventoryRowViewModel;
   actionPermissions?: Partial<InventoryActionPermissions>;
-  onViewRow?: (row: InventoryRowViewModel) => void;
   onMenuAction?: (action: InventoryMenuActionId, row: InventoryRowViewModel) => void;
 }) {
   const asset = inventoryRowToAssetRef(row);
@@ -601,7 +618,7 @@ function InventoryMobileCard({
           {row.manufacturer} · {row.model}
         </p>
         <p className="text-xs">
-          Assignee: {row.currentHolder} · {row.employeeId}
+          Assigned: {row.currentHolder} · {row.employeeId}
         </p>
         <p className="text-xs text-muted-foreground">
           Location: {row.location} · Issued: {row.issueDate}
@@ -609,7 +626,6 @@ function InventoryMobileCard({
         <InventoryActionMenu
           asset={asset}
           permissions={rowPermissions}
-          onView={() => onViewRow?.(row)}
           onMenuAction={(action) => onMenuAction?.(action, row)}
           className="w-full justify-end"
         />

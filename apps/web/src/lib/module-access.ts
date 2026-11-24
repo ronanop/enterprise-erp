@@ -27,13 +27,45 @@ export function hasAllModulesAdmin(adminModuleKeys: string[]): boolean {
   return all.every((key) => set.has(key));
 }
 
+const ASSET_IT_KEY = "assets-it";
+const ASSET_NON_IT_KEY = "assets-non-it";
+const ASSET_PARENT_KEY = "assets";
+
 export function moduleKeyForHref(href: string): string | null {
   if (href === "/" || href === "/home" || href === "/my-jobs") return null;
+  // External absolute URLs (e.g. Feedback Microsoft Form) are not module-gated.
+  if (/^https?:\/\//i.test(href)) return null;
   if (href === "/organization/users" || href.startsWith("/organization/")) {
     return "organization";
   }
+  // Assets IT / Non-IT are separate assignable modules under /assets.
+  if (href === "/assets/non-it" || href.startsWith("/assets/non-it/")) {
+    return ASSET_NON_IT_KEY;
+  }
+  if (href === "/assets" || href.startsWith("/assets/")) {
+    return ASSET_IT_KEY;
+  }
   const mod = erpModules.find((m) => href === m.href || href.startsWith(`${m.href}/`));
   return mod?.key ?? null;
+}
+
+function hasAssetModuleAccess(
+  key: string,
+  moduleKeys: string[],
+  adminModuleKeys: string[],
+): boolean {
+  const assigned = new Set([...moduleKeys, ...adminModuleKeys]);
+  const hasIt = assigned.has(ASSET_IT_KEY);
+  const hasNonIt = assigned.has(ASSET_NON_IT_KEY);
+  // Explicit IT / Non-IT grants win. Parent ``assets`` alone is legacy full access.
+  // Do not let a leftover parent row unlock the other domain when a submodule is set.
+  if (hasIt || hasNonIt) {
+    if (key === ASSET_IT_KEY) return hasIt;
+    if (key === ASSET_NON_IT_KEY) return hasNonIt;
+    return false;
+  }
+  if (assigned.has(ASSET_PARENT_KEY)) return true;
+  return false;
 }
 
 function moduleGroupForHref(href: string): string | null {
@@ -69,6 +101,9 @@ export function canAccessHref(
   const key = moduleKeyForHref(href);
   if (!key) return true;
   if (isErpAdmin(userType)) return true;
+  if (key === ASSET_IT_KEY || key === ASSET_NON_IT_KEY) {
+    return hasAssetModuleAccess(key, moduleKeys, adminModuleKeys);
+  }
   // Module admins can open every screen in the modules they administer.
   if (adminModuleKeys.includes(key)) return true;
   return moduleKeys.includes(key);
@@ -105,6 +140,9 @@ export function moduleTitle(key: string): string {
 /** Organization Users is reserved for ERP-wide module-admin assignment. */
 export function moduleUsersHref(moduleKey: string): string {
   if (moduleKey === "organization") return "/organization/module-users";
+  if (moduleKey === ASSET_IT_KEY) return "/assets/users?domain=IT";
+  if (moduleKey === ASSET_NON_IT_KEY) return "/assets/users?domain=NON_IT";
+  if (moduleKey === ASSET_PARENT_KEY) return "/assets/users";
   return `/${moduleKey}/users`;
 }
 
@@ -114,7 +152,15 @@ export function canManageModuleUsers(
   userType?: string,
 ): boolean {
   if (isErpAdmin(userType)) return true;
-  return adminModuleKeys.includes(moduleKey);
+  if (adminModuleKeys.includes(moduleKey)) return true;
+  // Parent Assets admin may manage IT / Non-IT Users tabs.
+  if (
+    (moduleKey === ASSET_IT_KEY || moduleKey === ASSET_NON_IT_KEY) &&
+    adminModuleKeys.includes(ASSET_PARENT_KEY)
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /**

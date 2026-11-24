@@ -4,11 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Boxes,
   Eye,
-  History,
   Loader2,
   Plus,
   RefreshCw,
-  Replace,
   Trash2,
   X,
 } from "lucide-react";
@@ -28,7 +26,7 @@ import {
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -41,7 +39,6 @@ import {
 import { isAuthenticated } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import {
-  type ComponentHistoryResult,
   type ComponentRow,
   type ComponentTreeResult,
   COMPONENT_TYPE_OPTIONS,
@@ -49,20 +46,23 @@ import {
   componentTypeLabel,
 } from "@/services/assets-service";
 import { ApiClientError, resourceService } from "@/services/api-client";
+import { formatDropdownLabel } from "@/components/assets/shared/format-dropdown-label";
 
 type AssetRow = {
   id: string;
   asset_code: string;
   asset_name: string;
-};
-
-type AttachableAsset = {
-  id: string;
-  asset_code: string;
-  asset_name: string;
-  serial_number?: string | null;
+  status?: string | null;
   operational_status?: string | null;
 };
+
+function isInstallableParentAsset(row: AssetRow): boolean {
+  const lifecycle = String(row.status ?? "").trim().toLowerCase();
+  const ops = String(row.operational_status ?? "").trim().toUpperCase();
+  if (lifecycle === "disposed" || lifecycle === "retired") return false;
+  if (ops === "DISPOSED" || ops === "RETIRED" || ops === "PENDING_DISPOSAL") return false;
+  return lifecycle === "active" || lifecycle === "";
+}
 
 type ListPayload<T> = {
   items: T[];
@@ -71,7 +71,6 @@ type ListPayload<T> = {
   page_size: number;
 };
 
-const STATUS_OPTIONS = ["", "active", "replaced", "disposed"] as const;
 const PAGE_SIZE = 25;
 
 function parseListPayload<T>(data: unknown): ListPayload<T> {
@@ -112,33 +111,21 @@ export function AssetComponentsWorkspace() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState<string>("");
-  const [assetFilter, setAssetFilter] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [installOpen, setInstallOpen] = useState(false);
-  const [installMode, setInstallMode] = useState<"type" | "asset">("type");
   const [draftAssetId, setDraftAssetId] = useState("");
   const [draftType, setDraftType] = useState("OTHER");
   const [draftSerial, setDraftSerial] = useState("");
-  const [draftQty, setDraftQty] = useState("1");
-  const [draftChildAssetId, setDraftChildAssetId] = useState("");
-  const [attachable, setAttachable] = useState<AttachableAsset[]>([]);
-  const [attachQ, setAttachQ] = useState("");
   const [saving, setSaving] = useState(false);
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [selected, setSelected] = useState<ComponentRow | null>(null);
   const [tree, setTree] = useState<ComponentTreeResult | null>(null);
-  const [history, setHistory] = useState<ComponentHistoryResult | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [editName, setEditName] = useState("");
   const [editSerial, setEditSerial] = useState("");
-  const [editQty, setEditQty] = useState("");
-  const [replaceOpen, setReplaceOpen] = useState(false);
-  const [replaceName, setReplaceName] = useState("");
-  const [replaceSerial, setReplaceSerial] = useState("");
 
   const assetLabelById = useMemo(() => {
     const map = new Map<string, string>();
@@ -151,10 +138,10 @@ export function AssetComponentsWorkspace() {
   const loadAssets = useCallback(async () => {
     if (!isAuthenticated()) return;
     const res = await resourceService.list<ListPayload<AssetRow>>(
-      "/assets/assets?page=1&page_size=200&sort=asset_code",
+      "/assets/assets?page=1&page_size=200&sort=asset_code&status=active",
     );
     const parsed = parseListPayload<AssetRow>(res.data);
-    setAssets(parsed.items);
+    setAssets(parsed.items.filter(isInstallableParentAsset));
   }, []);
 
   const loadRows = useCallback(async () => {
@@ -166,8 +153,6 @@ export function AssetComponentsWorkspace() {
         page,
         page_size: PAGE_SIZE,
         q: q.trim() || undefined,
-        status: status || undefined,
-        asset_id: assetFilter || undefined,
         sort: "created_at",
       });
       setRows(payload.items);
@@ -179,7 +164,7 @@ export function AssetComponentsWorkspace() {
     } finally {
       setLoading(false);
     }
-  }, [page, q, status, assetFilter]);
+  }, [page, q]);
 
   useEffect(() => {
     void loadAssets();
@@ -189,47 +174,16 @@ export function AssetComponentsWorkspace() {
     void loadRows();
   }, [loadRows]);
 
-  useEffect(() => {
-    if (!installOpen || installMode !== "asset" || !draftAssetId) {
-      setAttachable([]);
-      return;
-    }
-    let cancelled = false;
-    void componentService
-      .listAttachableAssets({
-        parent_asset_id: draftAssetId,
-        q: attachQ.trim() || undefined,
-        limit: 40,
-      })
-      .then((list) => {
-        if (!cancelled) setAttachable(list);
-      })
-      .catch(() => {
-        if (!cancelled) setAttachable([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [installOpen, installMode, draftAssetId, attachQ]);
-
   async function openDetail(row: ComponentRow) {
     setSelected(row);
     setDetailOpen(true);
     setEditMode(false);
-    setReplaceOpen(false);
     setEditName(row.component_name);
     setEditSerial(row.serial_number ?? "");
-    setEditQty(row.quantity != null ? String(row.quantity) : "");
     try {
-      const [t, h] = await Promise.all([
-        componentService.tree(row.asset_id),
-        componentService.history(row.id),
-      ]);
-      setTree(t);
-      setHistory(h);
+      setTree(await componentService.tree(row.asset_id));
     } catch {
       setTree(null);
-      setHistory(null);
     }
   }
 
@@ -238,11 +192,7 @@ export function AssetComponentsWorkspace() {
       setError("Select a parent asset");
       return;
     }
-    if (installMode === "asset" && !draftChildAssetId) {
-      setError("Select an asset to attach as a component");
-      return;
-    }
-    if (installMode === "type" && draftType === "CHARGER" && !draftSerial.trim()) {
+    if (draftType === "CHARGER" && !draftSerial.trim()) {
       setError("Serial number is required for chargers");
       return;
     }
@@ -251,15 +201,11 @@ export function AssetComponentsWorkspace() {
     try {
       const created = await componentService.install({
         asset_id: draftAssetId,
-        component_type: installMode === "type" ? draftType : "OTHER",
+        component_type: draftType,
         serial_number: draftSerial.trim() || undefined,
-        quantity: draftQty.trim() ? Number(draftQty) : undefined,
-        component_asset_id: installMode === "asset" ? draftChildAssetId : undefined,
       });
       setInstallOpen(false);
-      setDraftChildAssetId("");
       setDraftSerial("");
-      setDraftQty("1");
       await loadRows();
       await openDetail(created);
     } catch (err) {
@@ -277,7 +223,6 @@ export function AssetComponentsWorkspace() {
       const updated = await componentService.update(selected.id, {
         component_name: editName.trim() || selected.component_name,
         serial_number: editSerial.trim() || null,
-        quantity: editQty.trim() ? Number(editQty) : null,
         version: selected.version,
       });
       setSelected(updated);
@@ -285,25 +230,6 @@ export function AssetComponentsWorkspace() {
       await loadRows();
     } catch (err) {
       setError(errMessage(err, "Update failed"));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleReplace() {
-    if (!selected) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const result = await componentService.replace(selected.id, {
-        component_name: replaceName.trim() || undefined,
-        serial_number: replaceSerial.trim() || undefined,
-      });
-      setReplaceOpen(false);
-      await loadRows();
-      await openDetail(result.successor);
-    } catch (err) {
-      setError(errMessage(err, "Replace failed"));
     } finally {
       setSaving(false);
     }
@@ -339,7 +265,6 @@ export function AssetComponentsWorkspace() {
     <AssetsPremiumPage testId="asset-components-workspace">
       <PageHeader
         title="Asset Components"
-        description="Install accessories on a parent asset — lightweight types or attach a registered asset."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -356,7 +281,6 @@ export function AssetComponentsWorkspace() {
               className={cn("cursor-pointer", ASSETS_ACCENT_BTN)}
               onClick={() => {
                 setInstallOpen(true);
-                setInstallMode("type");
                 setError(null);
               }}
             >
@@ -377,69 +301,17 @@ export function AssetComponentsWorkspace() {
       ) : null}
 
       <Card className={ASSETS_SURFACE_CARD}>
-        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0 pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Boxes className="size-4 text-[#0369A1]" />
-            Component register
-          </CardTitle>
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="grid gap-1">
-              <Label className="text-xs text-muted-foreground">Search</Label>
-              <Input
-                className="h-9 w-44"
-                value={q}
-                onChange={(e) => {
-                  setPage(1);
-                  setQ(e.target.value);
-                }}
-                placeholder="Code, name, serial…"
-              />
-            </div>
-            <div className="grid gap-1">
-              <Label className="text-xs text-muted-foreground">Status</Label>
-              <Select
-                value={status || "all"}
-                onValueChange={(v) => {
-                  setPage(1);
-                  setStatus(v === "all" ? "" : v);
-                }}
-              >
-                <SelectTrigger className="h-9 w-36 cursor-pointer">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  {STATUS_OPTIONS.filter(Boolean).map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-1">
-              <Label className="text-xs text-muted-foreground">Parent asset</Label>
-              <Select
-                value={assetFilter || "all"}
-                onValueChange={(v) => {
-                  setPage(1);
-                  setAssetFilter(v === "all" ? "" : v);
-                }}
-              >
-                <SelectTrigger className="h-9 w-56 cursor-pointer">
-                  <SelectValue placeholder="All assets" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All assets</SelectItem>
-                  {assets.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>
-                      {a.asset_code} · {a.asset_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-end gap-3 space-y-0 pb-3">
+          <Input
+            className="h-9 w-full max-w-xs"
+            value={q}
+            onChange={(e) => {
+              setPage(1);
+              setQ(e.target.value);
+            }}
+            placeholder="Search code, name, serial…"
+            aria-label="Search components"
+          />
         </CardHeader>
         <CardContent className="overflow-x-auto p-0">
           <table className="w-full min-w-[720px] border-collapse text-sm">
@@ -448,57 +320,39 @@ export function AssetComponentsWorkspace() {
                     <th className={tableSerialHeaderClassName()} scope="col">
                       {TABLE_SERIAL_HEADER_LABEL}
                     </th>
-                    <th className="px-4 py-2.5 font-medium">Identity</th>
                 <th className="px-4 py-2.5 font-medium">Type</th>
                 <th className="px-4 py-2.5 font-medium">Parent asset</th>
                 <th className="px-4 py-2.5 font-medium">Status</th>
-                <th className="px-4 py-2.5 font-medium">Qty</th>
                 <th className="px-4 py-2.5 font-medium text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
                     <Loader2 className="mx-auto size-5 animate-spin" />
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
                     No components found.
                   </td>
                 </tr>
               ) : (
                 rows.map((row, index) => {
-                  const idn = displayIdentity(row);
                   return (
                     <tr
                       key={row.id}
                       className="border-b border-border/70 transition-colors duration-150 hover:bg-muted/30"
                     >
                       <td className={tableSerialCellClassName()}>{tableRowSerial(page, PAGE_SIZE, index)}</td>
-                          <td className="px-4 py-2.5">
-                        <div className="font-medium">{idn.primary}</div>
-                        <div className="text-xs text-muted-foreground">{idn.secondary}</div>
-                        {row.linked_asset_operational_status ? (
-                          <div className="mt-1">
-                            <StatusBadge
-                              kind="operational"
-                              status={row.linked_asset_operational_status}
-                            />
-                          </div>
-                        ) : null}
-                      </td>
                       <td className="px-4 py-2.5">{componentTypeLabel(row.component_type)}</td>
                       <td className="px-4 py-2.5">
                         {assetLabelById.get(row.asset_id) ?? row.asset_id.slice(0, 8)}
                       </td>
                       <td className="px-4 py-2.5">
-                        <Badge variant="secondary">{row.status}</Badge>
-                      </td>
-                      <td className="px-4 py-2.5 tabular-nums">
-                        {row.quantity != null ? String(row.quantity) : "—"}
+                        <Badge variant="secondary">{formatDropdownLabel(row.status)}</Badge>
                       </td>
                       <td className="px-4 py-2.5 text-right">
                         <Button
@@ -578,26 +432,6 @@ export function AssetComponentsWorkspace() {
                 <X className="size-4" />
               </Button>
             </div>
-            <div className="mb-3 flex gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant={installMode === "type" ? "default" : "outline"}
-                className="cursor-pointer"
-                onClick={() => setInstallMode("type")}
-              >
-                By type
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={installMode === "asset" ? "default" : "outline"}
-                className="cursor-pointer"
-                onClick={() => setInstallMode("asset")}
-              >
-                Attach asset
-              </Button>
-            </div>
             <div className="grid gap-3">
               <div className="grid gap-1.5">
                 <Label>Parent asset</Label>
@@ -614,90 +448,29 @@ export function AssetComponentsWorkspace() {
                   </SelectContent>
                 </Select>
               </div>
-              {installMode === "type" ? (
-                <>
-                  <div className="grid gap-1.5">
-                    <Label>Component type</Label>
-                    <Select value={draftType} onValueChange={setDraftType}>
-                      <SelectTrigger className="cursor-pointer">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {COMPONENT_TYPE_OPTIONS.map((o) => (
-                          <SelectItem key={o.value} value={o.value}>
-                            {o.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-1.5">
-                    <Label>Serial number{draftType === "CHARGER" ? " *" : ""}</Label>
-                    <Input
-                      value={draftSerial}
-                      onChange={(e) => setDraftSerial(e.target.value)}
-                      placeholder="Optional unless charger"
-                    />
-                  </div>
-                  <div className="grid gap-1.5">
-                    <Label>Quantity</Label>
-                    <Input
-                      value={draftQty}
-                      onChange={(e) => setDraftQty(e.target.value)}
-                      inputMode="decimal"
-                    />
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="grid gap-1.5">
-                    <Label>Search eligible assets</Label>
-                    <Input
-                      value={attachQ}
-                      onChange={(e) => setAttachQ(e.target.value)}
-                      placeholder="Code, name, serial…"
-                      disabled={!draftAssetId}
-                    />
-                  </div>
-                  <div className="max-h-48 overflow-y-auto rounded-md border border-border">
-                    {!draftAssetId ? (
-                      <p className="p-3 text-sm text-muted-foreground">Select a parent first.</p>
-                    ) : attachable.length === 0 ? (
-                      <p className="p-3 text-sm text-muted-foreground">
-                        No Ready to Move eligible assets (types marked eligible as component).
-                      </p>
-                    ) : (
-                      <ul className="m-0 list-none divide-y divide-border p-0">
-                        {attachable.map((a) => (
-                          <li key={a.id}>
-                            <label
-                              className={cn(
-                                "flex cursor-pointer items-start gap-2 px-3 py-2 transition-colors duration-150 hover:bg-muted/40",
-                                draftChildAssetId === a.id && "bg-primary/5",
-                              )}
-                            >
-                              <input
-                                type="radio"
-                                className="mt-1 cursor-pointer"
-                                checked={draftChildAssetId === a.id}
-                                onChange={() => setDraftChildAssetId(a.id)}
-                              />
-                              <span className="text-sm">
-                                <span className="font-medium">
-                                  {a.asset_code} · {a.asset_name}
-                                </span>
-                                <span className="mt-0.5 block text-xs text-muted-foreground">
-                                  S/N: {a.serial_number?.trim() || "—"} · {a.operational_status}
-                                </span>
-                              </span>
-                            </label>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </>
-              )}
+              <div className="grid gap-1.5">
+                <Label>Component type</Label>
+                <Select value={draftType} onValueChange={setDraftType}>
+                  <SelectTrigger className="cursor-pointer">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COMPONENT_TYPE_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Serial number{draftType === "CHARGER" ? " *" : ""}</Label>
+                <Input
+                  value={draftSerial}
+                  onChange={(e) => setDraftSerial(e.target.value)}
+                  placeholder="Optional unless charger"
+                />
+              </div>
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <Button
@@ -752,7 +525,7 @@ export function AssetComponentsWorkspace() {
             <div className="flex-1 space-y-4 overflow-y-auto p-4">
               <section className="space-y-2 text-sm">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary">{selected.status}</Badge>
+                  <Badge variant="secondary">{formatDropdownLabel(selected.status)}</Badge>
                   {selected.component_asset_id ? (
                     <Badge variant="outline">Asset-linked</Badge>
                   ) : null}
@@ -805,20 +578,6 @@ export function AssetComponentsWorkspace() {
                     <Button
                       type="button"
                       size="sm"
-                      variant="outline"
-                      className="cursor-pointer gap-1"
-                      onClick={() => {
-                        setReplaceOpen(true);
-                        setReplaceName(selected.component_name);
-                        setReplaceSerial("");
-                      }}
-                    >
-                      <Replace className="size-3.5" />
-                      Replace
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
                       variant="destructive"
                       className="cursor-pointer gap-1"
                       onClick={() => void handleDispose()}
@@ -848,8 +607,6 @@ export function AssetComponentsWorkspace() {
                     <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
                     <Label>Serial</Label>
                     <Input value={editSerial} onChange={(e) => setEditSerial(e.target.value)} />
-                    <Label>Quantity</Label>
-                    <Input value={editQty} onChange={(e) => setEditQty(e.target.value)} />
                     <Button
                       type="button"
                       size="sm"
@@ -858,26 +615,6 @@ export function AssetComponentsWorkspace() {
                       onClick={() => void handleUpdate()}
                     >
                       Save
-                    </Button>
-                  </div>
-                ) : null}
-                {replaceOpen ? (
-                  <div className="mt-3 space-y-2 rounded-md border border-border p-3">
-                    <Label>Successor name</Label>
-                    <Input value={replaceName} onChange={(e) => setReplaceName(e.target.value)} />
-                    <Label>New serial</Label>
-                    <Input
-                      value={replaceSerial}
-                      onChange={(e) => setReplaceSerial(e.target.value)}
-                    />
-                    <Button
-                      type="button"
-                      size="sm"
-                      className={cn("cursor-pointer", ASSETS_ACCENT_BTN)}
-                      disabled={saving}
-                      onClick={() => void handleReplace()}
-                    >
-                      Confirm replace
                     </Button>
                   </div>
                 ) : null}
@@ -894,34 +631,13 @@ export function AssetComponentsWorkspace() {
                     </li>
                     {tree.components.map((c) => (
                       <li key={String(c.id)} className="pl-3 text-muted-foreground">
-                        · {c.linked_asset_code || c.component_code} ({c.status})
+                        · {c.linked_asset_code || c.component_code} (
+                        {formatDropdownLabel(String(c.status ?? ""))})
                       </li>
                     ))}
                   </ul>
                 ) : (
                   <p className="text-sm text-muted-foreground">No hierarchy loaded.</p>
-                )}
-              </section>
-
-              <section>
-                <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
-                  <History className="size-3.5" /> Code history
-                </h3>
-                {history?.lineage?.length ? (
-                  <ul className="m-0 space-y-2 list-none p-0 text-sm">
-                    {history.lineage.map((h) => (
-                      <li key={h.id} className="rounded-md border border-border/70 px-2 py-1.5">
-                        <div className="font-medium">
-                          {h.status} · {h.component_name}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {h.created_at ?? "—"} · S/N {h.serial_number || "—"}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No history.</p>
                 )}
               </section>
             </div>

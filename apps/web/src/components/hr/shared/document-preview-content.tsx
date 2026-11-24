@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FileWarning, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import {
   dataUrlToArrayBuffer,
   dataUrlToBlob,
   dataUrlToText,
+  isUsablePdfDataUrl,
   resolveDocumentMime,
   triggerDataUrlDownload,
 } from "@/lib/document-preview";
@@ -56,6 +57,33 @@ export function DocumentPreviewContent({
   }
 
   if (kind === "pdf") {
+    if (!isUsablePdfDataUrl(dataUrl)) {
+      return (
+        <UnsupportedPreview
+          fileName={fileName}
+          dataUrl={dataUrl}
+          mime={mime}
+          message={
+            viewOnly
+              ? "This policy PDF could not be opened. The written policy text below still applies — contact HR if you need the file."
+              : "This PDF file appears empty or corrupted. Try uploading it again."
+          }
+          className={className}
+          viewOnly={viewOnly}
+        />
+      );
+    }
+    // View-only: render pages with pdf.js (no browser download/print toolbar).
+    if (viewOnly) {
+      return (
+        <ViewOnlyPdfPages
+          fileName={fileName}
+          dataUrl={dataUrl}
+          className={className}
+          frameClassName={frameClassName}
+        />
+      );
+    }
     return (
       <PdfFrame
         fileName={fileName}
@@ -104,7 +132,144 @@ export function DocumentPreviewContent({
   );
 }
 
-/** Blob URL + #toolbar=0 so Chrome/Edge hide download/print chrome. */
+function useBlockPrintAndContext() {
+  useEffect(() => {
+    const blockPrintKeys = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    document.body.classList.add("confidential-print-blocked");
+    window.addEventListener("keydown", blockPrintKeys, true);
+    return () => {
+      document.body.classList.remove("confidential-print-blocked");
+      window.removeEventListener("keydown", blockPrintKeys, true);
+    };
+  }, []);
+}
+
+/**
+ * Canvas PDF viewer with no browser chrome — no download, print, or edit tools.
+ */
+function ViewOnlyPdfPages({
+  fileName,
+  dataUrl,
+  className,
+  frameClassName,
+}: {
+  fileName: string;
+  dataUrl: string;
+  className?: string;
+  frameClassName?: string;
+}) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [pageCount, setPageCount] = useState(0);
+
+  useBlockPrintAndContext();
+
+  useEffect(() => {
+    let cancelled = false;
+    const host = hostRef.current;
+    if (!host) return;
+
+    setLoading(true);
+    setFailed(false);
+    setPageCount(0);
+    host.replaceChildren();
+
+    void (async () => {
+      try {
+        const bytes = dataUrlToArrayBuffer(dataUrl);
+        const pdfjs = await import("pdfjs-dist");
+        pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+          "pdfjs-dist/build/pdf.worker.min.mjs",
+          import.meta.url,
+        ).toString();
+        const doc = await pdfjs.getDocument({ data: bytes.slice(0) }).promise;
+        if (cancelled) {
+          await doc.destroy();
+          return;
+        }
+        setPageCount(doc.numPages);
+        const width = Math.max(host.clientWidth || 640, 320);
+        for (let pageNo = 1; pageNo <= doc.numPages; pageNo += 1) {
+          if (cancelled) break;
+          const page = await doc.getPage(pageNo);
+          const base = page.getViewport({ scale: 1 });
+          const scale = Math.min(1.5, width / base.width);
+          const viewport = page.getViewport({ scale });
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.floor(viewport.width);
+          canvas.height = Math.floor(viewport.height);
+          canvas.className =
+            "mx-auto mb-3 block w-full max-w-full rounded border border-border/40 bg-white shadow-sm last:mb-0";
+          canvas.setAttribute("aria-label", `${fileName} page ${pageNo}`);
+          const ctx = canvas.getContext("2d");
+          if (!ctx) continue;
+          await page.render({ canvasContext: ctx, viewport, canvas }).promise;
+          if (!cancelled) host.appendChild(canvas);
+        }
+        await doc.destroy();
+        if (!cancelled) setLoading(false);
+      } catch {
+        if (!cancelled) {
+          setFailed(true);
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      host.replaceChildren();
+    };
+  }, [dataUrl, fileName]);
+
+  if (failed) {
+    return (
+      <UnsupportedPreview
+        fileName={fileName}
+        dataUrl={dataUrl}
+        mime="application/pdf"
+        message="Could not display this policy PDF. Read the policy text below, or contact HR."
+        className={className}
+        viewOnly
+      />
+    );
+  }
+
+  return (
+    <div
+      className={cn("relative confidential-no-print", className)}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <div
+        className={cn(
+          "max-h-[65vh] overflow-y-auto rounded-md border border-border/60 bg-[#E5E7EB] p-3",
+          frameClassName,
+        )}
+      >
+        {loading ? (
+          <div className="flex h-[40vh] items-center justify-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            Loading document…
+          </div>
+        ) : null}
+        <div ref={hostRef} className={loading ? "hidden" : undefined} />
+      </div>
+      <p className="mt-1.5 text-center text-[10px] text-muted-foreground">
+        Confidential · view only
+        {pageCount > 0 ? ` · ${pageCount} page${pageCount === 1 ? "" : "s"}` : ""}
+        {" · "}download and print disabled
+      </p>
+    </div>
+  );
+}
+
+/** Blob URL via <embed> for editable/admin previews (browser chrome allowed). */
 function PdfFrame({
   fileName,
   dataUrl,
@@ -119,39 +284,45 @@ function PdfFrame({
   viewOnly?: boolean;
 }) {
   const [src, setSrc] = useState<string>("");
-  // Personal / policy docs are confidential - always hide browser PDF ribbon.
-  const confidential = true;
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let objectUrl = "";
+    setFailed(false);
     try {
       const blob = dataUrlToBlob(dataUrl, "application/pdf");
+      if (blob.size < 5) {
+        setFailed(true);
+        setSrc("");
+        return;
+      }
       objectUrl = URL.createObjectURL(blob);
-      // scrollbar stays on so multi-page docs can be read; toolbar/download/print hidden.
-      setSrc(`${objectUrl}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`);
+      setSrc(objectUrl);
     } catch {
-      setSrc(`${dataUrl}#toolbar=0&navpanes=0&scrollbar=1`);
+      setFailed(true);
+      setSrc("");
     }
     return () => {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [dataUrl]);
 
-  useEffect(() => {
-    if (!confidential) return;
-    const blockPrintKeys = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    };
-    document.body.classList.add("confidential-print-blocked");
-    window.addEventListener("keydown", blockPrintKeys, true);
-    return () => {
-      document.body.classList.remove("confidential-print-blocked");
-      window.removeEventListener("keydown", blockPrintKeys, true);
-    };
-  }, [confidential]);
+  if (failed) {
+    return (
+      <UnsupportedPreview
+        fileName={fileName}
+        dataUrl={dataUrl}
+        mime="application/pdf"
+        message={
+          viewOnly
+            ? "Could not display this policy PDF. Read the policy text below, or contact HR."
+            : "Could not display this PDF. Try downloading or re-uploading the file."
+        }
+        className={className}
+        viewOnly={viewOnly}
+      />
+    );
+  }
 
   if (!src) {
     return (
@@ -169,26 +340,15 @@ function PdfFrame({
   }
 
   return (
-    <div
-      className={cn("relative confidential-no-print", className)}
-      onContextMenu={(e) => e.preventDefault()}
-    >
-      <div
-        className={cn(
-          "relative overflow-hidden rounded-md border border-border/60 bg-white",
-        )}
-      >
-        <iframe
+    <div className={cn("relative", className)}>
+      <div className="relative overflow-hidden rounded-md border border-border/60 bg-white">
+        <embed
           title={fileName}
           src={src}
+          type="application/pdf"
           className={cn("h-[65vh] w-full bg-white", frameClassName)}
         />
       </div>
-      {viewOnly || confidential ? (
-        <p className="mt-1.5 text-center text-[10px] text-muted-foreground">
-          Confidential - view only (download and print are disabled)
-        </p>
-      ) : null}
     </div>
   );
 }

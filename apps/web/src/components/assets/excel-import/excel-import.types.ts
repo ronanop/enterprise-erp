@@ -195,6 +195,8 @@ export const OPERATIONAL_STATUS_ALIASES: Record<string, (typeof VALID_OPERATIONA
   ready_to_move: "READY_TO_MOVE",
   "ready to move": "READY_TO_MOVE",
   ready: "READY_TO_MOVE",
+  in_stock: "READY_TO_MOVE",
+  "in stock": "READY_TO_MOVE",
   assigned: "ASSIGNED",
   in_maintenance: "IN_MAINTENANCE",
   "in maintenance": "IN_MAINTENANCE",

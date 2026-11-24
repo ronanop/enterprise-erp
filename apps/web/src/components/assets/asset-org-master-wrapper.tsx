@@ -7,7 +7,7 @@ import { ResourceListView } from "@/components/module/resource-list-view";
 import { Button } from "@/components/ui/button";
 
 type Props = {
-  kind: "locations" | "departments";
+  kind: "locations";
 };
 
 const COPY = {
@@ -16,12 +16,6 @@ const COPY = {
     description: "Physical locations used when assigning assets. Managed in Organization.",
     orgHref: "/organization/locations",
     apiPath: "/locations",
-  },
-  departments: {
-    title: "Departments",
-    description: "Departments for asset custody and reporting. Managed in Organization.",
-    orgHref: "/organization/departments",
-    apiPath: "/departments",
   },
 } as const;
 

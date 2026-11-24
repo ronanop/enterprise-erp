@@ -103,6 +103,33 @@ def _site_address_from_handoff(handoff: dict[str, Any]) -> str | None:
     return None
 
 
+def _site_address_from_lead(lead: CrmLead) -> str | None:
+    return _format_address(
+        lead.street,
+        lead.city,
+        lead.state,
+        lead.zip,
+        lead.country,
+    )
+
+
+def _circle_city(
+    lead: CrmLead | None,
+    account: CrmCompany | None,
+) -> str | None:
+    """Implementation city for Projects Circle (not selling-entity name)."""
+    if lead is not None:
+        city = (lead.city or "").strip()
+        if city:
+            return city[:255]
+    if account is not None:
+        for value in (account.shipping_city, account.billing_city):
+            city = (value or "").strip()
+            if city:
+                return city[:255]
+    return None
+
+
 class ProjectCrmAdapter:
     def __init__(self, db: Session) -> None:
         self._db = db
@@ -177,20 +204,24 @@ class ProjectCrmAdapter:
         if customer_id is None and opp is not None:
             customer_id = opp.customer_id
 
-        circle_name: str | None = None
-        entity_state: str | None = None
         lead = self._load_lead(opp.lead_id if opp is not None else None)
+        if not site_name and lead is not None:
+            site_name = _site_address_from_lead(lead)
+
+        entity_state: str | None = None
         if lead is not None:
-            circle_name = (lead.entity_name or "").strip() or None
             entity_state = _state_from_entity_gst(lead.entity_gst) or (
                 (lead.state or "").strip() or None
             )
+        circle_name = _circle_city(lead, account)
 
         project_title: str | None = None
         if lead is not None:
             project_title = (getattr(lead, "project_title", None) or "").strip() or None
         if not project_title and opp is not None:
             project_title = (getattr(opp, "project_title", None) or "").strip() or None
+        if not project_title and opp is not None:
+            project_title = (opp.opportunity_name or "").strip() or None
 
         return {
             "customer_name": customer_name,
@@ -203,4 +234,73 @@ class ProjectCrmAdapter:
             "entity_state": entity_state,
             "lead_id": lead.id if lead is not None else None,
             "project_title": project_title,
+        }
+
+    def _customer_po_for_opportunity(
+        self, ctx: TenantContext, *, company_id: UUID, opportunity_id: UUID
+    ) -> str | None:
+        """Latest OVF customer PO number for the opportunity, if any."""
+        ovfs = self._ovf_repo.list_ovfs(
+            ctx, company_id, opportunity_id=opportunity_id
+        )
+        for ovf in ovfs:
+            po = (getattr(ovf, "po_number", None) or "").strip()
+            if po:
+                return po[:100]
+        return None
+
+    def resolve_opportunity_project_context(
+        self, ctx: TenantContext, opportunity_id: UUID
+    ) -> dict[str, Any]:
+        """Prefill for Cache Service / internal_service POs linked to an opportunity."""
+        opp = self._opportunities.get(ctx, opportunity_id, branch_scoped=False)
+        if opp is None:
+            opp = self._opportunities.get(ctx, opportunity_id, branch_scoped=True)
+        if opp is None:
+            return {"opportunity_id": opportunity_id}
+
+        account = self._load_company_account(ctx, opp.company_account_id)
+        customer_name: str | None = None
+        customer_id: UUID | None = opp.customer_id
+        site_name: str | None = None
+        if account is not None:
+            customer_name = (account.customer_name or "").strip() or None
+            site_name = _site_address_from_company(account)
+            if customer_id is None:
+                customer_id = account.master_customer_id
+
+        lead = self._load_lead(opp.lead_id)
+        if not site_name and lead is not None:
+            site_name = _site_address_from_lead(lead)
+
+        entity_state: str | None = None
+        if lead is not None:
+            entity_state = _state_from_entity_gst(lead.entity_gst) or (
+                (lead.state or "").strip() or None
+            )
+        circle_name = _circle_city(lead, account)
+
+        project_title = (getattr(opp, "project_title", None) or "").strip() or None
+        if not project_title and lead is not None:
+            project_title = (getattr(lead, "project_title", None) or "").strip() or None
+        if not project_title:
+            project_title = (opp.opportunity_name or "").strip() or None
+
+        customer_po_number = self._customer_po_for_opportunity(
+            ctx, company_id=opp.company_id, opportunity_id=opp.id
+        )
+
+        channel = (getattr(opp, "service_sourcing_channel", None) or "").strip() or None
+        return {
+            "customer_name": customer_name,
+            "customer_id": customer_id,
+            "site_name": site_name,
+            "opportunity_id": opp.id,
+            "customer_po_number": customer_po_number,
+            "company_account_id": opp.company_account_id,
+            "circle_name": circle_name,
+            "entity_state": entity_state,
+            "lead_id": lead.id if lead is not None else None,
+            "project_title": project_title,
+            "service_sourcing_channel": channel,
         }

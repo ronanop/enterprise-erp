@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
-from modules.platform.compat.audit_facade import PlatformAuditFacade
+from modules.foundation.service.audit_service import AuditService
 from modules.service.models import SvcServiceNotification
 from modules.service.repository.service_notification_repository import ServiceNotificationRepository
 from modules.service.service.engines import ServiceNotificationEngine
@@ -18,10 +18,10 @@ class ServiceNotificationService:
         self._repo = ServiceNotificationRepository(db)
         self._scope = ServiceScopeValidator(db)
         self._engine = ServiceNotificationEngine()
-        self._audit = PlatformAuditFacade(db)
+        self._audit = AuditService(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None, *, mine: bool = False):
-        cid = self._scope.resolve_list_company_id(ctx, company_id)
+        cid = self._scope.resolve_company_id(ctx, company_id)
         rows = self._repo.list_rows(ctx, cid)
         if mine:
             rows = [r for r in rows if r.recipient_user_id == ctx.user_id]

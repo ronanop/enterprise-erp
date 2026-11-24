@@ -116,6 +116,15 @@ def get_quote_blueprint(
     db: Annotated[Session, Depends(get_db)],
 ):
     quote = QuoteService(db).get(ctx, quote_id)
+    revision = max(1, int(getattr(quote, "quote_revision", 1) or 1))
+    # V1 that already cleared internal approval / customer send must not show
+    # Send for Approval again (e.g. legacy negotiation stage or draft resets).
+    # V2+ draft after negotiate correctly re-offers send_for_approval.
+    v1_already_approved = revision <= 1 and (
+        str(getattr(quote, "approval_status", "") or "") == "approved"
+        or str(quote.quote_stage or "")
+        in {"approved_internal", "sent_to_customer", "negotiation", "follow_up", "accepted"}
+    )
     return APIResponse(
         message="OK",
         data={
@@ -130,6 +139,13 @@ def get_quote_blueprint(
                     action
                     for action in sales_blueprint_engine.allowed_actions("quote", quote.quote_stage)
                     if action != "approve_internally"
+                    and not (action == "send_for_approval" and v1_already_approved)
+                    # Edit button owns revise-from-approved; keep Transitions free of Negotiate there.
+                    and not (
+                        action == "negotiate" and str(quote.quote_stage or "") == "approved_internal"
+                    )
+                    # Follow-up retired from quote Transitions (Create Quote Vn / Deal Won / Lost).
+                    and action != "follow_up"
                 ]
             ),
         },

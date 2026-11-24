@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Eye, MoreVertical } from "lucide-react";
+import { MoreVertical } from "lucide-react";
 
 import {
   DEFAULT_INVENTORY_ACTION_PERMISSIONS,
@@ -16,7 +16,6 @@ import { cn } from "@/lib/utils";
 
 export type InventoryActionMenuProps = {
   asset: InventoryAssetRef;
-  onView?: (asset: InventoryAssetRef) => void;
   onMenuAction?: (action: InventoryMenuActionId, asset: InventoryAssetRef) => void;
   permissions?: Partial<InventoryActionPermissions>;
   disabled?: boolean;
@@ -35,7 +34,6 @@ const MENU_GAP = 4;
 
 export function InventoryActionMenu({
   asset,
-  onView,
   onMenuAction,
   permissions: permissionsProp,
   disabled,
@@ -48,11 +46,8 @@ export function InventoryActionMenu({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // View is the only direct row action. Edit and all other actions live in the overflow menu.
-  const menuItems = INVENTORY_MENU_ITEMS.filter((item) => {
-    if (item.id === "viewDetails") return false;
-    return permissions[item.permissionKey];
-  });
+  // All row actions live in the overflow menu (no direct View button).
+  const menuItems = INVENTORY_MENU_ITEMS.filter((item) => permissions[item.permissionKey]);
 
   const updatePlacement = useCallback(() => {
     const trigger = triggerRef.current;
@@ -126,37 +121,21 @@ export function InventoryActionMenu({
               visibility: placement ? "visible" : "hidden",
             }}
           >
-            {menuItems.map((item, index) => {
-              const prev = menuItems[index - 1];
-              const showSeparatorBefore =
-                item.id === "delete" && prev != null && prev.id !== "delete";
-              return (
-                <div key={item.id}>
-                  {showSeparatorBefore ? (
-                    <div
-                      role="separator"
-                      className="my-1 h-px bg-border"
-                      data-testid="inventory-menu-delete-separator"
-                    />
-                  ) : null}
-                  <button
-                    type="button"
-                    role="menuitem"
-                    data-testid={`inventory-menu-${item.id}`}
-                    className={cn(
-                      "flex w-full cursor-pointer rounded-sm px-2 py-1.5 text-left text-sm transition-colors duration-150 hover:bg-muted",
-                      item.id === "delete" && "text-destructive hover:bg-destructive/10",
-                    )}
-                    onClick={() => {
-                      setOpen(false);
-                      onMenuAction?.(item.id, asset);
-                    }}
-                  >
-                    {item.label}
-                  </button>
-                </div>
-              );
-            })}
+            {menuItems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="menuitem"
+                data-testid={`inventory-menu-${item.id}`}
+                className="flex w-full cursor-pointer rounded-sm px-2 py-1.5 text-left text-sm transition-colors duration-150 hover:bg-muted"
+                onClick={() => {
+                  setOpen(false);
+                  onMenuAction?.(item.id, asset);
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
           </div>,
           document.body,
         )
@@ -164,20 +143,6 @@ export function InventoryActionMenu({
 
   return (
     <div className={cn("relative inline-flex items-center gap-1", className)}>
-      {permissions.viewDetails ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="cursor-pointer transition-colors duration-200"
-          disabled={disabled}
-          data-testid="inventory-action-view"
-          onClick={() => onView?.(asset)}
-        >
-          <Eye className="mr-1 size-4" aria-hidden />
-          View
-        </Button>
-      ) : null}
       {menuItems.length > 0 ? (
         <>
           <Button

@@ -38,6 +38,7 @@ import {
   maintenancePlanService,
 } from "@/services/assets-service";
 import { ApiClientError, resourceService } from "@/services/api-client";
+import { formatDropdownLabel } from "@/components/assets/shared/format-dropdown-label";
 
 type AssetRow = {
   id: string;
@@ -347,7 +348,7 @@ export function AssetMaintenancePlanWorkspace() {
                   </SelectItem>
                   {STATUS_OPTIONS.filter(Boolean).map((status) => (
                     <SelectItem key={status} value={status} className="cursor-pointer">
-                      {status}
+                      {formatDropdownLabel(status)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -368,7 +369,7 @@ export function AssetMaintenancePlanWorkspace() {
                   </SelectItem>
                   {MAINTENANCE_TYPES.map((type) => (
                     <SelectItem key={type} value={type} className="cursor-pointer">
-                      {type}
+                      {formatDropdownLabel(type)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -522,7 +523,7 @@ export function AssetMaintenancePlanWorkspace() {
                   <SelectContent>
                     {MAINTENANCE_TYPES.map((type) => (
                       <SelectItem key={type} value={type} className="cursor-pointer">
-                        {type}
+                        {formatDropdownLabel(type)}
                       </SelectItem>
                     ))}
                   </SelectContent>

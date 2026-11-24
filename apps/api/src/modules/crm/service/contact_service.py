@@ -31,6 +31,13 @@ class ContactService:
     def create(self, ctx: TenantContext, *, company_account_id: UUID, branch_id: UUID, **fields):
         account = self._companies.get(ctx, company_account_id)
         fields.setdefault("status", "active")
+        if "custom_fields" in fields:
+            from modules.crm.service.crm_settings_service import CrmSettingsService
+
+            effective = CrmSettingsService(self._db).get_effective(ctx, require_erp_admin=False)
+            fields["custom_fields"] = CrmSettingsService.sanitize_custom_fields(
+                effective, "contact", fields.get("custom_fields")
+            )
         self._assert_no_duplicate(
             ctx,
             company_account_id=company_account_id,
@@ -50,6 +57,13 @@ class ContactService:
 
     def update(self, ctx: TenantContext, row_id: UUID, **fields):
         existing = self.get(ctx, row_id)
+        if "custom_fields" in fields:
+            from modules.crm.service.crm_settings_service import CrmSettingsService
+
+            effective = CrmSettingsService(self._db).get_effective(ctx, require_erp_admin=False)
+            fields["custom_fields"] = CrmSettingsService.sanitize_custom_fields(
+                effective, "contact", fields.get("custom_fields")
+            )
         merged = {
             "email": fields.get("email", existing.email),
             "phone": fields.get("phone", existing.phone),

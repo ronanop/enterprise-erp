@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import Link from "next/link";
-import { Copy, KeyRound, ScrollText, Shield, UserPlus } from "lucide-react";
+import { KeyRound, Mail, ScrollText, Shield, UserPlus } from "lucide-react";
 
 import {
   HrAuthBanner,
@@ -39,16 +38,10 @@ import {
 import type { EmployeeRecord } from "@/types/employee-management";
 import { ApiClientError } from "@/services/api-client";
 
-type IssuedLogin = {
-  name: string;
-  email: string;
-  password: string;
-};
-
 type TabId = "assign" | "passwords" | "logs";
 
 const TABS: HrTabItem[] = [
-  { id: "assign", label: "Assign HR", icon: UserPlus },
+  { id: "assign", label: "Give access", icon: UserPlus },
   { id: "passwords", label: "Passwords", icon: KeyRound },
   { id: "logs", label: "Activity logs", icon: ScrollText },
 ];
@@ -174,7 +167,6 @@ export function HrSuperadminPage() {
   const [loading, setLoading] = useState(true);
   const [logsLoading, setLogsLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [issued, setIssued] = useState<IssuedLogin | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -280,30 +272,18 @@ export function HrSuperadminPage() {
     );
   }, [logs, logQuery]);
 
-  function showIssued(name: string, email: string, password: string | null | undefined) {
-    if (!password) return;
-    setIssued({ name, email, password });
-  }
-
-  async function copyText(value: string, label: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      toast(`${label} copied`);
-    } catch {
-      toast(`Could not copy ${label}`, "error");
-    }
-  }
-
   async function onToggleHr(employeeId: string, next: boolean) {
     setBusyId(employeeId);
     try {
       if (next) {
         const emp = employees.find((row) => row.id === employeeId);
         const row = await assignHrAdmin(employeeId, emp?.companyId ? [emp.companyId] : []);
-        if (row.temporary_password) {
-          showIssued(row.display_name, row.email, row.temporary_password);
-          toast(`${row.display_name} now has HR module access. Copy the generated password below.`);
-          setTab("passwords");
+        if (row.login_created || row.email_sent) {
+          toast(
+            row.email_sent
+              ? `${row.display_name} now has HR access. Login password emailed to ${row.email}.`
+              : `${row.display_name} now has HR module access.`,
+          );
         } else {
           toast(`${row.display_name} now has HR module access`);
         }
@@ -324,7 +304,7 @@ export function HrSuperadminPage() {
     if (next) current.add(companyId);
     else current.delete(companyId);
     if (current.size === 0) {
-      toast("Keep at least one entity, or turn off HR access", "error");
+      toast("Keep at least one entity, or turn off Give access", "error");
       return;
     }
     setBusyId(`entity:${employeeId}:${companyId}`);
@@ -333,8 +313,8 @@ export function HrSuperadminPage() {
       setAdmins((prev) => prev.map((item) => (item.employee_id === employeeId ? row : item)));
       toast(
         next
-          ? "Entity assigned"
-          : "Entity removed. That user was signed out of the revoked entity.",
+          ? "Entity assigned. User must sign in again for the new scope."
+          : "Entity removed. User was signed out so data scope refreshes.",
       );
       await reloadLogs();
     } catch (err) {
@@ -384,15 +364,18 @@ export function HrSuperadminPage() {
     }
   }
 
-  async function onGeneratePassword(employeeId: string) {
+  async function onSendPasswordEmail(employeeId: string) {
     setBusyId(employeeId);
     try {
       const row = await resetHrAdminPassword(employeeId);
-      showIssued(row.display_name, row.email, row.temporary_password);
-      toast(`New password generated for ${row.display_name}`);
+      toast(
+        row.email_sent
+          ? `Login password emailed to ${row.email}`
+          : `Password reset for ${row.display_name}`,
+      );
       await reloadLogs();
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Password generation failed", "error");
+      toast(err instanceof ApiClientError ? err.message : "Could not email login password", "error");
     } finally {
       setBusyId(null);
     }
@@ -414,48 +397,10 @@ export function HrSuperadminPage() {
   return (
     <div className="space-y-5">
       <SetupToastHost />
-      <PageHeader title="Superadmin Panel" />
-
-      {issued ? (
-        <div className="rounded-2xl border border-primary/30 bg-primary/5 px-5 py-4">
-          <p className="text-sm font-semibold text-foreground">HR login password (shown once)</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Share this with {issued.name}. They should change it after first sign-in.
-          </p>
-          <dl className="mt-3 grid gap-3 sm:grid-cols-2">
-            <div className="min-w-0">
-              <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Email</dt>
-              <dd className="mt-1 flex items-center gap-1.5">
-                <span className="min-w-0 truncate text-sm font-medium">{issued.email}</span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 shrink-0 px-2"
-                  onClick={() => void copyText(issued.email, "Email")}
-                >
-                  <Copy className="size-3.5" />
-                </Button>
-              </dd>
-            </div>
-            <div className="min-w-0">
-              <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Password</dt>
-              <dd className="mt-1 flex items-center gap-1.5">
-                <span className="min-w-0 truncate font-mono text-sm font-medium">{issued.password}</span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 shrink-0 px-2"
-                  onClick={() => void copyText(issued.password, "Password")}
-                >
-                  <Copy className="size-3.5" />
-                </Button>
-              </dd>
-            </div>
-          </dl>
-        </div>
-      ) : null}
+      <PageHeader
+        title="Superadmin Panel"
+        description="Give HR access, choose entities for data segregation, pick sidebar menus, email login passwords, and review activity logs."
+      />
 
       <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
         <div className="border-b border-border px-2">
@@ -476,7 +421,8 @@ export function HrSuperadminPage() {
             <>
               <PanelHeader
                 icon={Shield}
-                title={`Assigned HR Admins (${admins.length})`}
+                title={`People with access (${admins.length})`}
+                caption="Toggle entities (data segregation) and sidebar menus. Superadmin Panel is never granted here. Turn off Give access to revoke."
               >
                 <Input
                   value={query}
@@ -490,7 +436,7 @@ export function HrSuperadminPage() {
               ) : assignedRows.length === 0 ? (
                 <HrEmptyState
                   title="No HR module users yet"
-                  description="ERP admins assign module admins in Organization → Users, or grant member HR access below."
+                  description="Turn on Give access for an employee in the list below."
                 />
               ) : (
                 <div className="mb-6 overflow-auto rounded-xl border border-border/70">
@@ -501,23 +447,16 @@ export function HrSuperadminPage() {
                         <th className="px-3 py-2.5 font-medium">Designation</th>
                         <th className="px-3 py-2.5 font-medium">Entities</th>
                         <th className="px-3 py-2.5 font-medium">Sidebar menus</th>
-                        <th className="px-3 py-2.5 text-right font-medium">HR Admin</th>
+                        <th className="px-3 py-2.5 text-right font-medium">Give access</th>
                       </tr>
                     </thead>
                     <tbody>
                       {assignedRows.map(({ admin, emp }) => {
-                        const orgLocked = Boolean(admin.is_org_module_admin);
-                        const assigned = orgLocked
-                          ? new Set(entities.map((e) => e.id))
-                          : new Set(admin.company_ids ?? []);
-                        const entityNames = orgLocked
-                          ? entities.map((e) => e.company_name)
-                          : admin.company_ids
-                              .map((id) => entityNameById.get(id))
-                              .filter((name): name is string => Boolean(name));
-                        const navKeys = orgLocked
-                          ? new Set(ALL_HR_NAV_KEYS)
-                          : effectiveNavKeys(admin);
+                        const assigned = new Set(admin.company_ids ?? []);
+                        const entityNames = admin.company_ids
+                          .map((id) => entityNameById.get(id))
+                          .filter((name): name is string => Boolean(name));
+                        const navKeys = effectiveNavKeys(admin);
                         const allMenusOn = ALL_HR_NAV_KEYS.every((key) => navKeys.has(key));
                         return (
                           <tr key={admin.employee_id} className="border-b border-border/50 align-top last:border-b-0">
@@ -528,22 +467,13 @@ export function HrSuperadminPage() {
                               <p className="mt-0.5 text-[11px] text-muted-foreground">
                                 {admin.employee_code} · {admin.email}
                               </p>
-                              {orgLocked ? (
-                                <p className="mt-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                                  Organization module admin · all entities & menus
-                                </p>
-                              ) : null}
                             </td>
                             <td className="px-3 py-3 text-muted-foreground">
                               {admin.designation || emp?.designationName || "-"}
                             </td>
                             <td className="px-3 py-3">
                               <p className="text-foreground">
-                                {orgLocked
-                                  ? "All entities"
-                                  : entityNames.length
-                                    ? entityNames.join(", ")
-                                    : "-"}
+                                {entityNames.length ? entityNames.join(", ") : "-"}
                               </p>
                               {entities.length > 0 ? (
                                 <ul className="mt-2 space-y-1">
@@ -559,11 +489,7 @@ export function HrSuperadminPage() {
                                         <ToggleSwitch
                                           compact
                                           checked={on}
-                                          disabled={
-                                            orgLocked ||
-                                            busyId === admin.employee_id ||
-                                            entityBusy
-                                          }
+                                          disabled={busyId === admin.employee_id || entityBusy}
                                           label={on ? "On" : "Off"}
                                           onChange={(next) =>
                                             void onToggleEntity(admin.employee_id, entity.id, next)
@@ -574,11 +500,6 @@ export function HrSuperadminPage() {
                                   })}
                                 </ul>
                               ) : null}
-                              {orgLocked ? (
-                                <p className="mt-1.5 text-[10px] text-muted-foreground">
-                                  Locked — all entities assigned by default
-                                </p>
-                              ) : null}
                             </td>
                             <td className="px-3 py-3">
                               <div className="mb-2 flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-2 py-1">
@@ -586,18 +507,13 @@ export function HrSuperadminPage() {
                                 <ToggleSwitch
                                   compact
                                   checked={allMenusOn}
-                                  disabled={orgLocked || Boolean(busyId)}
+                                  disabled={Boolean(busyId)}
                                   label={allMenusOn ? "Shown" : "Hidden"}
                                   onChange={(next) =>
                                     void onToggleNavGroup(admin.employee_id, ALL_HR_NAV_KEYS, next)
                                   }
                                 />
                               </div>
-                              {orgLocked ? (
-                                <p className="mb-2 text-[10px] text-muted-foreground">
-                                  Locked — all sidebar menus assigned by default
-                                </p>
-                              ) : (
                               <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
                                 {NAV_ACCESS_GROUPS.map((group, groupIdx) => {
                                   const groupKeys = group.items.map((item) => item.navKey);
@@ -648,28 +564,15 @@ export function HrSuperadminPage() {
                                   );
                                 })}
                               </div>
-                              )}
                             </td>
                             <td className="px-3 py-3">
-                              <div className="flex flex-col items-end gap-1">
-                                {admin.is_org_module_admin ? (
-                                  <span className="text-right text-[11px] text-muted-foreground">
-                                    Revoke in{" "}
-                                    <Link
-                                      href="/organization/users"
-                                      className="cursor-pointer font-medium text-foreground underline-offset-2 transition-colors duration-200 hover:underline"
-                                    >
-                                      Organization → Users
-                                    </Link>
-                                  </span>
-                                ) : (
-                                  <ToggleSwitch
-                                    checked
-                                    disabled={busyId === admin.employee_id}
-                                    label="HR access"
-                                    onChange={(next) => void onToggleHr(admin.employee_id, next)}
-                                  />
-                                )}
+                              <div className="flex justify-end">
+                                <ToggleSwitch
+                                  checked
+                                  disabled={busyId === admin.employee_id}
+                                  label="Give access"
+                                  onChange={(next) => void onToggleHr(admin.employee_id, next)}
+                                />
                               </div>
                             </td>
                           </tr>
@@ -683,7 +586,7 @@ export function HrSuperadminPage() {
               <PanelHeader
                 icon={UserPlus}
                 title="Employees"
-                caption="Grant HR member access (not module admin). Module admins are assigned in Organization → Users."
+                caption="Turn on Give access to add HRMS to the user's ERP menu, then set entities and sidebar menus above."
               />
               {!loading && filtered.length === 0 ? (
                 <HrEmptyState title="No employees match" description="Try a different search." />
@@ -698,7 +601,7 @@ export function HrSuperadminPage() {
                         <ToggleSwitch
                           checked={false}
                           disabled={busyId === emp.id}
-                          label="Grant HR"
+                          label="Give access"
                           onChange={(next) => void onToggleHr(emp.id, next)}
                         />
                       </PersonRow>
@@ -714,12 +617,12 @@ export function HrSuperadminPage() {
               <PanelHeader
                 icon={KeyRound}
                 title={`HR module passwords (${admins.length})`}
-                caption="Turn on Generate to create a random login password. It is shown once above."
+                caption="Send a new random login password to the user’s email. It is not shown on this screen."
               />
               {admins.length === 0 ? (
                 <HrEmptyState
                   title="No HR module users yet"
-                  description="Grant HR access to an employee first, then generate their password here."
+                  description="Turn on Give access for an employee first, then send their login password by email here."
                 />
               ) : (
                 <ul>
@@ -727,21 +630,26 @@ export function HrSuperadminPage() {
                     const entityNames = row.company_ids
                       .map((id) => entityNameById.get(id))
                       .filter((name): name is string => Boolean(name));
+                    const sending = busyId === row.employee_id;
                     return (
                       <li key={row.employee_id} className="border-b border-border/70 py-3 last:border-b-0">
                         <PersonRow
                           name={row.display_name}
-                          meta={`${row.employee_code} · ${row.email} · ${entityNames.length ? entityNames.join(", ") : row.designation || "-"
-                            }`}
+                          meta={`${row.employee_code} · ${row.email} · ${
+                            entityNames.length ? entityNames.join(", ") : row.designation || "-"
+                          }`}
                         >
-                          <ToggleSwitch
-                            checked={issued?.email === row.email}
-                            disabled={busyId === row.employee_id}
-                            label="Generate password"
-                            onChange={(next) => {
-                              if (next) void onGeneratePassword(row.employee_id);
-                            }}
-                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 cursor-pointer gap-1.5"
+                            disabled={sending || !row.email}
+                            onClick={() => void onSendPasswordEmail(row.employee_id)}
+                          >
+                            <Mail className="size-3.5" />
+                            {sending ? "Sending…" : "Send password email"}
+                          </Button>
                         </PersonRow>
                       </li>
                     );

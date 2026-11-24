@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
@@ -15,34 +17,57 @@ import type {
   AssignmentWizardState,
   EmployeeSource,
 } from "@/components/assets/assignment-wizard/wizard-types";
+import { listDepartmentOptions } from "@/lib/org-options";
 import { cn } from "@/lib/utils";
 
-const ALLOCATION_TYPES = ["employee", "department", "project", "branch", "warehouse"] as const;
+const ALLOCATION_TYPES = [
+  { value: "employee", label: "Employee" },
+  { value: "department", label: "Department" },
+] as const;
 
-const EMPLOYEE_MODES: Array<{ value: EmployeeSource; label: string; hint: string }> = [
-  { value: "MASTER_DATA", label: "From directory", hint: "Employee in HR master data." },
-  {
-    value: "MANUAL_ENTRY",
-    label: "Enter manually",
-    hint: "Not in directory — deployed elsewhere.",
-  },
+const EMPLOYEE_MODES: Array<{ value: EmployeeSource; label: string }> = [
+  { value: "MASTER_DATA", label: "From Directory" },
+  { value: "MANUAL_ENTRY", label: "Enter Manually" },
 ];
 
 export type EmployeeStepProps = {
   state: AssignmentWizardState;
   onChange: (patch: Partial<AssignmentWizardState>) => void;
-  showAdvancedAllocation?: boolean;
   employees?: WizardSelectOption[];
-  fieldErrors?: Record<string, string>;
+  departments?: WizardSelectOption[];
 };
 
 export function EmployeeStep({
   state,
   onChange,
-  showAdvancedAllocation,
   employees = MOCK_EMPLOYEES,
-  fieldErrors = {},
+  departments: departmentsProp,
 }: EmployeeStepProps) {
+  const [loadedDepartments, setLoadedDepartments] = useState<WizardSelectOption[]>([]);
+  const [departmentsLoading, setDepartmentsLoading] = useState(false);
+
+  useEffect(() => {
+    if (departmentsProp) return;
+    let cancelled = false;
+    setDepartmentsLoading(true);
+    void listDepartmentOptions()
+      .then((rows) => {
+        if (cancelled) return;
+        setLoadedDepartments(rows.map((d) => ({ id: d.id, label: d.label })));
+      })
+      .catch(() => {
+        if (!cancelled) setLoadedDepartments([]);
+      })
+      .finally(() => {
+        if (!cancelled) setDepartmentsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [departmentsProp]);
+
+  const departments = departmentsProp ?? loadedDepartments;
+
   const switchEmployeeSource = (next: EmployeeSource) => {
     if (next === state.employeeSource) return;
     if (next === "MANUAL_ENTRY") {
@@ -72,7 +97,7 @@ export function EmployeeStep({
       manualEmployeeEmail: "",
       manualEmployeeDeployedTo: "",
       departmentId: value === "department" ? state.departmentId : "",
-      projectId: value === "project" ? state.projectId : "",
+      projectId: "",
     });
   };
 
@@ -85,9 +110,9 @@ export function EmployeeStep({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {(showAdvancedAllocation ? ALLOCATION_TYPES : (["employee"] as const)).map((type) => (
-              <SelectItem key={type} value={type} className="cursor-pointer capitalize">
-                {type}
+            {ALLOCATION_TYPES.map((type) => (
+              <SelectItem key={type.value} value={type.value} className="cursor-pointer">
+                {type.label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -95,35 +120,29 @@ export function EmployeeStep({
       </div>
 
       {state.allocationType === "employee" ? (
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">How is this employee identified?</p>
-          <div
-            className="grid grid-cols-1 gap-1.5 sm:grid-cols-2"
-            role="group"
-            aria-label="Employee source"
-          >
-            {EMPLOYEE_MODES.map((mode) => {
-              const active = state.employeeSource === mode.value;
-              return (
-                <button
-                  key={mode.value}
-                  type="button"
-                  onClick={() => switchEmployeeSource(mode.value)}
-                  className={cn(
-                    "cursor-pointer rounded-lg border px-3 py-2.5 text-left transition-colors duration-200",
-                    active
-                      ? "border-[#0369A1] bg-[rgba(3,105,161,0.08)] shadow-sm"
-                      : "border-border/80 hover:bg-muted/40",
-                  )}
-                >
-                  <span className="block text-sm font-medium text-foreground">{mode.label}</span>
-                  <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
-                    {mode.hint}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+        <div
+          className="grid grid-cols-1 gap-1.5 sm:grid-cols-2"
+          role="group"
+          aria-label="Employee source"
+        >
+          {EMPLOYEE_MODES.map((mode) => {
+            const active = state.employeeSource === mode.value;
+            return (
+              <button
+                key={mode.value}
+                type="button"
+                onClick={() => switchEmployeeSource(mode.value)}
+                className={cn(
+                  "cursor-pointer rounded-lg border px-3 py-2.5 text-left transition-colors duration-200",
+                  active
+                    ? "border-[#0369A1] bg-[rgba(3,105,161,0.08)] shadow-sm"
+                    : "border-border/80 hover:bg-muted/40",
+                )}
+              >
+                <span className="block text-sm font-medium text-foreground">{mode.label}</span>
+              </button>
+            );
+          })}
         </div>
       ) : null}
 
@@ -148,9 +167,6 @@ export function EmployeeStep({
               ))}
             </SelectContent>
           </Select>
-          {fieldErrors.employee ? (
-            <p className="text-xs text-destructive">{fieldErrors.employee}</p>
-          ) : null}
         </div>
       ) : null}
 
@@ -164,7 +180,6 @@ export function EmployeeStep({
               onChange={(e) => onChange({ manualEmployeeName: e.target.value })}
               autoComplete="name"
             />
-            {fieldErrors.name ? <p className="text-xs text-destructive">{fieldErrors.name}</p> : null}
           </div>
           <div className="space-y-2">
             <Label htmlFor="wiz-manual-phone">Phone *</Label>
@@ -174,7 +189,6 @@ export function EmployeeStep({
               onChange={(e) => onChange({ manualEmployeePhone: e.target.value })}
               autoComplete="tel"
             />
-            {fieldErrors.phone ? <p className="text-xs text-destructive">{fieldErrors.phone}</p> : null}
           </div>
           <div className="space-y-2">
             <Label htmlFor="wiz-manual-email">Email (can confirm later)</Label>
@@ -192,15 +206,40 @@ export function EmployeeStep({
               id="wiz-manual-deployed"
               value={state.manualEmployeeDeployedTo}
               onChange={(e) => onChange({ manualEmployeeDeployedTo: e.target.value })}
-              placeholder="e.g. Airtel — Gurugram office"
+              placeholder=""
             />
-            {fieldErrors["deployed-to"] ? (
-              <p className="text-xs text-destructive">{fieldErrors["deployed-to"]}</p>
-            ) : null}
-            <p className="text-xs text-muted-foreground">
-              External company or location this person is deployed to.
-            </p>
           </div>
+        </div>
+      ) : null}
+
+      {state.allocationType === "department" ? (
+        <div className="space-y-2">
+          <Label htmlFor="wiz-department">Department *</Label>
+          <Select
+            value={state.departmentId || "__none"}
+            onValueChange={(v) => onChange({ departmentId: v === "__none" ? "" : v })}
+            disabled={departmentsLoading && !departmentsProp}
+          >
+            <SelectTrigger
+              id="wiz-department"
+              className="cursor-pointer"
+              data-testid="wiz-department-select"
+            >
+              <SelectValue
+                placeholder={departmentsLoading ? "Loading departments…" : "Select department"}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none" className="cursor-pointer">
+                Select department…
+              </SelectItem>
+              {departments.map((dept) => (
+                <SelectItem key={dept.id} value={dept.id} className="cursor-pointer">
+                  {dept.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       ) : null}
     </div>

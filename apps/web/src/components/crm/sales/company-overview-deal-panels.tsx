@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { AttachmentDocumentCell } from "@/components/crm/sales/attachment-document-cell";
+import { SalesStageBadge } from "@/components/crm/sales/sales-stage-badge";
 import {
   CrmCountBadge,
   CrmIconBadge,
@@ -21,8 +22,8 @@ import {
   CRM_TABLE_HEAD_CELL,
   CRM_TABLE_HEAD_ROW,
 } from "@/components/crm/crm-ui";
-import { Badge } from "@/components/ui/badge";
 import { formatCrmCode } from "@/lib/crm/format-crm-code";
+import { resolveSalesStageLabel } from "@/lib/crm/sales-blueprint-stages";
 import {
   formatInr,
   listOvfLines,
@@ -210,9 +211,15 @@ export function CompanyOverviewDealPanels({
                         {companyCustomerName.trim() || "-"}
                       </td>
                       <td className="px-4 py-2.5">
-                        <Badge variant="outline" className="capitalize">
-                          {row.current_stage.replaceAll("_", " ")}
-                        </Badge>
+                        <SalesStageBadge
+                          label={resolveSalesStageLabel({
+                            entityType: "opportunity",
+                            blueprintState: row.blueprint_state || row.current_stage,
+                            opportunity: row,
+                          })}
+                          state={row.blueprint_state || row.current_stage}
+                          entityType="opportunity"
+                        />
                       </td>
                       <td className="px-4 py-2.5 text-muted-foreground">{formatInr(row.expected_revenue)}</td>
                       <td className="max-w-[240px] px-4 py-2.5 text-muted-foreground">
@@ -296,9 +303,16 @@ export function CompanyOverviewDealPanels({
                           </Link>
                         </td>
                         <td className="px-4 py-2.5">
-                          <Badge variant="outline" className="capitalize">
-                            {row.quote_stage.replaceAll("_", " ")}
-                          </Badge>
+                          <SalesStageBadge
+                            label={resolveSalesStageLabel({
+                              entityType: "quote",
+                              blueprintState: row.quote_stage,
+                              quote: row,
+                              locked: row.locked,
+                            })}
+                            state={row.quote_stage}
+                            entityType="quote"
+                          />
                         </td>
                         <td className="px-4 py-2.5 text-muted-foreground">{formatInr(row.total_margin_amount)}</td>
                         <td className="px-4 py-2.5 font-medium text-foreground">{formatInr(row.grand_total)}</td>

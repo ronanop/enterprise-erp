@@ -7,7 +7,13 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from modules.foundation.domain.erp_modules import MODULE_ROLE_ADMIN
+from modules.foundation.domain.erp_modules import (
+    ASSET_MODULE_KEY,
+    ASSET_SUBMODULE_KEYS,
+    MODULE_ROLE_ADMIN,
+    MODULE_ROLE_MEMBER,
+    asset_domain_for_module_key,
+)
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.models.security import SecRole, SecUser, SecUserModule, SecUserRole
 from modules.foundation.repository.user_module_repository import UserModuleRepository
@@ -57,10 +63,31 @@ class OrgModuleAdminSyncService:
         if "hr" in old_set and "hr" not in new_set:
             self._demote_hr(ctx, user_id, actor_id)
 
-        if "assets" in new_set and "assets" not in old_set:
+        if ASSET_MODULE_KEY in new_set and ASSET_MODULE_KEY not in old_set:
             self._promote_assets(tenant_id, user_id, actor_id)
-        if "assets" in old_set and "assets" not in new_set:
-            self._demote_assets(tenant_id, user_id, actor_id)
+        if ASSET_MODULE_KEY in old_set and ASSET_MODULE_KEY not in new_set:
+            # Keep ASSET_MANAGER while any IT/Non-IT submodule remains admin.
+            if not (new_set & ASSET_SUBMODULE_KEYS):
+                self._demote_assets(tenant_id, user_id, actor_id)
+
+        for sub in sorted(ASSET_SUBMODULE_KEYS):
+            if sub in new_set and sub not in old_set:
+                self._sync_asset_submodule_admin(
+                    tenant_id, user_id, sub, role=MODULE_ROLE_ADMIN, actor_id=actor_id
+                )
+            if sub in old_set and sub not in new_set:
+                # Drop to member domain if submodule member row remains; else revoke domain.
+                member_row = self._modules.get_assignment(tenant_id, user_id, sub)
+                if member_row is not None:
+                    self._sync_asset_submodule_admin(
+                        tenant_id,
+                        user_id,
+                        sub,
+                        role=MODULE_ROLE_MEMBER,
+                        actor_id=actor_id,
+                    )
+                else:
+                    self._revoke_asset_submodule(tenant_id, user_id, sub, actor_id=actor_id)
 
         if "procurement" in new_set and "procurement" not in old_set:
             self._promote_procurement(ctx, user_id, actor_id)
@@ -98,8 +125,13 @@ class OrgModuleAdminSyncService:
             )
             if "hr" in keys:
                 self._promote_hr(ctx, user_id, None)
-            if "assets" in keys:
-                self._promote_assets(tenant_id, user_id, None)
+            if ASSET_MODULE_KEY in keys or (keys & ASSET_SUBMODULE_KEYS):
+                if ASSET_MODULE_KEY in keys:
+                    self._promote_assets(tenant_id, user_id, None)
+                for sub in sorted(keys & ASSET_SUBMODULE_KEYS):
+                    self._sync_asset_submodule_admin(
+                        tenant_id, user_id, sub, role=MODULE_ROLE_ADMIN, actor_id=None
+                    )
             if "procurement" in keys:
                 self._promote_procurement(ctx, user_id, None)
             if "service" in keys:
@@ -276,13 +308,26 @@ class OrgModuleAdminSyncService:
     def _promote_assets(self, tenant_id: UUID, user_id: UUID, actor_id: UUID | None) -> None:
         self._ensure_role(tenant_id, user_id, ASSET_MANAGER_ROLE_CODE, actor_id)
         self._rbac.invalidate_user(user_id)
+        # Full Assets module admin unlocks both domains.
+        from modules.asset.service.domain_membership_service import DomainMembershipService
+
+        domains = DomainMembershipService(self._db)
+        ctx = TenantContext(tenant_id=tenant_id, user_id=actor_id or user_id, user_type="super_admin")
+        for sub in sorted(ASSET_SUBMODULE_KEYS):
+            domains.upsert_from_module_grant(
+                ctx,
+                user_id=user_id,
+                module_key=sub,
+                role=MODULE_ROLE_ADMIN,
+                actor_id=actor_id,
+            )
         self._audit.log_entity_change(
             tenant_id=tenant_id,
             entity_name="org_module_admin",
             entity_id=user_id,
             operation="promote",
             performed_by=actor_id,
-            new_value={"module": "assets", "role": ASSET_MANAGER_ROLE_CODE},
+            new_value={"module": ASSET_MODULE_KEY, "role": ASSET_MANAGER_ROLE_CODE},
         )
 
     def _demote_assets(self, tenant_id: UUID, user_id: UUID, actor_id: UUID | None) -> None:
@@ -294,7 +339,49 @@ class OrgModuleAdminSyncService:
             entity_id=user_id,
             operation="demote",
             performed_by=actor_id,
-            new_value={"module": "assets"},
+            new_value={"module": ASSET_MODULE_KEY},
+        )
+
+    def _sync_asset_submodule_admin(
+        self,
+        tenant_id: UUID,
+        user_id: UUID,
+        module_key: str,
+        *,
+        role: str,
+        actor_id: UUID | None,
+    ) -> None:
+        if asset_domain_for_module_key(module_key) is None:
+            return
+        from modules.asset.service.domain_membership_service import DomainMembershipService
+
+        ctx = TenantContext(tenant_id=tenant_id, user_id=actor_id or user_id, user_type="super_admin")
+        DomainMembershipService(self._db).upsert_from_module_grant(
+            ctx,
+            user_id=user_id,
+            module_key=module_key,
+            role=role,
+            actor_id=actor_id,
+        )
+
+    def _revoke_asset_submodule(
+        self,
+        tenant_id: UUID,
+        user_id: UUID,
+        module_key: str,
+        *,
+        actor_id: UUID | None,
+    ) -> None:
+        if asset_domain_for_module_key(module_key) is None:
+            return
+        from modules.asset.service.domain_membership_service import DomainMembershipService
+
+        ctx = TenantContext(tenant_id=tenant_id, user_id=actor_id or user_id, user_type="super_admin")
+        DomainMembershipService(self._db).revoke_from_module_grant(
+            ctx,
+            user_id=user_id,
+            module_key=module_key,
+            actor_id=actor_id,
         )
 
     def _promote_procurement(self, ctx: TenantContext, user_id: UUID, actor_id: UUID | None) -> None:

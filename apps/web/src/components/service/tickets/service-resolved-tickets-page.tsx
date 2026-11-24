@@ -17,11 +17,14 @@ import {
   formatStatus,
   listResolvedTickets,
   SOLUTION_TYPES,
+  ticketStatusLabel,
   type ResolvedTicketItem,
 } from "@/services/service-request-ticket-service";
 
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+
 const solutionLabel = (value: string | null) =>
-  SOLUTION_TYPES.find((s) => s.value === value)?.label ?? (value ? formatStatus(value) : "-");
+  SOLUTION_TYPES.find((s) => s.value === value)?.label ?? (value ? formatStatus(value) : "—");
 
 export function ServiceResolvedTicketsPage() {
   const router = useRouter();
@@ -37,6 +40,8 @@ export function ServiceResolvedTicketsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -44,7 +49,6 @@ export function ServiceResolvedTicketsPage() {
     try {
       const data = await listResolvedTickets({
         q: q || undefined,
-        page_size: 200,
         sla_outcome: slaOutcome === "within" || slaOutcome === "breach" ? slaOutcome : undefined,
         mine: scopedToMine,
       });
@@ -61,6 +65,10 @@ export function ServiceResolvedTicketsPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [dayFilter, slaOutcome, scopedToMine, pageSize, q]);
+
   const filteredRows = useMemo(() => {
     if (!dayFilter) return rows;
     return rows.filter((row) => {
@@ -71,6 +79,15 @@ export function ServiceResolvedTicketsPage() {
       return localDateKey(d) === dayFilter;
     });
   }, [rows, dayFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pagedRows = useMemo(() => {
+    const start = (safePage - 1) * pageSize;
+    return filteredRows.slice(start, start + pageSize);
+  }, [filteredRows, pageSize, safePage]);
+  const rangeFrom = filteredRows.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
+  const rangeTo = Math.min(safePage * pageSize, filteredRows.length);
 
   const dayLabel = dayFilter
     ? new Date(`${dayFilter}T12:00:00`).toLocaleDateString("en-IN", {
@@ -162,8 +179,13 @@ export function ServiceResolvedTicketsPage() {
                   </td>
                 </tr>
               ) : (
-                filteredRows.map((row) => (
-                  <tr key={row.id} className="border-b border-border/50 hover:bg-muted/30">
+                pagedRows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className={`border-b border-border/50 hover:bg-muted/30 ${
+                      row.status === "closed" ? "bg-muted/15 text-muted-foreground" : ""
+                    }`}
+                  >
                     <td className="px-3 py-2 font-mono text-xs">
                       <Link
                         href={`/service/service-request-tickets/${row.id}`}
@@ -173,28 +195,79 @@ export function ServiceResolvedTicketsPage() {
                       </Link>
                     </td>
                     <td className="max-w-[160px] truncate px-3 py-2">{row.subject}</td>
-                    <td className="px-3 py-2">{row.owner_name ?? "-"}</td>
+                    <td className="px-3 py-2">{row.owner_name ?? "—"}</td>
                     <td className="px-3 py-2">
                       <FinanceStatusBadge status={row.priority} />
                     </td>
                     <td className="px-3 py-2">
-                      <FinanceStatusBadge status={row.status} />
+                      <FinanceStatusBadge status={row.status} label={ticketStatusLabel(row)} />
+                      {row.reopen_request_status === "pending" ? (
+                        <span className="ml-1 text-[10px] font-medium text-amber-800">Reopen pending</span>
+                      ) : null}
                     </td>
                     <td className="px-3 py-2">{solutionLabel(row.solution_type)}</td>
                     <td className="max-w-[220px] truncate px-3 py-2 text-muted-foreground">
-                      {row.solution_summary ?? "-"}
+                      {row.solution_summary ?? "—"}
                     </td>
                     <td className="px-3 py-2 text-xs text-muted-foreground">
-                      {row.resolved_at?.slice(0, 16).replace("T", " ") ?? "-"}
+                      {row.resolved_at?.slice(0, 16).replace("T", " ") ?? "—"}
                     </td>
                     <td className="px-3 py-2 text-xs text-muted-foreground">
-                      {row.closed_at?.slice(0, 16).replace("T", " ") ?? "-"}
+                      {row.closed_at?.slice(0, 16).replace("T", " ") ?? "—"}
                     </td>
                   </tr>
                 ))
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/70 pt-3">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>
+              Showing {rangeFrom}–{rangeTo} of {filteredRows.length}
+            </span>
+            <label className="inline-flex items-center gap-1.5">
+              <span>Rows</span>
+              <select
+                className="h-8 cursor-pointer rounded-lg border border-input bg-transparent px-2 text-sm text-foreground"
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                disabled={loading}
+              >
+                {PAGE_SIZE_OPTIONS.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8"
+              disabled={loading || safePage <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              Previous
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              Page {safePage} / {totalPages}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8"
+              disabled={loading || safePage >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Next
+            </Button>
+          </div>
         </div>
       </div>
     </div>

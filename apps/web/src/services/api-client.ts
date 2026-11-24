@@ -2,6 +2,8 @@ import {
   clearTokens,
   getAccessToken,
   getRefreshToken,
+  getRequestAccessToken,
+  isAccessTokenExpired,
   redirectToLogin,
   setTokens,
 } from "@/lib/auth";
@@ -41,6 +43,11 @@ type RequestOptions = Omit<RequestInit, "body"> & {
   _retried?: boolean;
   /** Internal: skip one API-base failover retry. */
   _apiFailover?: boolean;
+  /**
+   * Internal: omit Authorization header so a valid HttpOnly access cookie can
+   * authenticate after a stale/invalid bearer caused 401 (avoids surprise logout).
+   */
+  _cookieOnly?: boolean;
 };
 
 function buildUrl(
@@ -103,6 +110,11 @@ async function failoverApiBase(): Promise<void> {
 }
 
 async function tryRefreshAccessToken(): Promise<boolean> {
+  // Already have a usable access token (another tab/request refreshed first).
+  if (getAccessToken() && !isAccessTokenExpired()) {
+    return true;
+  }
+
   const refreshToken = getRefreshToken();
 
   if (!refreshInFlight) {
@@ -173,8 +185,22 @@ async function apiClientExecute<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<ApiResponse<T>> {
-  const { body, headers, auth = true, query, _retried, _apiFailover, ...rest } = options;
-  const token = auth ? getAccessToken() : null;
+  const {
+    body,
+    headers,
+    auth = true,
+    query,
+    _retried,
+    _apiFailover,
+    _cookieOnly,
+    ...rest
+  } = options;
+  // Prefer a non-expired bearer; otherwise omit so HttpOnly cookie can authenticate.
+  if (auth && !_retried && !_cookieOnly && isAccessTokenExpired(getAccessToken())) {
+    await tryRefreshAccessToken();
+  }
+  const token = auth && !_cookieOnly ? getRequestAccessToken() : null;
+  const sentBearer = Boolean(token);
 
   await ensureApiBase();
 
@@ -210,25 +236,24 @@ async function apiClientExecute<T>(
     throw new ApiClientError("Invalid API response", response.status);
   }
 
-  if (
-    auth &&
-    !_retried &&
-    response.status === 401 &&
-    (payload as ErrorResponse).message
-  ) {
+  if (auth && response.status === 401 && !_retried) {
     const refreshed = await tryRefreshAccessToken();
     if (refreshed) {
-      return apiClient<T>(path, { ...options, _retried: true });
+      return apiClient<T>(path, { ...options, _retried: true, _cookieOnly: false });
+    }
+    // Stale/invalid bearer shadows a still-valid HttpOnly cookie — retry cookie-only.
+    if (sentBearer && !_cookieOnly) {
+      return apiClient<T>(path, { ...options, _retried: true, _cookieOnly: true });
     }
   }
 
   if (!response.ok || payload.success === false) {
-    const errorPayload = payload as ErrorResponse;
+    const errorPayload = payload as ErrorResponse & { detail?: unknown };
     if (auth && response.status === 401) {
       clearTokens();
     }
     throw new ApiClientError(
-      errorPayload.message ?? "API request failed",
+      resolveErrorMessage(errorPayload),
       response.status,
       errorPayload.errors ?? [],
     );
@@ -237,10 +262,40 @@ async function apiClientExecute<T>(
   return payload as ApiResponse<T>;
 }
 
+function resolveErrorMessage(payload: {
+  message?: string;
+  detail?: unknown;
+  errors?: string[];
+}): string {
+  if (typeof payload.message === "string" && payload.message.trim()) {
+    return payload.message;
+  }
+  const detail = payload.detail;
+  if (typeof detail === "string" && detail.trim()) {
+    return detail;
+  }
+  if (Array.isArray(detail)) {
+    const parts = detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object" && "msg" in item) {
+          return String((item as { msg: unknown }).msg);
+        }
+        return "";
+      })
+      .filter(Boolean);
+    if (parts.length > 0) return parts.join("; ");
+  }
+  if (payload.errors && payload.errors.length > 0) {
+    return payload.errors.join("; ");
+  }
+  return "API request failed";
+}
+
 async function parseErrorMessage(response: Response): Promise<string> {
   try {
-    const payload = (await response.json()) as ErrorResponse;
-    return payload.message ?? "API request failed";
+    const payload = (await response.json()) as ErrorResponse & { detail?: unknown };
+    return resolveErrorMessage(payload);
   } catch {
     return "API request failed";
   }
@@ -260,7 +315,10 @@ async function apiUploadUnqueued<T>(
   formData: FormData,
   options: { _retried?: boolean; _apiFailover?: boolean } = {},
 ): Promise<ApiResponse<T>> {
-  const token = getAccessToken();
+  if (!options._retried && isAccessTokenExpired(getAccessToken())) {
+    await tryRefreshAccessToken();
+  }
+  const token = getRequestAccessToken();
   await ensureApiBase();
   let response: Response;
   try {
@@ -271,6 +329,7 @@ async function apiUploadUnqueued<T>(
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: formData,
+      credentials: "include",
       cache: "no-store",
     });
   } catch {
@@ -300,9 +359,9 @@ async function apiUploadUnqueued<T>(
   }
 
   if (!response.ok || payload.success === false) {
-    const errorPayload = payload as ErrorResponse;
+    const errorPayload = payload as ErrorResponse & { detail?: unknown };
     throw new ApiClientError(
-      errorPayload.message ?? "API request failed",
+      resolveErrorMessage(errorPayload),
       response.status,
       errorPayload.errors ?? [],
     );
@@ -335,6 +394,7 @@ export async function apiGetBlob(
           Accept: "application/pdf,image/jpeg,image/png,application/json,*/*",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
+        credentials: "include",
         cache: "no-store",
         signal: controller.signal,
       });

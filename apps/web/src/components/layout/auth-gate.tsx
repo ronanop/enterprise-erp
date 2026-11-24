@@ -11,7 +11,7 @@ import {
   peekWelcomeSplash,
   type WelcomeSplashPayload,
 } from "@/lib/welcome-splash-session";
-import { apiClient } from "@/services/api-client";
+import { ApiClientError, apiClient } from "@/services/api-client";
 
 function AuthGatePlaceholder({ message }: { message: string }) {
   return (
@@ -53,6 +53,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
         return;
       }
       // HttpOnly cookie session survives reload — probe /auth/me with credentials.
+      // apiClient refreshes via the refresh cookie on 401 before giving up.
       try {
         await apiClient("/auth/me", { auth: true });
         markSessionPresent();
@@ -61,8 +62,17 @@ export function AuthGate({ children }: { children: ReactNode }) {
           setChecking(false);
         }
         return;
-      } catch {
-        // fall through to unauthenticated
+      } catch (err) {
+        // Only clear on confirmed auth failure — keep hint through transient blips.
+        if (!(err instanceof ApiClientError) || err.status !== 401) {
+          if (isAuthenticated()) {
+            if (!cancelled) {
+              setAuthed(true);
+              setChecking(false);
+            }
+            return;
+          }
+        }
       }
       if (!cancelled) {
         clearTokens();
@@ -100,22 +110,36 @@ export function AuthGate({ children }: { children: ReactNode }) {
     };
   }, [mounted, checking, authed, pathname, searchParams, router]);
 
-  // If the cookie session dies mid-tab, send user back to login.
+  // Soft session check on tab focus — only log out on confirmed 401, never on
+  // transient network / API-restart blips (those were causing surprise logouts).
   useEffect(() => {
     if (!mounted || !authed) return;
+    let lastCheckAt = 0;
     function onFocus() {
+      const now = Date.now();
+      if (now - lastCheckAt < 15_000) return;
+      lastCheckAt = now;
       void apiClient("/auth/me", { auth: true })
         .then(() => {
           markSessionPresent();
         })
-        .catch(() => {
-          clearTokens();
-          setAuthed(false);
+        .catch((err) => {
+          if (err instanceof ApiClientError && err.status === 401) {
+            clearTokens();
+            setAuthed(false);
+          }
         });
     }
+    function onAuthChange() {
+      if (!isAuthenticated()) {
+        setAuthed(false);
+      }
+    }
     window.addEventListener("focus", onFocus);
+    window.addEventListener("erp-auth-change", onAuthChange);
     return () => {
       window.removeEventListener("focus", onFocus);
+      window.removeEventListener("erp-auth-change", onAuthChange);
     };
   }, [mounted, authed]);
 

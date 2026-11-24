@@ -13,13 +13,13 @@ import {
 } from "@/components/assets/dashboard.mapper";
 import {
   ASSETS_SURFACE_CARD,
-  StatusBadge,
   TABLE_SERIAL_HEADER_LABEL,
   tableRowSerial,
   tableSerialCellClassName,
   tableSerialHeaderClassName,
 } from "@/components/assets/shared";
 import { PageHeader } from "@/components/layout/page-header";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -63,6 +63,12 @@ function fromToLabel(location: string, branchId: string | null, branchLookup: Re
   if (location && location !== "—" && branch !== "—") return `${location} · ${branch}`;
   if (location && location !== "—") return location;
   return branch;
+}
+
+function formatSimpleTransferStatus(status: string): "In Progress" | "Completed" {
+  const key = status.trim().toLowerCase();
+  if (key === "completed" || key === "cancelled") return "Completed";
+  return "In Progress";
 }
 
 function TransferRowMenu({
@@ -218,7 +224,7 @@ function TransferRowMenu({
 
 /**
  * Simple transfer-document register — same data shape as Dashboard Transfer List.
- * Not the User Transfer wizard (`/assets/asset-transfers/new`).
+ * Location/branch transfer register (not asset assignment issue/return).
  */
 export function AssetTransferRegister() {
   const searchParams = useSearchParams();
@@ -437,13 +443,8 @@ export function AssetTransferRegister() {
                         <td className="px-3 py-2 font-mono text-xs text-foreground">
                           {row.documentNumber}
                         </td>
-                        <td className="px-3 py-2">
-                          <div className="text-[13px] font-medium text-foreground">
-                            {row.assetName}
-                          </div>
-                          <div className="font-mono text-[11px] text-muted-foreground">
-                            {row.assetCode}
-                          </div>
+                        <td className="px-3 py-2 text-[13px] font-medium text-foreground">
+                          {row.assetName}
                         </td>
                         <td className="px-3 py-2 text-[13px] text-muted-foreground">
                           {fromToLabel(row.fromLocation, row.fromBranchId, branchLookup)}
@@ -452,7 +453,16 @@ export function AssetTransferRegister() {
                           {fromToLabel(row.toLocation, row.toBranchId, branchLookup)}
                         </td>
                         <td className="px-3 py-2">
-                          <StatusBadge kind="lifecycle" status={row.status} />
+                          <Badge
+                            variant={
+                              formatSimpleTransferStatus(row.status) === "Completed"
+                                ? "outline"
+                                : "default"
+                            }
+                            className="text-xs"
+                          >
+                            {formatSimpleTransferStatus(row.status)}
+                          </Badge>
                         </td>
                         <td className="px-3 py-2 font-mono text-[12px] tabular-nums text-muted-foreground">
                           {row.effectiveDate ?? "—"}
@@ -509,9 +519,7 @@ export function AssetTransferRegister() {
             <CardTitle className="text-sm font-semibold tracking-tight">
               {selected.documentNumber}
             </CardTitle>
-            <p className="text-xs text-muted-foreground">
-              {selected.assetCode} — {selected.assetName}
-            </p>
+            <p className="text-xs text-muted-foreground">{selected.assetName}</p>
           </CardHeader>
           <CardContent className="grid gap-3 pb-4 text-sm sm:grid-cols-2">
             <div>
@@ -530,7 +538,16 @@ export function AssetTransferRegister() {
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Status
               </p>
-              <StatusBadge kind="lifecycle" status={selected.status} />
+              <Badge
+                variant={
+                  formatSimpleTransferStatus(selected.status) === "Completed"
+                    ? "outline"
+                    : "default"
+                }
+                className="text-xs"
+              >
+                {formatSimpleTransferStatus(selected.status)}
+              </Badge>
             </div>
             <div>
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">

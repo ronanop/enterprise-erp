@@ -161,9 +161,10 @@ def next_lead_dr_number(
     ctx: Annotated[TenantContext, Depends(require_permission("crm.lead:create"))],
     db: Annotated[Session, Depends(get_db)],
     company_id: UUID | None = None,
+    entity_name: str | None = None,
 ):
     """Preview the next DR number that will be assigned when a sales lead is created."""
-    number = LeadService(db).peek_next_dr_number(ctx, company_id)
+    number = LeadService(db).peek_next_dr_number(ctx, company_id, entity_name=entity_name)
     return APIResponse(message="OK", data={"dr_number": number})
 
 

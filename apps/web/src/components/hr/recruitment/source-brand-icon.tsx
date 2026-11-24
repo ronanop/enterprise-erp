@@ -55,7 +55,7 @@ export function SourceBrandIcon({ source }: { source: string }) {
     case "campus":
       return (
         <span
-          className="inline-flex size-[18px] shrink-0 items-center justify-center rounded-full bg-[#9B5BB8] text-[9px] font-bold leading-none text-white"
+          className="inline-flex size-[18px] shrink-0 items-center justify-center rounded-full bg-primary text-[9px] font-bold leading-none text-primary-foreground"
           aria-hidden
         >
           C

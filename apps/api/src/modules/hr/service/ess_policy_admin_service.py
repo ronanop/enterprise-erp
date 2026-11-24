@@ -22,7 +22,7 @@ class EssPolicyAdminService:
         self._audit = PlatformAuditFacade(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
-        cid = self._scope.resolve_list_company_id(ctx, company_id)
+        cid = self._scope.resolve_company_id(ctx, company_id)
         return list(
             self._db.scalars(
                 select(HrEssPolicy)

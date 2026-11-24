@@ -3,9 +3,26 @@ import { useRouter } from "next/navigation";
 import { downloadCompanyPdf, exportCompanyPdf } from "@/lib/crm/export-company-pdf";
 import { downloadLeadPdf, exportLeadPdf } from "@/lib/crm/export-lead-pdf";
 import { downloadOpportunityPdf, exportOpportunityPdf, type OpportunityExportInput } from "@/lib/crm/export-opportunity-pdf";
-import { exportOvfPdf, openOvfPrintPreview } from "@/lib/crm/export-ovf-pdf";
-import { downloadQuotePdf, exportQuotePdf, loadSellerLetterhead } from "@/lib/crm/export-quote-pdf";
+import {
+  buildOvfPdfBase64,
+  exportOvfPdf,
+  openOvfPrintPreview,
+  type OvfExportInput,
+} from "@/lib/crm/export-ovf-pdf";
+import {
+  buildQuotePdfBase64,
+  downloadQuotePdf,
+  exportQuotePdf,
+  loadSellerLetterhead,
+} from "@/lib/crm/export-quote-pdf";
 import { nextCloneCompanyName } from "@/lib/crm/company-clone-name";
+import {
+  customerRowsFromOvfLines,
+  mergeCustomerRowsWithPoAttachments,
+  mergeVendorRowsWithQuoteAttachments,
+  supportingRowsFromOvfLines,
+  vendorRowsFromOvfLines,
+} from "@/components/crm/sales/ovf-order-lines-section";
 import { ApiClientError } from "@/services/api-client";
 import {
   addQuoteLine,
@@ -14,9 +31,15 @@ import {
   createLeadFromCompany,
   createOpportunity,
   createQuote,
+  getOpportunity,
+  getOvf,
+  getQuote,
+  listAttachments,
   listCompanies,
   listCrmMemberOptions,
+  listOvfLines,
   listPipelines,
+  listQuoteLines,
   type Company,
   type LeadCreateFromCompanyInput,
   type Opportunity,
@@ -24,6 +47,54 @@ import {
   type QuoteLine,
   type SalesLead,
 } from "@/services/sales-crm-service";
+
+function textOrDash(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return "-";
+  const text = String(value).trim();
+  return text || "-";
+}
+
+/** Load full OVF print payload from APIs (same data as OVF detail Export). */
+export async function loadOvfExportInput(ovfId: string): Promise<OvfExportInput> {
+  const [ovf, ovfLines] = await Promise.all([
+    getOvf(ovfId),
+    listOvfLines(ovfId).catch(() => []),
+  ]);
+  const [quote, opportunity, quoteLines, attachments] = await Promise.all([
+    getQuote(ovf.quote_id).catch(() => null),
+    getOpportunity(ovf.opportunity_id).catch(() => null),
+    listQuoteLines(ovf.quote_id).catch(() => []),
+    listAttachments("ovf", ovfId).catch(() => []),
+  ]);
+  const poAttachments = attachments.filter((row) => row.category === "customer_po");
+  const quoteAttachments = attachments.filter((row) => row.category === "vendor_quote");
+  return {
+    ovf,
+    quote,
+    opportunity,
+    customerName: textOrDash(ovf.customer_name),
+    accountName: textOrDash(ovf.account_name),
+    quoteName: textOrDash(ovf.quote_name),
+    ownerName: textOrDash(ovf.owner_name),
+    billingAddress: textOrDash(ovf.billing_address),
+    billingState: textOrDash(ovf.billing_state),
+    billingCountry: textOrDash(ovf.billing_country),
+    billingContact: textOrDash(ovf.billing_contact_person),
+    shippingAddress: textOrDash(ovf.shipping_address),
+    shippingState: textOrDash(ovf.shipping_state),
+    shippingCountry: textOrDash(ovf.shipping_country),
+    shippingContact: textOrDash(ovf.shipping_contact_person),
+    customerRows: mergeCustomerRowsWithPoAttachments(
+      customerRowsFromOvfLines(ovfLines, quoteLines),
+      poAttachments,
+    ),
+    vendorRows: mergeVendorRowsWithQuoteAttachments(
+      vendorRowsFromOvfLines(ovfLines, quoteLines),
+      quoteAttachments,
+    ),
+    supportingRows: supportingRowsFromOvfLines(ovfLines),
+  };
+}
 
 export function salesLeadToCreateInput(lead: SalesLead): LeadCreateFromCompanyInput {
   return {
@@ -72,6 +143,7 @@ export function salesLeadToCreateInput(lead: SalesLead): LeadCreateFromCompanyIn
     distributor_department: lead.distributor_department ?? null,
     end_customer_name: lead.end_customer_name ?? null,
     end_customer_location: lead.end_customer_location ?? null,
+    sale_type: lead.sale_type ?? null,
     entity_name: lead.entity_name,
     entity_email: lead.entity_email,
     entity_address: lead.entity_address,
@@ -240,25 +312,47 @@ export async function downloadQuoteExport(quote: Quote, lines: QuoteLine[]) {
   });
 }
 
+export async function buildQuotePrintPdfAttachment(quote: Quote, lines: QuoteLine[]) {
+  const seller = await loadSellerLetterhead(quote.company_id, quote.branch_id);
+  return buildQuotePdfBase64({
+    quote,
+    lines,
+    seller,
+    customerName: quote.entity_name || quote.account_name || "-",
+    customerAddress: quote.entity_address || "-",
+    subject: quote.subject || quote.project_title || quote.quote_no,
+    ownerName: quote.owner_name || "-",
+    termsOverride: quote.terms,
+  });
+}
+
 export async function cloneOvfRecord() {
   throw new ApiClientError("Only one OVF is allowed per opportunity; cloning is not supported.", 409);
 }
 
-export async function printOvfPreview(
-  input: Parameters<typeof openOvfPrintPreview>[0],
-) {
+export async function printOvfPreview(input: OvfExportInput) {
   await openOvfPrintPreview(input);
 }
 
-export async function downloadOvfExport(
-  input: Parameters<typeof exportOvfPdf>[0],
-) {
+export async function downloadOvfExport(input: OvfExportInput) {
   await exportOvfPdf(input);
 }
 
+/** Regenerate and download OVF print PDF by id (My Jobs / approvals). */
+export async function downloadOvfExportById(ovfId: string) {
+  await exportOvfPdf(await loadOvfExportInput(ovfId));
+}
+
+/** Build OVF print PDF as base64 for approval email attachment. */
+export async function buildOvfPrintPdfAttachment(input: OvfExportInput) {
+  return buildOvfPdfBase64(input);
+}
+
+export async function buildOvfPrintPdfAttachmentById(ovfId: string) {
+  return buildOvfPdfBase64(await loadOvfExportInput(ovfId));
+}
+
 /** @deprecated Prefer downloadOvfExport (PDF download). */
-export async function downloadOvfPdf(
-  input: Parameters<typeof exportOvfPdf>[0],
-) {
+export async function downloadOvfPdf(input: OvfExportInput) {
   await exportOvfPdf(input);
 }

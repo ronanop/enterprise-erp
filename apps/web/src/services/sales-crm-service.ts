@@ -54,7 +54,22 @@ export function quoteLineMarkupPct(
   const cost = Number(unitCost) || 0;
   const sell = Number(unitSell) || 0;
   if (cost <= 0) return Number(fallback) || 0;
-  return Number((((sell - cost) / cost) * 100).toFixed(3));
+  // Preserve up to 10 decimal places for vendor-matched margin %.
+  return Number((((sell - cost) / cost) * 100).toFixed(10));
+}
+
+/** Format a margin % for inputs without forcing trailing zeros past significant digits. */
+export function formatMarginPctInput(
+  value: number | string | null | undefined,
+  fallback: number | string | null | undefined = 0,
+): string {
+  const n = Number(value);
+  if (!Number.isFinite(n)) {
+    const fb = Number(fallback);
+    return Number.isFinite(fb) ? String(fb) : "0";
+  }
+  // Trim floating noise while keeping up to 10 decimal places.
+  return Number(n.toFixed(10)).toString();
 }
 
 export function truncateId(id?: string | null): string {
@@ -173,6 +188,7 @@ export type Company = {
   shipping_code: string | null;
   shipping_country: string | null;
   description: string | null;
+  custom_fields?: Record<string, unknown> | null;
   master_customer_id: string | null;
   status: string;
   locked: boolean;
@@ -212,6 +228,7 @@ export type CompanyFormInput = {
   shipping_code?: string | null;
   shipping_country?: string | null;
   description?: string | null;
+  custom_fields?: Record<string, unknown> | null;
 };
 
 export async function listCompanies(): Promise<Company[]> {
@@ -276,6 +293,7 @@ export function companyToFormInput(company: Company, customerName?: string): Com
     shipping_code: company.shipping_code,
     shipping_country: company.shipping_country,
     description: company.description,
+    custom_fields: company.custom_fields ?? null,
   };
 }
 
@@ -327,6 +345,8 @@ export type LeadCreateFromCompanyInput = {
   distributor_department?: string | null;
   end_customer_name?: string | null;
   end_customer_location?: string | null;
+  /** sell_through | sell_to */
+  sale_type?: string | null;
   entity_name?: string | null;
   entity_email?: string | null;
   entity_address?: string | null;
@@ -338,6 +358,9 @@ export type LeadCreateFromCompanyInput = {
   presales_owner_id?: string | null;
   presales_call_aligned?: boolean | null;
   presales_call_contact_name?: string | null;
+  /** JSON map of product type → { aligned, contact_name }. */
+  presales_call_by_product?: string | null;
+  custom_fields?: Record<string, unknown> | null;
 };
 
 export async function createLeadFromCompany(
@@ -352,9 +375,15 @@ export async function createLeadFromCompany(
   );
 }
 
-export async function peekNextLeadDrNumber(companyId?: string): Promise<string> {
+export async function peekNextLeadDrNumber(
+  companyId?: string,
+  entityName?: string,
+): Promise<string> {
+  const query: Record<string, string> = {};
+  if (companyId) query.company_id = companyId;
+  if (entityName?.trim()) query.entity_name = entityName.trim();
   const res = await apiClient<{ dr_number: string }>("/crm/leads/next-dr-number", {
-    query: companyId ? { company_id: companyId } : undefined,
+    query: Object.keys(query).length ? query : undefined,
   });
   return unwrap(res).dr_number;
 }
@@ -380,6 +409,7 @@ export type Contact = {
   owner_id: string | null;
   status: string;
   version: number;
+  custom_fields?: Record<string, unknown> | null;
 };
 
 export type ContactFormInput = {
@@ -393,6 +423,7 @@ export type ContactFormInput = {
   title?: string | null;
   is_primary?: boolean;
   owner_id?: string | null;
+  custom_fields?: Record<string, unknown> | null;
 };
 
 export async function listContacts(companyAccountId?: string): Promise<Contact[]> {
@@ -509,9 +540,20 @@ export type SellingEntity = {
   version: number;
 };
 
-export async function listSellingEntities(): Promise<SellingEntity[]> {
-  const res = await resourceService.list<SellingEntity>(CRM_SELLING_ENTITIES_API);
-  return asArray(res.data);
+export async function listSellingEntities(companyId?: string | null): Promise<SellingEntity[]> {
+  const res = await resourceService.list<SellingEntity>(CRM_SELLING_ENTITIES_API, {
+    page_size: 200,
+    ...(companyId ? { company_id: companyId } : {}),
+  });
+  const rows = asArray(res.data);
+  // Unscoped admin lists can return one row per org company — keep unique entity codes.
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const key = (row.entity_code || row.entity_name || row.id).trim().toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export async function getSellingEntity(id: string): Promise<SellingEntity> {
@@ -579,6 +621,8 @@ export type SalesLead = {
   sow_attached?: boolean;
   presales_call_aligned?: boolean | null;
   presales_call_contact_name?: string | null;
+  /** JSON map of product type → { aligned, contact_name }. */
+  presales_call_by_product?: string | null;
   oem_name?: string | null;
   oem_contact_person?: string | null;
   oem_contact_number?: string | null;
@@ -590,11 +634,14 @@ export type SalesLead = {
   distributor_department?: string | null;
   end_customer_name?: string | null;
   end_customer_location?: string | null;
+  /** sell_through | sell_to */
+  sale_type?: string | null;
   notes: string | null;
   convert_remark?: string | null;
   lost_reason?: string | null;
   converted_opportunity_id: string | null;
   presales_owner_id?: string | null;
+  custom_fields?: Record<string, unknown> | null;
   version: number;
 };
 
@@ -694,6 +741,11 @@ export type Opportunity = {
   customer_po_approved?: boolean;
   cloud_blueprint_variant?: string | null;
   product_type?: string | null;
+  has_hardware?: boolean;
+  has_software?: boolean;
+  has_services?: boolean;
+  /** Outsourced | Cache Service — copied from lead Service Sourcing Channel. */
+  service_sourcing_channel?: string | null;
   cloud_sub_product?: string | null;
   customer_mrr?: number | null;
   customer_arr?: number | null;
@@ -718,6 +770,7 @@ export type Opportunity = {
   lease_interest_rate_pct?: number | null;
   lease_tenure_months?: number | null;
   lease_monthly_rental?: number | null;
+  custom_fields?: Record<string, unknown> | null;
   version: number;
   created_at?: string | null;
   notes?: string | null;
@@ -853,6 +906,55 @@ export async function getOpportunityTimeline(id: string): Promise<OpportunityTim
   return unwrap(await apiClient<OpportunityTimeline>(`${CRM_OPPORTUNITIES_API}/${id}/timeline`));
 }
 
+// ── Unified deal timeline (lead → OVF → SCM → PO → delivery → project) ──
+
+const CRM_DEAL_TIMELINE_API = "/crm/deal-timeline";
+
+export type DealTimelinePhase =
+  | "crm"
+  | "ovf"
+  | "scm"
+  | "delivery"
+  | "project"
+  | "completed"
+  | "lost";
+
+export type DealTimelineListItem = {
+  opportunity_id: string;
+  opportunity_code: string | null;
+  opportunity_name: string | null;
+  customer_name: string | null;
+  account_name: string | null;
+  stage: string | null;
+  status: string | null;
+  phase: DealTimelinePhase;
+  timeline_status: string;
+  deal_won: boolean;
+  updated_at: string | null;
+};
+
+export type DealTimeline = {
+  opportunity_id: string;
+  opportunity_code: string | null;
+  opportunity_name: string | null;
+  customer_name: string | null;
+  timeline_status: string;
+  events: OpportunityTimelineEvent[];
+};
+
+export async function listDealTimelines(params?: {
+  company_id?: string;
+}): Promise<DealTimelineListItem[]> {
+  const res = await apiClient<DealTimelineListItem[]>(CRM_DEAL_TIMELINE_API, { query: params });
+  return asArray(res.data);
+}
+
+export async function getDealTimeline(opportunityId: string): Promise<DealTimeline> {
+  return unwrap(
+    await apiClient<DealTimeline>(`${CRM_DEAL_TIMELINE_API}/${opportunityId}`),
+  );
+}
+
 
 export async function applyOpportunityAction(
   id: string,
@@ -918,6 +1020,7 @@ export type Quote = {
   description?: string | null;
   sales_order_id: string | null;
   parent_quote_id?: string | null;
+  custom_fields?: Record<string, unknown> | null;
   version: number;
   created_at?: string | null;
 };
@@ -954,6 +1057,7 @@ export type QuoteFormInput = {
   terms?: string | null;
   description?: string | null;
   reason_for_discount?: string | null;
+  custom_fields?: Record<string, unknown> | null;
 };
 
 export type QuoteLine = {
@@ -964,6 +1068,7 @@ export type QuoteLine = {
   product_name: string;
   hsn_sac: string | null;
   description?: string | null;
+  sub_product_category?: string | null;
   line_type: string;
   qty: number;
   unit_cost: number;
@@ -982,10 +1087,12 @@ export type QuoteLineFormInput = {
   product_name: string;
   hsn_sac?: string | null;
   description?: string | null;
+  sub_product_category?: string | null;
   line_type?: string;
   qty?: number;
   unit_cost?: number;
   unit_sell?: number;
+  margin_pct?: number;
   gst_pct?: number;
 };
 
@@ -1062,6 +1169,50 @@ export async function getQuoteMargin(quoteId: string): Promise<QuoteMarginSummar
   return unwrap(await apiClient<QuoteMarginSummary>(`${CRM_QUOTES_API}/${quoteId}/margin`));
 }
 
+export type QuoteRevisionRow = {
+  revision_no: number;
+  avg_margin_pct: number;
+  grand_total: number;
+  total_margin_amount: number;
+  negotiation_pct: number;
+  is_current: boolean;
+  snapshotted_at?: string | null;
+  remark?: string | null;
+  has_print_payload?: boolean;
+};
+
+export type QuoteRevisionPrintPayload = {
+  revision_no: number;
+  is_current: boolean;
+  quote: Quote;
+  lines: QuoteLine[];
+};
+
+export async function listQuoteRevisions(quoteId: string): Promise<QuoteRevisionRow[]> {
+  const res = await apiClient<QuoteRevisionRow[]>(`${CRM_QUOTES_API}/${quoteId}/revisions`);
+  return asArray(res.data);
+}
+
+export async function getQuoteRevisionPrintPayload(
+  quoteId: string,
+  revisionNo: number,
+): Promise<QuoteRevisionPrintPayload> {
+  return unwrap(
+    await apiClient<QuoteRevisionPrintPayload>(
+      `${CRM_QUOTES_API}/${quoteId}/revisions/${revisionNo}/print-payload`,
+    ),
+  );
+}
+
+/** Remove unapproved current revision and restore the prior approved version. */
+export async function discardQuoteCurrentRevision(quoteId: string): Promise<Quote> {
+  return unwrap(
+    await apiClient<Quote>(`${CRM_QUOTES_API}/${quoteId}/revisions/current/discard`, {
+      method: "POST",
+    }),
+  );
+}
+
 export async function getQuoteBlueprint(quoteId: string): Promise<BlueprintState> {
   return unwrap(await apiClient<BlueprintState>(`${CRM_QUOTES_API}/${quoteId}/blueprint`));
 }
@@ -1073,6 +1224,8 @@ export async function sendQuoteForApproval(
     assigned_user_id: string;
     assigned_user_ids?: string[];
     remarks?: string | null;
+    quotation_pdf_base64?: string | null;
+    quotation_pdf_filename?: string | null;
   },
 ): Promise<Quote> {
   return unwrap(
@@ -1187,6 +1340,7 @@ export type Ovf = {
   freight_medium?: string | null;
   freight_weight_kg?: number | null;
   freight_insurance?: boolean;
+  custom_fields?: Record<string, unknown> | null;
   version: number;
   created_at?: string | null;
   updated_at?: string | null;
@@ -1261,6 +1415,7 @@ export type OvfFormInput = {
   negotiated_by?: string | null;
   negotiation_remark?: string | null;
   early_payment_discount_pct?: number | null;
+  custom_fields?: Record<string, unknown> | null;
 };
 
 export type OvfLine = {
@@ -1392,6 +1547,8 @@ export async function sendOvfForApproval(
     remarks?: string | null;
     assigned_user_id?: string;
     assigned_user_ids?: string[];
+    ovf_pdf_base64?: string | null;
+    ovf_pdf_filename?: string | null;
   },
 ): Promise<Ovf> {
   return unwrap(
@@ -1490,7 +1647,10 @@ export async function listMyJobs(params?: {
   entity_type?: string;
   entity_id?: string;
 }): Promise<ApprovalTask[]> {
-  const res = await resourceService.list<ApprovalTask>(CRM_MY_JOBS_API, params);
+  const res = await resourceService.list<ApprovalTask>(CRM_MY_JOBS_API, {
+    page_size: 200,
+    ...params,
+  });
   return asArray(res.data);
 }
 
@@ -1504,6 +1664,7 @@ export async function decideMyJob(
     freight_weight_kg?: number;
     freight_insurance?: boolean;
     supporting_items?: Array<{
+      line_id?: string;
       product_name: string;
       qty: number;
       unit_price: number;
@@ -1585,6 +1746,18 @@ export async function requestOvfSupportingItems(
 ): Promise<Ovf> {
   return unwrap(
     await apiClient<Ovf>(`${CRM_OVF_API}/${ovfId}/request-supporting-items`, {
+      method: "POST",
+      body,
+    }),
+  );
+}
+
+export async function requestOvfSupportingItemPrices(
+  ovfId: string,
+  body: OvfSupportingItemsRequestInput = {},
+): Promise<Ovf> {
+  return unwrap(
+    await apiClient<Ovf>(`${CRM_OVF_API}/${ovfId}/request-supporting-item-prices`, {
       method: "POST",
       body,
     }),
@@ -1974,13 +2147,25 @@ export async function createTask(body: TaskFormInput): Promise<CrmTask> {
 
 export type Option = { id: string; label: string; email?: string; userId?: string };
 
-export async function listLeadSourceOptions(): Promise<Option[]> {
-  const res = await resourceService.list("/crm/lead-sources");
+export async function listLeadSourceOptions(companyId?: string | null): Promise<Option[]> {
+  const res = await resourceService.list("/crm/lead-sources", {
+    page_size: 200,
+    ...(companyId ? { company_id: companyId } : {}),
+  });
   const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);
-  return rows.map((r) => ({
+  const options = rows.map((r) => ({
     id: String(r.id),
     label: String(r.source_name ?? r.source_code ?? r.id),
+    code: String(r.source_code ?? r.source_name ?? r.id),
   }));
+  // Unscoped admin lists can return one row per org company — keep unique source codes.
+  const seen = new Set<string>();
+  return options.filter((opt) => {
+    const key = opt.code.trim().toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).map(({ id, label }) => ({ id, label }));
 }
 
 /** Marketing campaigns with TYPE = Event (for Source / Lead Source = Event). */

@@ -56,7 +56,6 @@ async function advanceToReview(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: /^Next$/i }));
   await user.click(screen.getByRole("button", { name: /^Next$/i }));
   await user.click(screen.getByRole("button", { name: /^Next$/i }));
-  await user.click(screen.getByRole("button", { name: /^Next$/i }));
   await waitFor(() => {
     expect(screen.getByRole("button", { name: /Confirm return/i })).toBeInTheDocument();
   });
@@ -323,32 +322,11 @@ describe("ReturnWizardContainer — return condition", () => {
     await user.click(screen.getByRole("radio", { name: /Outdated/i }));
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
-    await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /Confirm return/i }));
     await waitFor(() =>
       expect(returnAsset).toHaveBeenCalledWith(
         "asg-1",
         expect.objectContaining({ return_condition: "outdated" }),
-      ),
-    );
-  });
-
-  it("submits dead condition", async () => {
-    const user = userEvent.setup();
-    render(
-      <ReturnWizardContainer assignmentId="asg-1" service={service} listEmployees={listEmployees} />,
-    );
-    await waitForWizard();
-    await user.click(screen.getByRole("button", { name: /^Next$/i }));
-    await user.click(screen.getByRole("radio", { name: /Not working/i }));
-    await user.click(screen.getByRole("button", { name: /^Next$/i }));
-    await user.click(screen.getByRole("button", { name: /^Next$/i }));
-    await user.click(screen.getByRole("button", { name: /^Next$/i }));
-    await user.click(screen.getByRole("button", { name: /Confirm return/i }));
-    await waitFor(() =>
-      expect(returnAsset).toHaveBeenCalledWith(
-        "asg-1",
-        expect.objectContaining({ return_condition: "dead" }),
       ),
     );
   });
@@ -376,29 +354,7 @@ describe("ReturnWizardContainer — return condition", () => {
 });
 
 describe("ReturnWizardContainer — return remarks", () => {
-  it("includes remarks and reason in payload", async () => {
-    const user = userEvent.setup();
-    render(
-      <ReturnWizardContainer assignmentId="asg-1" service={service} listEmployees={listEmployees} />,
-    );
-    await waitForWizard();
-    await user.click(screen.getByRole("button", { name: /^Next$/i }));
-    await user.click(screen.getByRole("button", { name: /^Next$/i }));
-    await user.click(screen.getByRole("button", { name: /^Next$/i }));
-    await user.type(screen.getByLabelText(/Return remarks/i), "  screen scratch  ");
-    await user.type(screen.getByLabelText(/Reason/i), "  offboarding  ");
-    await user.click(screen.getByRole("button", { name: /^Next$/i }));
-    await user.click(screen.getByRole("button", { name: /Confirm return/i }));
-    await waitFor(() =>
-      expect(returnAsset).toHaveBeenCalledWith("asg-1", {
-        return_condition: "good",
-        return_remarks: "screen scratch",
-        reason: "offboarding",
-      }),
-    );
-  });
-
-  it("omits blank remarks from payload", async () => {
+  it("does not show remarks fields on review and omits blank remarks from payload", async () => {
     const user = userEvent.setup();
     render(
       <ReturnWizardContainer
@@ -410,6 +366,8 @@ describe("ReturnWizardContainer — return remarks", () => {
     );
     await waitForWizard();
     await advanceToReview(user);
+    expect(screen.queryByLabelText(/Return remarks/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Reason \(audit\)/i)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Confirm return/i }));
     await waitFor(() =>
       expect(returnAsset).toHaveBeenCalledWith("asg-1", {

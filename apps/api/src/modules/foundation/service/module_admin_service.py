@@ -11,9 +11,12 @@ from core.exceptions import AppException, ConflictException, ForbiddenException,
 from modules.asset.service.domain_membership_service import DomainMembershipService
 from modules.foundation.domain.erp_modules import (
     ADMIN_USER_TYPES,
+    ASSET_MODULE_KEY,
+    ASSET_SUBMODULE_KEYS,
     ERP_MODULE_KEY_SET,
     MODULE_ROLE_ADMIN,
     MODULE_ROLE_MEMBER,
+    asset_domain_for_module_key,
     default_module_member_role,
     module_member_roles,
 )
@@ -45,6 +48,11 @@ class ModuleAdminService:
             return
         if self._modules.is_module_admin(ctx.tenant_id, ctx.user_id, module_key):
             return
+        # Parent Asset Management admins may manage IT / Non-IT submodule users.
+        if module_key in ASSET_SUBMODULE_KEYS and self._modules.is_module_admin(
+            ctx.tenant_id, ctx.user_id, ASSET_MODULE_KEY
+        ):
+            return
         raise ForbiddenException("Only a module admin can manage users for this module")
 
     def is_module_admin(self, ctx: TenantContext, module_key: str) -> bool:
@@ -52,7 +60,13 @@ class ModuleAdminService:
             return False
         if ctx.user_type in ADMIN_USER_TYPES:
             return True
-        return self._modules.is_module_admin(ctx.tenant_id, ctx.user_id, module_key)
+        if self._modules.is_module_admin(ctx.tenant_id, ctx.user_id, module_key):
+            return True
+        if module_key in ASSET_SUBMODULE_KEYS:
+            return self._modules.is_module_admin(
+                ctx.tenant_id, ctx.user_id, ASSET_MODULE_KEY
+            )
+        return False
 
     def list_members(self, ctx: TenantContext, module_key: str) -> list[dict]:
         self.ensure_module_admin(ctx, module_key)
@@ -165,6 +179,24 @@ class ModuleAdminService:
         if module_key == "crm":
             OrgModuleAdminSyncService(self._db).promote_crm_member(
                 ctx.tenant_id, user_id, ctx.user_id
+            )
+        if module_key == ASSET_MODULE_KEY:
+            domains = DomainMembershipService(self._db)
+            for sub in sorted(ASSET_SUBMODULE_KEYS):
+                domains.upsert_from_module_grant(
+                    ctx,
+                    user_id=user_id,
+                    module_key=sub,
+                    role=member_role,
+                    actor_id=ctx.user_id,
+                )
+        elif asset_domain_for_module_key(module_key) is not None:
+            DomainMembershipService(self._db).upsert_from_module_grant(
+                ctx,
+                user_id=user_id,
+                module_key=module_key,
+                role=member_role,
+                actor_id=ctx.user_id,
             )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
@@ -308,10 +340,17 @@ class ModuleAdminService:
             OrgModuleAdminSyncService(self._db).demote_crm_member(
                 ctx.tenant_id, user_id, ctx.user_id
             )
-        if module_key == "assets":
+        if module_key == ASSET_MODULE_KEY:
             # Clear IT/Non-IT domain memberships so list_users sync cannot re-add this member.
             DomainMembershipService(self._db).deactivate_all_for_user(
                 ctx.tenant_id, user_id, actor_id=ctx.user_id
+            )
+        elif asset_domain_for_module_key(module_key) is not None:
+            DomainMembershipService(self._db).revoke_from_module_grant(
+                ctx,
+                user_id=user_id,
+                module_key=module_key,
+                actor_id=ctx.user_id,
             )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,

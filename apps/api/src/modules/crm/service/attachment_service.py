@@ -26,10 +26,15 @@ from modules.foundation.domain.value_objects import TenantContext
 from shared.upload_safety import (
     DEFAULT_MAX_ATTACHMENTS_PER_ENTITY,
     DEFAULT_MAX_UPLOAD_BYTES,
+    OUTLOOK_MAIL_EXPORT_EXTENSIONS,
+    OUTLOOK_MAIL_EXPORT_HINT,
     UnsafeUploadError,
+    file_extension,
     sanitize_filename,
     validate_upload,
 )
+
+_OUTLOOK_ONLY_CATEGORIES = frozenset({"oem_quote", "vendor_quote"})
 
 
 def _upload_root() -> Path:
@@ -150,6 +155,11 @@ class AttachmentService:
                     content_type=content_type,
                     raw=raw,
                     max_bytes=DEFAULT_MAX_UPLOAD_BYTES,
+                    allowed_extensions=(
+                        OUTLOOK_MAIL_EXPORT_EXTENSIONS
+                        if category in _OUTLOOK_ONLY_CATEGORIES
+                        else None
+                    ),
                 )
             except UnsafeUploadError as exc:
                 raise ValidationException(str(exc)) from exc
@@ -186,6 +196,10 @@ class AttachmentService:
                 stored_path = str(dest)
             source = "upload"
         else:
+            # Linked path uploads for vendor quotation still need Outlook export extension.
+            if category in _OUTLOOK_ONLY_CATEGORIES:
+                if file_extension(safe_name) not in OUTLOOK_MAIL_EXPORT_EXTENSIONS:
+                    raise ValidationException(OUTLOOK_MAIL_EXPORT_HINT)
             # Link/cloud references still must not carry active filenames.
             safe_name = sanitize_filename(file_name)
             if Path(safe_name).suffix.lower() in {

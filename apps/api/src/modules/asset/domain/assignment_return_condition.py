@@ -25,8 +25,9 @@ class AssignmentReturnCondition(str, Enum):
 
 RETURN_CONDITION_TO_OPERATIONAL_ACTION: dict[str, str] = {
     RETURN_CONDITION_GOOD: "return_to_ready",
-    # Simplified lifecycle: no separate Retired / Pending Disposal queue.
-    RETURN_CONDITION_OUTDATED: "return_to_ready",
+    # Outdated retire → DISPOSED + Disposal register (no separate Retired queue).
+    RETURN_CONDITION_OUTDATED: "dispose",
+    # Dead kept as stock return; UI currently only offers good | outdated.
     RETURN_CONDITION_DEAD: "return_to_ready",
 }
 

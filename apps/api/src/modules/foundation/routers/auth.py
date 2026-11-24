@@ -34,11 +34,16 @@ FORGOT_PASSWORD_MESSAGE = (
 )
 
 
-def _apply_auth_cookies(response: Response, result: dict) -> None:
+def _apply_auth_cookies(
+    response: Response,
+    result: dict,
+    request: Request | None = None,
+) -> None:
     set_auth_cookies(
         response,
         access_token=result.get("access_token"),
         refresh_token=result.get("refresh_token"),
+        request=request,
     )
 
 
@@ -59,7 +64,7 @@ def login(
     )
     db.commit()
     if result.get("access_token"):
-        _apply_auth_cookies(response, result)
+        _apply_auth_cookies(response, result, request)
     return APIResponse(message="Login successful", data=TokenResponse(**result))
 
 
@@ -78,7 +83,7 @@ def verify_mfa(
         user_agent=request.headers.get("User-Agent"),
     )
     db.commit()
-    _apply_auth_cookies(response, result)
+    _apply_auth_cookies(response, result, request)
     return APIResponse(message="MFA verified", data=TokenResponse(**result))
 
 
@@ -143,12 +148,13 @@ def refresh(
         user_agent=request.headers.get("User-Agent"),
     )
     db.commit()
-    _apply_auth_cookies(response, result)
+    _apply_auth_cookies(response, result, request)
     return APIResponse(message="Token refreshed", data=TokenResponse(**result))
 
 
 @router.post("/logout", response_model=APIResponse[None])
 def logout(
+    request: Request,
     ctx: Annotated[TenantContext, Depends(get_tenant_context)],
     db: Annotated[Session, Depends(get_db)],
     response: Response,
@@ -157,7 +163,7 @@ def logout(
     assert ctx.session_id is not None
     service.logout(ctx.session_id, ctx.user_id, ctx.tenant_id)
     db.commit()
-    clear_auth_cookies(response)
+    clear_auth_cookies(response, request)
     return APIResponse(message="Logged out", data=None)
 
 

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from core.exceptions import ForbiddenException
 from modules.foundation.domain.value_objects import TenantContext
-from modules.quality.repository.base import QmScopedRepository
+from modules.quality.repository.base import MODULE_KEY, QmScopedRepository
 
 
 class QmScopeValidator:
@@ -22,15 +22,13 @@ class QmScopeValidator:
         return QmScopedRepository.resolve_company_id(ctx, company_id)
 
     def validate_company_access(self, ctx: TenantContext, company_id: UUID) -> None:
-        QmScopedRepository.ensure_company_access(ctx, company_id)
+        QmScopedRepository.ensure_company_access(
+            ctx, company_id, module_key=MODULE_KEY
+        )
 
     def validate_branch_access(self, ctx: TenantContext, branch_id: UUID | None) -> None:
-        if branch_id is None:
-            return
-        if ctx.user_type in {"super_admin", "tenant_admin"}:
-            return
-        if ctx.branch_id and ctx.branch_id != branch_id:
-            raise ForbiddenException("Branch access denied")
+        # Session branch must not block cross-entity quality work.
+        _ = (ctx, branch_id)
 
     def require_branch(self, ctx: TenantContext, branch_id: UUID | None) -> UUID:
         if branch_id is not None:

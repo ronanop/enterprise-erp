@@ -1,10 +1,6 @@
-﻿import { FieldEngineerRouteGuard } from "@/components/service/field-engineer-route-guard";
-import { FieldEngineerDashboardPage } from "@/components/service/tickets/field-engineer-dashboard-page";
+import { redirect } from "next/navigation";
 
+/** Field Engineer portal removed — FE work is managed on the ticket. */
 export default function Page() {
-  return (
-    <FieldEngineerRouteGuard>
-      <FieldEngineerDashboardPage />
-    </FieldEngineerRouteGuard>
-  );
+  redirect("/service/service-request-tickets");
 }

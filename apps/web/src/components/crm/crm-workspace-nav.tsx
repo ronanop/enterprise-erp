@@ -6,6 +6,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
   Building2,
+  GitBranch,
   Handshake,
   LayoutDashboard,
   ListTodo,
@@ -24,6 +25,8 @@ import {
 } from "@/lib/crm-sidebar-focus";
 import { canManageModuleUsers } from "@/lib/module-access";
 import { useAuthUser } from "@/hooks/use-auth-user";
+import { useCrmSettingsEffective } from "@/hooks/use-crm-settings";
+
 
 type CrmNavItem = {
   title: string;
@@ -52,6 +55,7 @@ export const CRM_NAV: readonly CrmNavItem[] = [
   { title: "Company", href: "/crm/companies", icon: Building2 },
   { title: "Leads", href: "/crm/leads", icon: UserPlus },
   { title: "Opportunities", href: "/crm/opportunities", icon: Target },
+  { title: "Timeline", href: "/crm/timeline", icon: GitBranch },
 ];
 
 export function isCrmAdminOnlyHref(href: string): boolean {
@@ -111,16 +115,26 @@ function onCrmNavigate(item: ModuleNavItem) {
 export function CrmSidebar() {
   const pathname = usePathname();
   const { user, adminModuleKeys } = useAuthUser();
+  const { settings } = useCrmSettingsEffective();
 
   const isCrmAdmin = canManageModuleUsers("crm", adminModuleKeys, user?.userType);
 
   const navItems = useMemo(() => {
-    const items: CrmNavItem[] = [...CRM_NAV];
+    const paneVisibility = new Map(
+      (settings?.navigation?.panes ?? []).map((pane) => [pane.href, pane.visible !== false]),
+    );
+    const items: CrmNavItem[] = CRM_NAV.filter((item) => {
+      if (!paneVisibility.size) return true;
+      return paneVisibility.get(item.href) !== false;
+    });
     if (isCrmAdmin) {
-      items.push({ title: "Users", href: "/crm/users", icon: UserCog });
+      const usersVisible = !paneVisibility.size || paneVisibility.get("/crm/users") !== false;
+      if (usersVisible) {
+        items.push({ title: "Users", href: "/crm/users", icon: UserCog });
+      }
     }
     return items;
-  }, [isCrmAdmin]);
+  }, [isCrmAdmin, settings]);
 
   return (
     <ModuleSidebar

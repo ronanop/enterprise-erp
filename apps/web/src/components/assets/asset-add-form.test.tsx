@@ -136,23 +136,19 @@ async function fillMinimalLaptopForm(user: ReturnType<typeof userEvent.setup>) {
     expect(screen.getByRole("heading", { name: "Add Asset" })).toBeInTheDocument(),
   );
   await waitFor(() =>
-    expect(screen.getByRole("combobox", { name: /Asset Type/i })).toBeInTheDocument(),
+    expect(screen.getByRole("combobox", { name: /Asset Name/i })).toBeInTheDocument(),
   );
 
-  const name = screen.getByLabelText(/Asset Name/i);
-  await user.clear(name);
-  await user.type(name, "Dell Latitude");
-
-  await selectByLabel(user, /Asset Type/i, "type-laptop");
+  await selectByLabel(user, /Asset Name/i, "type-laptop");
   await selectByLabel(user, /Processor/i, "Intel i5");
   await selectByLabel(user, /Generation/i, "12th");
   await selectByLabel(user, /^RAM/i, "16 GB");
   await selectByLabel(user, /Storage/i, "512 GB");
   await selectByLabel(user, /^Location/i, "loc-mumbai");
   await waitFor(() => {
-    expect(screen.getByRole("combobox", { name: /Building/i })).not.toBeDisabled();
+    expect(screen.getByRole("combobox", { name: /Address/i })).not.toBeDisabled();
   });
-  await selectByLabel(user, /Building/i, "bld-crc1");
+  await selectByLabel(user, /Address/i, "bld-crc1");
   await selectByLabel(user, /Charger Available/i, "no");
 }
 
@@ -171,7 +167,7 @@ describe("AssetAddForm single-page registration", () => {
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "Add Asset" })).toBeInTheDocument(),
     );
-    expect(screen.getByText(/Register a new IT asset/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Register a new IT asset/i)).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Basic" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "IT Information" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Location/i })).toBeInTheDocument();
@@ -180,7 +176,7 @@ describe("AssetAddForm single-page registration", () => {
     expect(screen.getByRole("button", { name: /^Add Asset$/i })).toBeInTheDocument();
   });
 
-  it("filters buildings by selected location", async () => {
+  it("filters addresses by selected location", async () => {
     const user = userEvent.setup();
     render(<AssetAddForm />);
     await waitFor(() =>
@@ -189,9 +185,9 @@ describe("AssetAddForm single-page registration", () => {
 
     await selectByLabel(user, /^Location/i, "loc-mumbai");
     await waitFor(() => {
-      expect(screen.getByRole("combobox", { name: /Building/i })).not.toBeDisabled();
+      expect(screen.getByRole("combobox", { name: /Address/i })).not.toBeDisabled();
     });
-    const building = screen.getByRole("combobox", { name: /Building/i });
+    const building = screen.getByRole("combobox", { name: /Address/i });
     expect(within(building).getByRole("option", { name: "CRC-1" })).toBeInTheDocument();
     expect(within(building).getByRole("option", { name: "Mumbai IT Park" })).toBeInTheDocument();
     expect(
@@ -203,10 +199,10 @@ describe("AssetAddForm single-page registration", () => {
     const user = userEvent.setup();
     render(<AssetAddForm />);
     await waitFor(() =>
-      expect(screen.getByRole("combobox", { name: /Asset Type/i })).toBeInTheDocument(),
+      expect(screen.getByRole("combobox", { name: /Asset Name/i })).toBeInTheDocument(),
     );
 
-    await selectByLabel(user, /Asset Type/i, "type-laptop");
+    await selectByLabel(user, /Asset Name/i, "type-laptop");
     await selectByLabel(user, /Processor/i, "Intel i7");
     expect(screen.getByRole("combobox", { name: /Generation/i })).toBeInTheDocument();
 
@@ -218,15 +214,15 @@ describe("AssetAddForm single-page registration", () => {
     const user = userEvent.setup();
     render(<AssetAddForm />);
     await waitFor(() =>
-      expect(screen.getByRole("combobox", { name: /Asset Type/i })).toBeInTheDocument(),
+      expect(screen.getByRole("combobox", { name: /Asset Name/i })).toBeInTheDocument(),
     );
 
-    await selectByLabel(user, /Asset Type/i, "type-laptop");
+    await selectByLabel(user, /Asset Name/i, "type-laptop");
     expect(screen.getByRole("combobox", { name: /Processor/i })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: /^RAM/i })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: /Storage/i })).toBeInTheDocument();
 
-    await selectByLabel(user, /Asset Type/i, "type-monitor");
+    await selectByLabel(user, /Asset Name/i, "type-monitor");
     expect(screen.queryByRole("combobox", { name: /Processor/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: /^RAM/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: /Storage/i })).not.toBeInTheDocument();
@@ -282,7 +278,7 @@ describe("AssetAddForm single-page registration", () => {
     });
 
     const body = create.mock.calls[0]![0] as Record<string, unknown>;
-    expect(body.asset_name).toBe("Dell Latitude");
+    expect(body.asset_name).toBe("Laptop");
     expect(body.asset_category_id).toBe("c1");
     expect(body.asset_type_id).toBe("type-laptop");
     expect(body.asset_type).toBeUndefined();
@@ -302,7 +298,7 @@ describe("AssetAddForm single-page registration", () => {
     expect(body.purchase_cost).toBe(0);
 
     await waitFor(() => {
-      expect(push).toHaveBeenCalledWith("/assets/assets/asset-3");
+      expect(push).toHaveBeenCalledWith("/assets/assets");
     });
     },
     15000,
@@ -359,7 +355,7 @@ describe("AssetAddForm single-page registration", () => {
 
     resolveCreate({ id: "asset-x", status: "draft" });
     await waitFor(() => {
-      expect(push).toHaveBeenCalledWith("/assets/assets/asset-x");
+      expect(push).toHaveBeenCalledWith("/assets/assets");
     });
   });
 });
@@ -453,7 +449,7 @@ describe("AssetAddForm Phase 5F activation reliability", () => {
     await user.click(screen.getByRole("button", { name: /^Add Asset$/i }));
 
     await waitFor(() => {
-      expect(push).toHaveBeenCalledWith("/assets/assets/asset-3");
+      expect(push).toHaveBeenCalledWith("/assets/assets");
     });
     },
     15000,

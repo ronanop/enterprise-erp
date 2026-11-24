@@ -106,7 +106,7 @@ class HRReportService:
         self._separation = SeparationRepository(db)
 
     def summary(self, ctx: TenantContext, company_id: UUID | None = None) -> dict:
-        cid = self._scope.resolve_list_company_id(ctx, company_id)
+        cid = self._scope.resolve_company_id(ctx, company_id)
         attendance = self._attendance.list_rows(ctx, cid)
         leaves = self._leave.list_rows(ctx, cid)
         separations = self._separation.list_rows(ctx, cid)

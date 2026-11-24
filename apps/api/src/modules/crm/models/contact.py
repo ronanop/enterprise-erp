@@ -9,7 +9,7 @@ the same convention used on ``crm_lead`` / ``crm_opportunity``.
 from uuid import UUID, uuid4
 
 from sqlalchemy import Boolean, ForeignKey, String
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.base import Base
@@ -36,3 +36,4 @@ class CrmContact(Base, *CrmTransactionMixin):
     is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     owner_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="active")
+    custom_fields: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)

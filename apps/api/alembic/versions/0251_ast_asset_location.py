@@ -1,8 +1,8 @@
 """Create AstAssetLocation table.
 
-Creates the pre-0505 shape (no location_id / building_id). Those columns and
-FKs are added in 0505_ast_location_master after ast_location / ast_building exist.
-Do not create from the live ORM model — it includes the later FKs.
+Historical shape only — location_id / building_id are added later by
+0505_ast_location_master / 0576_ast_location_master. Do not create from the
+current ORM model (it already includes those FKs).
 """
 
 from collections.abc import Sequence
@@ -45,37 +45,56 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["tenant_id"], ["foundation.sec_tenant.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         schema="asset",
-        if_not_exists=True,
     )
     op.create_index(
-        "ix_ast_asset_location_asset_id",
+        op.f("ix_asset_ast_asset_location_asset_id"),
         "ast_asset_location",
         ["asset_id"],
+        unique=False,
         schema="asset",
-        if_not_exists=True,
     )
     op.create_index(
-        "ix_ast_asset_location_branch_id",
+        op.f("ix_asset_ast_asset_location_branch_id"),
         "ast_asset_location",
         ["branch_id"],
+        unique=False,
         schema="asset",
-        if_not_exists=True,
     )
     op.create_index(
-        "ix_ast_asset_location_is_current",
+        op.f("ix_asset_ast_asset_location_company_id"),
+        "ast_asset_location",
+        ["company_id"],
+        unique=False,
+        schema="asset",
+    )
+    op.create_index(
+        op.f("ix_asset_ast_asset_location_is_current"),
         "ast_asset_location",
         ["is_current"],
+        unique=False,
         schema="asset",
-        if_not_exists=True,
     )
     op.create_index(
-        "ix_ast_asset_location_status",
+        op.f("ix_asset_ast_asset_location_status"),
         "ast_asset_location",
         ["status"],
+        unique=False,
         schema="asset",
-        if_not_exists=True,
+    )
+    op.create_index(
+        op.f("ix_asset_ast_asset_location_tenant_id"),
+        "ast_asset_location",
+        ["tenant_id"],
+        unique=False,
+        schema="asset",
     )
 
 
 def downgrade() -> None:
-    op.drop_table("ast_asset_location", schema="asset", if_exists=True)
+    op.drop_index(op.f("ix_asset_ast_asset_location_tenant_id"), table_name="ast_asset_location", schema="asset")
+    op.drop_index(op.f("ix_asset_ast_asset_location_status"), table_name="ast_asset_location", schema="asset")
+    op.drop_index(op.f("ix_asset_ast_asset_location_is_current"), table_name="ast_asset_location", schema="asset")
+    op.drop_index(op.f("ix_asset_ast_asset_location_company_id"), table_name="ast_asset_location", schema="asset")
+    op.drop_index(op.f("ix_asset_ast_asset_location_branch_id"), table_name="ast_asset_location", schema="asset")
+    op.drop_index(op.f("ix_asset_ast_asset_location_asset_id"), table_name="ast_asset_location", schema="asset")
+    op.drop_table("ast_asset_location", schema="asset")

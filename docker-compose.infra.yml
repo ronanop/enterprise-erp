@@ -1,4 +1,4 @@
-# Shared backend infra for this VM (172.16.200.30).
+# Shared backend infra for this VM (172.16.200.26).
 # Usage: docker compose -f docker-compose.infra.yml up -d
 # Shares network `erp-net` with docker-compose.app.yml
 # DNS: postgres / redis / rabbitmq / opensearch / minio

@@ -39,6 +39,8 @@ import {
 export type AssignmentWizardContainerService = {
   createDraft: (body: AssignmentDraft) => Promise<AssignmentResponse>;
   loadDraft: (id: string) => Promise<AssignmentResponse>;
+  /** Load assignment in any status (used after submit/activate). */
+  loadAssignment?: (id: string) => Promise<AssignmentResponse>;
   updateDraft: (id: string, body: AssignmentDraft) => Promise<AssignmentResponse>;
   submitDraft: (id: string) => Promise<AssignmentResponse>;
   activateAssignment: (id: string, comments?: string) => Promise<AssignmentResponse>;
@@ -60,7 +62,16 @@ export type AssignmentWizardContainerProps = {
   initialState?: Partial<AssignmentWizardState>;
   onCancel?: () => void;
   /** Called after successful submit (+ best-effort activate). */
-  onSuccess?: (assignmentId: string) => void;
+  onSuccess?: (
+    assignmentId: string,
+    context?: {
+      assetId?: string;
+      dcChallanMode?: AssignmentWizardState["dcChallanMode"];
+      dcChallanId?: string;
+    },
+  ) => void;
+  /** Create DC now from Delivery step — open DC Challan workspace. */
+  onCreateDcNow?: (state: AssignmentWizardState) => void;
   /** Defaults to assignmentFrontendService. */
   service?: AssignmentWizardContainerService;
   /** Override employee lookup (tests). */
@@ -71,6 +82,7 @@ function bindDefaultService(): AssignmentWizardContainerService {
   return {
     createDraft: assignmentFrontendService.createDraft.bind(assignmentFrontendService),
     loadDraft: assignmentFrontendService.loadDraft.bind(assignmentFrontendService),
+    loadAssignment: assignmentFrontendService.loadAssignment.bind(assignmentFrontendService),
     updateDraft: assignmentFrontendService.updateDraft.bind(assignmentFrontendService),
     submitDraft: assignmentFrontendService.submitDraft.bind(assignmentFrontendService),
     activateAssignment: assignmentFrontendService.activateAssignment.bind(assignmentFrontendService),
@@ -87,6 +99,7 @@ export function AssignmentWizardContainer({
   initialState,
   onCancel,
   onSuccess,
+  onCreateDcNow,
   service: serviceProp,
   listEmployees = listEmployeeOptions,
 }: AssignmentWizardContainerProps) {
@@ -95,6 +108,8 @@ export function AssignmentWizardContainer({
   initialStateRef.current = initialState;
   const onSuccessRef = useRef(onSuccess);
   onSuccessRef.current = onSuccess;
+  const onCreateDcNowRef = useRef(onCreateDcNow);
+  onCreateDcNowRef.current = onCreateDcNow;
 
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -108,7 +123,6 @@ export function AssignmentWizardContainer({
   const [employees, setEmployees] = useState<WizardSelectOption[]>([]);
   const [assets, setAssets] = useState<WizardAssetOption[]>([]);
   const [issuedItems, setIssuedItems] = useState<WizardIssuedItemOption[]>([]);
-  const [branchLabel, setBranchLabel] = useState("—");
   const [unavailableAssetMessage, setUnavailableAssetMessage] = useState<string | null>(null);
   const [unlinkedDcChallans, setUnlinkedDcChallans] = useState<
     Array<{ id: string; dcNumber: string; employeeName?: string | null }>
@@ -149,8 +163,6 @@ export function AssignmentWizardContainer({
           issuedIds,
           components,
         );
-        const match = readyAssets.find((a) => a.id === row.asset_id);
-        setBranchLabel(match?.branchLabel ?? (row.branch_id.slice(0, 8) || "—"));
       } else if (next.assetId) {
         const match = readyAssets.find((a) => a.id === next.assetId);
         if (match) {
@@ -159,12 +171,11 @@ export function AssignmentWizardContainer({
           if (next.issuedItemIds.length === 0) {
             next.issuedItemIds = components.filter((i) => !i.disabled).map((i) => i.id);
           }
-          setBranchLabel(match.branchLabel);
           setUnavailableAssetMessage(null);
         } else {
           // Deep-link to an asset that is no longer READY_TO_MOVE.
           setUnavailableAssetMessage(
-            "This asset is no longer available for assignment. Choose another Ready to Move asset.",
+            "This asset is no longer available for assignment. Choose another In Stock asset.",
           );
           next.assetId = "";
           next.branchId = "";
@@ -203,7 +214,6 @@ export function AssignmentWizardContainer({
           // Pre-select available accessories (including CHARGER) so they follow the asset.
           const availableIds = list.filter((i) => !i.disabled).map((i) => i.id);
           if (match) {
-            setBranchLabel(match.branchLabel);
             setWizardState((prev) => ({
               ...prev,
               assetId,
@@ -266,16 +276,34 @@ export function AssignmentWizardContainer({
   }, [wizardState.assetId, wizardState.allocationType]);
 
   const persistDraft = useCallback(
-    async (state: AssignmentWizardState): Promise<AssignmentResponse> => {
-      const body = (
-        state.draftId
-          ? wizardStateToUpdateBody(state, issuedItems)
-          : wizardStateToCreateBody(state, issuedItems)
-      ) as AssignmentDraft;
+    async (
+      state: AssignmentWizardState,
+    ): Promise<{ row: AssignmentResponse; dcChallanId: string }> => {
+      const createBody = wizardStateToCreateBody(state, issuedItems) as AssignmentDraft;
+      let row: AssignmentResponse;
 
-      const row = state.draftId
-        ? await service.updateDraft(state.draftId, body)
-        : await service.createDraft(body);
+      if (state.draftId) {
+        try {
+          row = await service.updateDraft(
+            state.draftId,
+            wizardStateToUpdateBody(state, issuedItems) as AssignmentDraft,
+          );
+        } catch (err) {
+          const message = service.formatError(err, "");
+          // Stale/cancelled draft id left in wizard state — start a fresh draft.
+          if (/not found/i.test(message)) {
+            row = await service.createDraft(createBody);
+          } else {
+            throw err;
+          }
+        }
+      } else {
+        row = await service.createDraft(createBody);
+      }
+
+      if (!row?.id) {
+        throw new Error("Assignment draft was saved without an id. Reload and try again.");
+      }
 
       let dcChallanId = state.dcChallanId;
       if (state.allocationType === "employee") {
@@ -304,7 +332,7 @@ export function AssignmentWizardContainer({
         branchId: state.branchId || row.branch_id,
         dcChallanId,
       });
-      return row;
+      return { row, dcChallanId };
     },
     [issuedItems, service],
   );
@@ -329,14 +357,45 @@ export function AssignmentWizardContainer({
       setSaving(true);
       setActionError(null);
       try {
-        const row = await persistDraft(state);
-        await service.submitDraft(row.id);
-        try {
-          await service.activateAssignment(row.id);
-        } catch {
-          /* Multi-step workflow may leave status=submitted — still success for caller. */
+        const { row, dcChallanId } = await persistDraft(state);
+        const successContext = {
+          assetId: state.assetId || row.asset_id,
+          dcChallanMode: state.dcChallanMode,
+          dcChallanId: dcChallanId || undefined,
+        };
+        let latest = await service.submitDraft(row.id);
+        // Governance-off submit activates in one step. Governance-on may stay submitted
+        // until another user approves — only then treat activate failure as soft success.
+        if (latest.status !== "active") {
+          try {
+            latest = await service.activateAssignment(row.id);
+          } catch (activateErr) {
+            // Prefer current assignment status over loadDraft (post-submit is not a draft).
+            try {
+              latest = service.loadAssignment
+                ? await service.loadAssignment(row.id)
+                : await service.loadDraft(row.id);
+            } catch {
+              latest = row;
+            }
+            if (
+              latest.status === "active" ||
+              latest.status === "submitted" ||
+              latest.status === "approved"
+            ) {
+              onSuccessRef.current?.(row.id, successContext);
+              return;
+            }
+            setActionError(
+              service.formatError(
+                activateErr,
+                "Assignment was submitted but not activated. Cancel or complete it before issuing again.",
+              ),
+            );
+            return;
+          }
         }
-        onSuccessRef.current?.(row.id);
+        onSuccessRef.current?.(row.id, successContext);
       } catch (err) {
         setActionError(service.formatError(err, "Failed to submit assignment."));
       } finally {
@@ -372,7 +431,6 @@ export function AssignmentWizardContainer({
         key={hydrationKey}
         loading={loading}
         saving={saving}
-        branchLabel={branchLabel}
         initialState={wizardState}
         employees={employees}
         assets={assets}
@@ -389,6 +447,7 @@ export function AssignmentWizardContainer({
         onSaveDraft={(state) => void handleSaveDraft(state)}
         onFinish={(state) => void handleSubmitAndActivate(state)}
         onAssetChange={handleAssetChange}
+        onCreateDcNow={(state) => onCreateDcNowRef.current?.(state)}
         unlinkedDcChallans={unlinkedDcChallans}
       />
     </div>

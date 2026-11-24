@@ -7,6 +7,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
 import { downloadPdf, openPdfInNewTab } from "@/lib/crm/open-pdf-preview";
+import { stripEmployeeCodeSuffix } from "@/lib/crm/session-employee";
 import type { Quote, QuoteLine } from "@/services/sales-crm-service";
 
 export type QuoteExportSeller = {
@@ -52,7 +53,8 @@ const CONTENT_RIGHT = PAGE_W - MARGIN_R;
 const CACHE_LOGO = { path: "/quote-export/cache-logo.png", w: 47.076, h: 17.687 };
 const WOMEN_LOGO = { path: "/quote-export/women-owned.jpeg", w: 38.034, h: 16.095 };
 
-const COLS = [13.811, 19.509, 22.49, 69.356, 11.924, 27.64, 28.716];
+/** S.No | Product | HSN/SAC | Type | Description | Qty | Unit Price | Total */
+const COLS = [11.5, 22, 18, 20, 46.5, 11.5, 26, 28];
 const TABLE_X = MARGIN_L + 5.98;
 
 const TEXT: [number, number, number] = [0x10, 0x10, 0x10];
@@ -103,6 +105,12 @@ function formatTableTotal(value: number | string | null | undefined): string {
 
 function formatMoneyLabel(value: number | string | null | undefined): string {
   return `Rs. ${formatMoney(value, 2)}`;
+}
+
+function formatLineType(value: string | null | undefined): string {
+  const raw = (value || "hardware").trim().toLowerCase();
+  if (!raw) return "Hardware";
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
 function formatDisplayDate(value: string | null | undefined): string {
@@ -220,17 +228,34 @@ export async function loadSellerLetterhead(
 }
 
 export function buildQuoteExportFilename(quote: Quote, subject?: string | null): string {
-  const base = (subject || quote.subject || quote.quote_no || "Quote")
+  const code = (quote.quote_no || "Quote")
+    .replace(/[\\/]+/g, "_")
+    .replace(/[:*?"<>|]+/g, "-")
+    .trim()
+    .replace(/\s+/g, "_");
+  const rev = Math.max(1, Number(quote.quote_revision) || 1);
+  const versionSuffix = `_V${rev}`;
+  const titleSource = (quote.project_title || quote.subject || subject || "").trim();
+  const title = titleSource
     .replace(/[\\/:*?"<>|]+/g, " ")
     .trim()
-    .replace(/\s+/g, " ");
-  return `QT_${base || quote.quote_no}.pdf`;
+    .replace(/\s+/g, " ")
+    .slice(0, 60);
+  const genericTitle =
+    !title ||
+    /^test\d*$/i.test(title) ||
+    title.toLowerCase() === code.toLowerCase().replaceAll("_", "/");
+  if (!genericTitle) {
+    const safeTitle = title.replace(/\s+/g, "_");
+    return `Quotation_${code}_${safeTitle}${versionSuffix}.pdf`;
+  }
+  return `Quotation_${code || "Quote"}${versionSuffix}.pdf`;
 }
 
 export async function exportQuotePdf(
   input: QuoteExportInput,
-  options?: { download?: boolean },
-): Promise<void> {
+  options?: { download?: boolean; asBase64?: boolean },
+): Promise<{ filename: string; base64?: string } | void> {
   const [cacheLogo, womenLogo] = await Promise.all([
     loadImageDataUrl(CACHE_LOGO.path),
     loadImageDataUrl(WOMEN_LOGO.path),
@@ -240,7 +265,9 @@ export async function exportQuotePdf(
   const { quote, lines } = input;
   const seller = input.seller?.companyName ? input.seller : CACHE_LETTERHEAD;
   const subject = (input.subject || quote.subject || "Quotation").trim();
-  const ownerName = (input.ownerName || quote.owner_name || "-").trim();
+  const ownerName = stripEmployeeCodeSuffix(
+    (input.ownerName || quote.owner_name || "-").trim(),
+  ) || "-";
   const customerName = (input.customerName || quote.entity_name || quote.account_name || "-")
     .trim()
     .toUpperCase();
@@ -276,7 +303,7 @@ export async function exportQuotePdf(
   let rightY = logoY + CACHE_LOGO.h + 4.5;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
-  doc.text(pdfSafe(`Validity Date: ${validity}`), metaX, rightY, { align: "right" });
+  doc.text(pdfSafe(`Price Validity Date: ${validity}`), metaX, rightY, { align: "right" });
   rightY += lineH;
   doc.text(pdfSafe(`Ref.: ${ref}`), metaX, rightY, { align: "right" });
   rightY += lineH;
@@ -305,7 +332,7 @@ export async function exportQuotePdf(
   y += bodyLineH + 1.5;
   y = writeLines(doc, cover, BODY_X, y, CONTENT_RIGHT - BODY_X - 6, 5.4) + 7;
 
-  // ── Line table ──────────────────────────────────────────────────────────
+  // ── Single line table with Type column (matches quote detail) ───────────
   const sorted = [...lines].sort((a, b) => (a.line_no ?? 0) - (b.line_no ?? 0));
   const tableWidth = COLS.reduce((a, b) => a + b, 0);
 
@@ -313,13 +340,12 @@ export async function exportQuotePdf(
     startY: y,
     margin: { left: TABLE_X, right: PAGE_W - TABLE_X - tableWidth },
     tableWidth,
-    head: [
-      ["S.No", "Product Name", "HSN/SAC\nCode", "Item Description", "Qty", "Unit Price", "Total"],
-    ],
+    head: [["S.No", "Product Name", "HSN/SAC\nCode", "Type", "Item Description", "Qty", "Unit Price", "Total"]],
     body: sorted.map((line, idx) => [
       String(line.line_no || idx + 1),
       pdfSafe(line.product_name || ""),
       pdfSafe(line.hsn_sac || ""),
+      pdfSafe(formatLineType(line.line_type)),
       pdfSafe(line.description || ""),
       formatQty(line.qty),
       formatMoney(line.unit_sell, 2),
@@ -350,15 +376,11 @@ export async function exportQuotePdf(
       0: { cellWidth: COLS[0], halign: "center", fontSize: 9 },
       1: { cellWidth: COLS[1] },
       2: { cellWidth: COLS[2] },
-      3: { cellWidth: COLS[3] },
-      4: { cellWidth: COLS[4], halign: "right", overflow: "ellipsize" },
-      5: { cellWidth: COLS[5], halign: "right" },
+      3: { cellWidth: COLS[3], halign: "center" },
+      4: { cellWidth: COLS[4] },
+      5: { cellWidth: COLS[5], halign: "right", overflow: "ellipsize" },
       6: { cellWidth: COLS[6], halign: "right" },
-    },
-    didParseCell: (data) => {
-      if (data.section === "head" && data.column.index === 0) {
-        data.cell.styles.fontSize = 9;
-      }
+      7: { cellWidth: COLS[7], halign: "right" },
     },
     didDrawPage: () => {
       drawFooter(doc);
@@ -416,14 +438,31 @@ export async function exportQuotePdf(
 
   drawFooter(doc);
   const filename = buildQuoteExportFilename(quote, subject);
+  if (options?.asBase64) {
+    const dataUri = doc.output("datauristring") as string;
+    const base64 = dataUri.includes(",") ? dataUri.split(",")[1] : dataUri;
+    return { filename, base64 };
+  }
   if (options?.download) {
     downloadPdf(doc, filename);
-  } else {
-    openPdfInNewTab(doc, filename);
+    return { filename };
   }
+  openPdfInNewTab(doc, filename);
+  return { filename };
 }
 
 /** Download quote PDF. */
 export async function downloadQuotePdf(input: QuoteExportInput): Promise<void> {
   await exportQuotePdf(input, { download: true });
+}
+
+/** Build quote print PDF as base64 for email / API upload. */
+export async function buildQuotePdfBase64(
+  input: QuoteExportInput,
+): Promise<{ filename: string; base64: string }> {
+  const result = await exportQuotePdf(input, { asBase64: true });
+  if (!result?.base64) {
+    throw new Error("Failed to generate quotation PDF");
+  }
+  return { filename: result.filename, base64: result.base64 };
 }

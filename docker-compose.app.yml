@@ -3,9 +3,8 @@
 # (Postgres, Redis, RabbitMQ, OpenSearch, MinIO on erp-net).
 # Object storage: MinIO via S3_ENDPOINT_URL (AWS S3 disabled).
 # Shares Docker network `erp-net` with infra (REDIS_URL=redis://redis:6379/0, etc.).
-# Does NOT bind 80/443/5432/6379/5672/9200/9000.
-# Host ports: Nginx TLS :8443 (web+api via reverse proxy)  |  Employee :3001
-# Web/API are internal on erp-net only — do not publish :3000 / :8010.
+# Does NOT bind 5432/6379/5672/9200/9000 (infra compose owns those).
+# Host ports: Nginx HTTP :80 + TLS :443 | Web :3000 | API :8000 | Employee :3001
 
 networks:
   erp-net:
@@ -34,7 +33,7 @@ services:
       RUN_MIGRATIONS: "true"
       CORS_ORIGINS: ${CORS_ORIGINS}
       CORS_ORIGIN_REGEX: ${CORS_ORIGIN_REGEX:-}
-      FRONTEND_URL: ${FRONTEND_URL:-https://172.16.200.30:8443}
+      FRONTEND_URL: ${FRONTEND_URL:-https://erp.iconnectplus.in}
       MICROSOFT_REDIRECT_URI: ${MICROSOFT_REDIRECT_URI:-}
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
       REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
@@ -52,6 +51,8 @@ services:
       ACCESS_GATE_TOKEN_HOURS: ${ACCESS_GATE_TOKEN_HOURS:-12}
     expose:
       - "8000"
+    ports:
+      - "8000:8000"
     volumes:
       - erp_crm_uploads:/app/var/crm-attachments
       - erp_asset_storage:/app/var/asset-storage
@@ -112,7 +113,7 @@ services:
       context: ./apps/web
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://172.16.200.30:8443/api/v1}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://erp.iconnectplus.in/api/v1}
         NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-iConnect Plus}
         NEXT_PUBLIC_DEMO_EMAIL: ${NEXT_PUBLIC_DEMO_EMAIL:-admin@example.com}
         NEXT_PUBLIC_DEMO_PASSWORD: ${NEXT_PUBLIC_DEMO_PASSWORD:-Secure1!}
@@ -121,12 +122,24 @@ services:
     image: enterprise-erp-web:local
     container_name: erp-web
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       PORT: "3000"
       HOSTNAME: 0.0.0.0
       API_INTERNAL_URL: http://api:8000
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_ADDRESS: ${SMTP_FROM_ADDRESS:-}
+      BREVO_EMAIL: ${BREVO_EMAIL:-}
+      BREVO_SMTP_KEY: ${BREVO_SMTP_KEY:-}
     expose:
       - "3000"
+    ports:
+      - "3000:3000"
     depends_on:
       api:
         condition: service_healthy
@@ -161,6 +174,9 @@ services:
     container_name: erp-nginx
     restart: unless-stopped
     ports:
+      - "80:80"
+      - "443:443"
+      # Bookmarks / .env FRONTEND_URL use :8443 (TLS still terminates on 443 in-container).
       - "8443:443"
     volumes:
       - ./docker/nginx/coexist.conf:/etc/nginx/conf.d/default.conf:ro

@@ -1,4 +1,69 @@
-import type { VendorOption } from "@/services/procurement-service";
+import type {
+  VendorAddressEntry,
+  VendorOption,
+} from "@/services/procurement-service";
+
+/** Unique supply states from a vendor's address book. */
+export function vendorSupplyStates(
+  vendor: VendorOption | null | undefined,
+): string[] {
+  if (!vendor?.addressEntries?.length) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of vendor.addressEntries) {
+    const state = (
+      entry.sourceOfSupply ||
+      entry.billing?.state ||
+      entry.shipping?.state ||
+      ""
+    ).trim();
+    if (!state) continue;
+    const key = state.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(state);
+  }
+  return out.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+}
+
+/** Address entry matching a supply/billing state (falls back to first entry). */
+export function findVendorAddressEntryByState(
+  vendor: VendorOption | null | undefined,
+  state: string | null | undefined,
+): { entry: VendorAddressEntry; index: number } | null {
+  if (!vendor?.addressEntries?.length) return null;
+  const needle = (state || "").trim().toLowerCase();
+  if (!needle) {
+    return { entry: vendor.addressEntries[0], index: 0 };
+  }
+  const index = vendor.addressEntries.findIndex((entry) => {
+    const candidates = [
+      entry.sourceOfSupply,
+      entry.billing?.state,
+      entry.shipping?.state,
+    ].map((value) => (value || "").trim().toLowerCase());
+    return candidates.includes(needle);
+  });
+  if (index < 0) return null;
+  return { entry: vendor.addressEntries[index], index };
+}
+
+/** Display address for a vendor + selected state. */
+export function vendorAddressForState(
+  vendor: VendorOption | null | undefined,
+  state: string | null | undefined,
+): string {
+  const matched = findVendorAddressEntryByState(vendor, state);
+  if (!matched) return (vendor?.address || "").trim();
+  const billing = matched.entry.billing;
+  if (billing && (billing.street || billing.city || billing.pincode)) {
+    return [billing.street, billing.city, billing.state, billing.pincode, billing.country]
+      .map((part) => (part || "").trim())
+      .filter(Boolean)
+      .join(", ");
+  }
+  return (matched.entry.address || vendor?.address || "").trim();
+}
 
 /** Split CRM multi-select party names (comma / semicolon). */
 export function splitPartyNames(raw: string | null | undefined): string[] {

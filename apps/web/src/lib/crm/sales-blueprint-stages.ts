@@ -14,10 +14,15 @@ export type SalesStageContext = {
   ovfs?: Ovf[];
 };
 
-function resolveQuoteStageLabel(quoteStage: string, locked?: boolean): string {
+function resolveQuoteStageLabel(
+  quoteStage: string,
+  locked?: boolean,
+  quoteRevision?: number | null,
+): string {
+  const rev = Math.max(1, Number(quoteRevision) || 1);
   switch (quoteStage) {
     case "draft":
-      return "Quote Created";
+      return rev > 1 ? `V${rev} Draft` : "Quote Created";
     case "internal_approval":
       return locked ? "Quote Sent for Approval" : "Quote Sent for Approval";
     case "approved_internal":
@@ -25,9 +30,9 @@ function resolveQuoteStageLabel(quoteStage: string, locked?: boolean): string {
     case "sent_to_customer":
     case "negotiation":
     case "follow_up":
-      return "Quote Sent";
+      return `Quote Sent V${rev}`;
     case "accepted":
-      return "Quote Accepted";
+      return rev > 1 ? `Deal Won · V${rev}` : "Deal Won";
     case "lost":
       return "Deal Lost";
     default:
@@ -39,7 +44,7 @@ function resolveOvfStageLabel(blueprintState: string, ovf: Ovf): string {
   if (ovf.deal_won || blueprintState === "deal_won") return "Deal Won";
   switch (blueprintState) {
     case "draft":
-      return "OVF Created · Draft";
+      return "OVF Created";
     case "approval":
       return ovf.locked ? "OVF Sent for Approval" : "OVF Sent for Approval";
     case "approved":
@@ -100,11 +105,11 @@ function resolveOpportunityBlueprintState(
     case "deal_reg":
       return resolveOpportunityDealReg(opp);
     case "oem_pending":
-      return "Awaiting Vendor Quotation";
+      return "Attach Vendor Quotation";
     case "oem_attached":
-      return "Vendor Quotation Received";
+      return "Attach Vendor Quotation";
     case "quote_ready":
-      return "Vendor Quote Attached";
+      return "Vendor Quotation Attached";
     case "quote_in_progress":
       return "Quote Created";
     case "po_pending":
@@ -143,14 +148,14 @@ function resolveUnifiedOpportunityStage(ctx: SalesStageContext): string {
     ctx.quotes?.[0];
 
   if (quote) {
-    const quoteLabel = resolveQuoteStageLabel(quote.quote_stage, quote.locked);
+    const quoteLabel = resolveQuoteStageLabel(quote.quote_stage, quote.locked, quote.quote_revision);
     const quotePastDraft = quote.quote_stage !== "draft";
     const oppInQuotePhase = ["quote_in_progress", "po_pending", "po_approval", "ovf_ready"].includes(
       state,
     );
     if (quotePastDraft || oppInQuotePhase || state === "quote_in_progress") {
       if (quote.quote_stage === "draft" && state === "quote_in_progress") {
-        return "Quote Created";
+        return quoteLabel;
       }
       if (quote.quote_stage !== "draft") {
         return quoteLabel;
@@ -171,7 +176,11 @@ export function resolveSalesStageLabel(ctx: SalesStageContext): string {
       return ctx.lead?.created_at ? "Lead Open" : "Lead Open";
     }
     case "quote":
-      return resolveQuoteStageLabel(state, ctx.locked ?? ctx.quote?.locked);
+      return resolveQuoteStageLabel(
+        state,
+        ctx.locked ?? ctx.quote?.locked,
+        ctx.quote?.quote_revision,
+      );
     case "ovf":
       if (ctx.ovf) return resolveOvfStageLabel(state, ctx.ovf);
       return resolveOvfStageLabel(state, {
@@ -186,5 +195,64 @@ export function resolveSalesStageLabel(ctx: SalesStageContext): string {
       return resolveUnifiedOpportunityStage(ctx);
     default:
       return state.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "-";
+  }
+}
+
+/**
+ * Stage color bands for status identification:
+ * - pre_po (orange): Lead → … → Deal Won (inclusive)
+ * - post_po (green): Customer PO / OVF path onward
+ * - lost (red): Deal Lost
+ */
+export type SalesStageTone = "pre_po" | "post_po" | "lost" | "neutral";
+
+const POST_PO_LABEL_RE =
+  /customer\s*po|ovf\b|shared\s*to\s*scm|po\s*received|po\s*attached|po\s*approved|po\s*sent/i;
+
+const POST_PO_STATE_RE =
+  /^(po_pending|po_approval|ovf_ready|ovf_|shared_scm|customer_po)/i;
+
+/** Classify a human stage label (Current State / timeline / reports). */
+export function salesStageToneFromLabel(label: string | null | undefined): SalesStageTone {
+  const text = (label || "").trim();
+  if (!text || text === "-") return "neutral";
+  const lower = text.toLowerCase();
+  if (/\blost\b/.test(lower)) return "lost";
+  // Deal Won stays orange even if it appears again later in the path.
+  if (/^deal\s*won\b/.test(lower) || lower.includes("deal won ·")) return "pre_po";
+  if (POST_PO_LABEL_RE.test(lower)) return "post_po";
+  return "pre_po";
+}
+
+/** Classify a raw blueprint / quote / opportunity stage key. */
+export function salesStageToneFromState(
+  state: string | null | undefined,
+  entityType?: BlueprintEntity | "opportunity" | "quote" | "ovf" | "lead" | string,
+): SalesStageTone {
+  const raw = (state || "").trim().toLowerCase();
+  if (!raw) return "neutral";
+  if (raw === "lost") return "lost";
+
+  if (entityType === "ovf") {
+    if (raw === "deal_won") return "post_po";
+    return "post_po";
+  }
+
+  if (raw === "won" || raw === "accepted" || raw === "deal_won") return "pre_po";
+  if (POST_PO_STATE_RE.test(raw)) return "post_po";
+  if (entityType === "quote") return "pre_po";
+  return "pre_po";
+}
+
+export function salesStageBadgeClassName(tone: SalesStageTone): string {
+  switch (tone) {
+    case "post_po":
+      return "border-emerald-200 bg-emerald-100 text-emerald-800 hover:bg-emerald-100";
+    case "pre_po":
+      return "border-orange-200 bg-orange-100 text-orange-900 hover:bg-orange-100";
+    case "lost":
+      return "border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/10";
+    default:
+      return "border-border bg-muted text-muted-foreground hover:bg-muted";
   }
 }

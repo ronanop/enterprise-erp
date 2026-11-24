@@ -40,9 +40,6 @@ vi.mock("@/services/projects-portal-service", () => ({
 
 vi.mock("@/services/asset-site-location-service", () => ({
   listSiteLocations: vi.fn(async () => [{ id: "loc-1", name: "Noida", is_head_office: false, org_location_id: null, company_id: "c1", version: 1 }]),
-  listSiteBuildings: vi.fn(async () => [
-    { id: "bld-1", location_id: "loc-1", name: "CRC-2", company_id: "c1", version: 1 },
-  ]),
 }));
 
 const listMock = vi.fn();
@@ -230,10 +227,14 @@ beforeEach(() => {
   actionMock.mockResolvedValue({ data: { ...draftAssignment, status: "cancelled" } });
   listMock.mockImplementation(async (path: string) => {
     if (String(path).startsWith("/assets/asset-assignments")) {
+      const url = String(path);
+      const all = [directoryAssignment, manualAssignment, returnedAssignment, draftAssignment];
+      const status = new URLSearchParams(url.split("?")[1] ?? "").get("status");
+      const items = status ? all.filter((row) => row.status === status) : all;
       return {
         data: {
-          items: [directoryAssignment, manualAssignment, returnedAssignment, draftAssignment],
-          total: 4,
+          items,
+          total: items.length,
           page: 1,
           page_size: 25,
         },
@@ -262,12 +263,15 @@ describe("AssetAssignmentWorkspace register", () => {
     });
     expect(await screen.findByTestId("assignment-row-asg-1")).toBeInTheDocument();
     expect(screen.getByTestId("assignment-row-asg-2")).toBeInTheDocument();
+    expect(screen.queryByTestId("assignment-row-asg-3")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("assignment-row-asg-draft")).not.toBeInTheDocument();
     expect(
       within(screen.getByTestId("assignment-row-asg-1")).getByTestId("assignment-asset-cell"),
     ).toHaveTextContent("Macbook");
     expect(
       within(screen.getByTestId("assignment-row-asg-2")).getByTestId("assignment-asset-cell"),
     ).toHaveTextContent("Dell");
+    expect(listMock).toHaveBeenCalledWith(expect.stringContaining("status=active"));
   });
 
   it("STATUS column uses lifecycle only — never workflow composites", async () => {
@@ -292,11 +296,7 @@ describe("AssetAssignmentWorkspace register", () => {
     expect(activeStatus).not.toHaveTextContent("/");
     expect(activeStatus).not.toHaveTextContent("active / approved");
 
-    const returnedRow = screen.getByTestId("assignment-row-asg-3");
-    const returnedStatus = within(returnedRow).getByTestId("assignment-status-cell");
-    expect(returnedStatus).toHaveTextContent(/^Returned$/);
-    expect(returnedStatus).not.toHaveTextContent("approved");
-    expect(returnedStatus).not.toHaveTextContent("returned / approved");
+    expect(screen.queryByTestId("assignment-row-asg-3")).not.toBeInTheDocument();
 
     const tableText = table.textContent ?? "";
     expect(tableText).not.toMatch(/active\s*\/\s*approved/i);
@@ -319,29 +319,28 @@ describe("AssetAssignmentWorkspace register", () => {
     expect(screen.queryByTestId("assignment-asset-code-cell")).not.toBeInTheDocument();
   });
 
-  it("shows real employee name and manual name in Assignee — never generic Assigned", async () => {
+  it("shows real employee name in Assigned column and employee id separately", async () => {
     render(<AssetAssignmentWorkspace />);
+    const table = await screen.findByTestId("assignment-register-table");
+    expect(within(table).getByRole("columnheader", { name: /^Assigned$/i })).toBeInTheDocument();
+    expect(within(table).queryByRole("columnheader", { name: /^Assignee$/i })).not.toBeInTheDocument();
+    expect(within(table).queryByRole("columnheader", { name: /^Office$/i })).not.toBeInTheDocument();
+
     const dirRow = await screen.findByTestId("assignment-row-asg-1");
     expect(within(dirRow).getByTestId("assignment-assignee-cell")).toHaveTextContent(
       "Rohan Mehta",
     );
-    expect(within(dirRow).getByTestId("assignment-assignee-cell")).not.toHaveTextContent(
-      "Assigned",
+    expect(within(dirRow).getByTestId("assignment-employee-id-cell")).toHaveTextContent(
+      "EMP-002",
     );
 
     const manualRow = screen.getByTestId("assignment-row-asg-2");
     expect(within(manualRow).getByTestId("assignment-assignee-cell")).toHaveTextContent(
       "Shreya Saxena",
     );
-    expect(within(manualRow).getByTestId("assignment-assignee-cell")).not.toHaveTextContent(
-      /^Assigned$/,
-    );
-
-    const table = screen.getByTestId("assignment-register-table");
-    expect(within(table).queryByText(/^Assigned$/)).not.toBeInTheDocument();
   });
 
-  it("shows employee id, asset name/code under Asset, location, building, date, status, DC", async () => {
+  it("shows employee id, asset name/code under Asset, date, status, DC", async () => {
     render(<AssetAssignmentWorkspace />);
     const row = await screen.findByTestId("assignment-row-asg-1");
 
@@ -353,31 +352,30 @@ describe("AssetAssignmentWorkspace register", () => {
       "AST-2026-000002",
     );
     expect(within(row).queryByTestId("assignment-department-cell")).not.toBeInTheDocument();
-    expect(within(row).getByTestId("assignment-location-cell")).toHaveTextContent(
-      "Noida Campus",
-    );
-    expect(within(row).getByTestId("assignment-building-cell")).toHaveTextContent("CRC-2");
+    expect(within(row).queryByTestId("assignment-location-cell")).not.toBeInTheDocument();
+    expect(within(row).queryByTestId("assignment-building-cell")).not.toBeInTheDocument();
     expect(within(row).getByTestId("assignment-date-cell")).toHaveTextContent("2026-03-10");
     expect(within(row).getByTestId("assignment-status-cell")).toHaveTextContent("Active");
     expect(within(row).getByTestId("assignment-status-cell")).not.toHaveTextContent("/");
     expect(within(row).getByTestId("assignment-status-cell")).not.toHaveTextContent(
       "approved",
     );
-    expect(within(row).getByTestId("assignment-dc-status")).toHaveTextContent("Not Created");
+    expect(within(row).queryByTestId("assignment-dc-status")).not.toBeInTheDocument();
+    expect(within(row).getByTestId("assignment-dc-create")).toBeInTheDocument();
 
     const manualRow = screen.getByTestId("assignment-row-asg-2");
-    expect(within(manualRow).getByTestId("assignment-dc-status")).toHaveTextContent(
-      "Pending · Not Signed",
-    );
+    expect(within(manualRow).queryByTestId("assignment-dc-status")).not.toBeInTheDocument();
+    expect(within(manualRow).getByTestId("assignment-dc-created")).toHaveTextContent("Created");
   });
 
-  it("shows Not Created with enabled Create DC action when no DC record exists", async () => {
+  it("shows Create DC action when no DC record exists", async () => {
     const user = userEvent.setup();
     render(<AssetAssignmentWorkspace />);
     const row = await screen.findByTestId("assignment-row-asg-1");
-    expect(within(row).getByTestId("assignment-dc-status")).toHaveTextContent("Not Created");
+    expect(within(row).queryByTestId("assignment-dc-status")).not.toBeInTheDocument();
     const createBtn = within(row).getByTestId("assignment-dc-create");
     expect(createBtn).toBeEnabled();
+    expect(createBtn).toHaveTextContent("Create");
     await user.click(createBtn);
     expect(push).toHaveBeenCalledWith(
       expect.stringContaining("/assets/asset-dc-challans?"),
@@ -387,17 +385,15 @@ describe("AssetAssignmentWorkspace register", () => {
     expect(push.mock.calls.some((c) => String(c[0]).includes("challanId="))).toBe(false);
   });
 
-  it("shows existing DC status and Edit/View inside DC Challan column only", async () => {
+  it("shows Created button for existing DC challan", async () => {
     const user = userEvent.setup();
     render(<AssetAssignmentWorkspace />);
     const row = await screen.findByTestId("assignment-row-asg-2");
-    expect(within(row).getByTestId("assignment-dc-status")).toHaveTextContent(
-      "Pending · Not Signed",
-    );
+    expect(within(row).queryByTestId("assignment-dc-status")).not.toBeInTheDocument();
     expect(within(row).queryByTestId("assignment-dc-create")).not.toBeInTheDocument();
-    const openBtn = within(row).getByTestId("assignment-dc-open");
-    expect(openBtn).toHaveTextContent("Edit");
-    await user.click(openBtn);
+    const createdBtn = within(row).getByTestId("assignment-dc-created");
+    expect(createdBtn).toHaveTextContent("Created");
+    await user.click(createdBtn);
     expect(push).toHaveBeenCalledWith(expect.stringContaining("challanId=dc-existing"));
     expect(push).toHaveBeenCalledWith(expect.stringContaining("assignmentId=asg-2"));
   });
@@ -415,11 +411,11 @@ describe("AssetAssignmentWorkspace register", () => {
     expect(within(row).getByTestId("assignment-dc-create")).toBeInTheDocument();
   });
 
-  it("opens assignment details with Edit and Delete; delete confirms via cancel action", async () => {
+  it("opens assignment details for an active row", async () => {
     const user = userEvent.setup();
     render(<AssetAssignmentWorkspace />);
-    const draftRow = await screen.findByTestId("assignment-row-asg-draft");
-    await user.click(draftRow);
+    const row = await screen.findByTestId("assignment-row-asg-1");
+    await user.click(row);
 
     const panel = await screen.findByTestId("assignment-detail-panel");
     expect(panel).toBeInTheDocument();
@@ -427,72 +423,17 @@ describe("AssetAssignmentWorkspace register", () => {
     expect(within(panel).getByTestId("assignment-detail-assignee")).toHaveTextContent(
       "Rohan Mehta",
     );
-    expect(screen.getByTestId("assignment-detail-edit")).toBeInTheDocument();
-    expect(screen.getByTestId("assignment-detail-delete")).toBeInTheDocument();
-
-    await user.click(screen.getByTestId("assignment-detail-edit"));
-    expect(push).toHaveBeenCalledWith(
-      expect.stringContaining("/assets/asset-assignments/new?"),
+    expect(within(panel).getByTestId("assignment-detail-employee-id")).toHaveTextContent(
+      "EMP-002",
     );
-    expect(push).toHaveBeenCalledWith(expect.stringContaining("draftId=asg-draft"));
-
-    await user.click(draftRow);
-    await screen.findByTestId("assignment-detail-panel");
-    await user.click(screen.getByTestId("assignment-detail-delete"));
-
-    const confirm = await screen.findByTestId("delete-assignment-confirm-dialog");
-    expect(within(confirm).getByTestId("delete-assignment-confirm-message")).toHaveTextContent(
-      "Are you sure you want to delete this assignment?",
-    );
-    expect(within(confirm).getByTestId("delete-assignment-cancel")).toBeInTheDocument();
-
-    await user.click(within(confirm).getByTestId("delete-assignment-confirm"));
-    await waitFor(() => {
-      expect(actionMock).toHaveBeenCalledWith(
-        "/assets/asset-assignments",
-        "asg-draft",
-        "cancel",
-      );
-    });
-    expect(deleteMock).not.toHaveBeenCalled();
-    expect(
-      deleteMock.mock.calls.some((c) => String(c[0]).includes("/assets/assets")),
-    ).toBe(false);
+    expect(within(panel).queryByTestId("assignment-detail-building")).not.toBeInTheDocument();
   });
 
-  it("cancel on delete confirmation does not call cancel/delete APIs", async () => {
-    const user = userEvent.setup();
+  it("excludes returned and draft assignments from the register", async () => {
     render(<AssetAssignmentWorkspace />);
-    await user.click(await screen.findByTestId("assignment-row-asg-draft"));
-    await screen.findByTestId("assignment-detail-panel");
-    await user.click(screen.getByTestId("assignment-detail-delete"));
-    await screen.findByTestId("delete-assignment-confirm-dialog");
-    await user.click(screen.getByTestId("delete-assignment-cancel"));
-    expect(screen.queryByTestId("delete-assignment-confirm-dialog")).not.toBeInTheDocument();
-    expect(actionMock).not.toHaveBeenCalled();
-    expect(deleteMock).not.toHaveBeenCalled();
-  });
-
-  it("returned assignment shows returned status and historical assignee, not as active holder flag", async () => {
-    render(<AssetAssignmentWorkspace />);
-    const row = await screen.findByTestId("assignment-row-asg-3");
-    expect(row).toHaveAttribute("data-returned", "true");
-    expect(row).toHaveAttribute("data-assignment-status", "returned");
-    expect(within(row).getByTestId("assignment-status-cell")).toHaveTextContent("Returned");
-    expect(within(row).getByTestId("assignment-status-cell")).not.toHaveTextContent(
-      "approved",
-    );
-    expect(within(row).getByTestId("assignment-status-cell")).not.toHaveTextContent("/");
-    expect(within(row).getByTestId("assignment-assignee-cell")).toHaveTextContent(
-      "Rohan Mehta",
-    );
-    expect(within(row).getByTestId("assignment-assignee-cell")).toHaveAttribute(
-      "data-historical",
-      "true",
-    );
-    expect(within(row).getByTestId("assignment-dc-status")).toHaveTextContent(
-      "Not Applicable",
-    );
-    expect(within(row).queryByTestId("assignment-dc-create")).not.toBeInTheDocument();
+    await screen.findByTestId("assignment-row-asg-1");
+    expect(screen.queryByTestId("assignment-row-asg-3")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("assignment-row-asg-draft")).not.toBeInTheDocument();
+    expect(listMock).toHaveBeenCalledWith(expect.stringContaining("status=active"));
   });
 });

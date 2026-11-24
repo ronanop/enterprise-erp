@@ -7,7 +7,7 @@ import { ChevronDown, Plus, X } from "lucide-react";
 import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
 import { FinanceField } from "@/components/finance/journals/finance-form-field";
 import { Input } from "@/components/ui/input";
-import { LEAD_DISTRIBUTOR_OPTIONS } from "@/lib/crm/lead-distributor-options";
+import { loadCrmDistributorOptions } from "@/lib/crm/lead-distributor-options";
 import { cn } from "@/lib/utils";
 
 type LeadDistributorMultiSelectProps = {
@@ -47,18 +47,30 @@ export function LeadDistributorMultiSelect({
   const [search, setSearch] = useState("");
   const [coords, setCoords] = useState<MenuCoords | null>(null);
   const [customOptions, setCustomOptions] = useState<string[]>([]);
+  const [scmOptions, setScmOptions] = useState<string[]>(["IN STOCK"]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [dialogError, setDialogError] = useState<string | null>(null);
 
   const selectedSet = useMemo(() => new Set(value), [value]);
 
+  useEffect(() => {
+    if (options && options.length > 0) return;
+    let cancelled = false;
+    void loadCrmDistributorOptions(value.join(", ")).then((rows) => {
+      if (!cancelled) setScmOptions(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [options, value]);
+
   const baseOptions = useMemo(() => {
     if (options && options.length > 0) {
       return Array.from(new Set(options.map((name) => name.trim()).filter(Boolean)));
     }
-    return [...LEAD_DISTRIBUTOR_OPTIONS];
-  }, [options]);
+    return scmOptions;
+  }, [options, scmOptions]);
 
   const allOptions = useMemo(() => {
     const preset = new Set(baseOptions.map((name) => name.toLowerCase()));

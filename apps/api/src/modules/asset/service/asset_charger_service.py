@@ -62,11 +62,30 @@ class AssetChargerService:
             raise RegistrationValidationError("Charger Code exceeds maximum length")
 
         existing = self.find_active_charger(ctx, asset.id)
+        # Edit Asset always re-sends charger fields. If type lookup misses (e.g. org-scope
+        # edge) but this asset already owns the serial, treat it as the active charger
+        # instead of failing company-wide uniqueness on install.
+        if existing is None:
+            by_serial = self._components.find_active_by_serial(
+                ctx, company_id=asset.company_id, serial_number=code
+            )
+            if by_serial is not None:
+                if by_serial.asset_id == asset.id:
+                    existing = by_serial
+                else:
+                    raise RegistrationValidationError(
+                        f"Charger code '{code}' is already used on another asset in this company"
+                    )
+
         components = ComponentService(self._db)
         if existing is not None:
             current_code = (existing.component_code or "").strip()
             current_serial = (existing.serial_number or "").strip()
-            if current_code == code and current_serial == code:
+            # Edit re-sends whatever the form loaded (often auto component_code
+            # CHARGER-NNNN while serial_number is the real charger id). Matching
+            # either field is a no-op — rewriting serial to the auto code collides
+            # company-wide with other assets that share CHARGER-0001 codes.
+            if code == current_code or code == current_serial:
                 return existing
             return components.update_charger_identity(ctx, existing.id, charger_code=code)
 

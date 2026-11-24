@@ -1,5 +1,6 @@
 """Procurement ORM models."""
 
+from modules.procurement.models.approval_step_owner import ProcApprovalStepOwner
 from modules.procurement.models.contract import ProcVendorContract, ProcVendorContractLine
 from modules.procurement.models.grn import ProcGrnHeader, ProcGrnLine
 from modules.procurement.models.inventory_adjustment import ProcInventoryStockAdjustment
@@ -7,6 +8,7 @@ from modules.procurement.models.inventory_import import ProcInventoryImportLine
 from modules.procurement.models.inventory_stock import ProcInventoryStockUnit
 from modules.procurement.models.inventory_transfer import ProcInventoryTransferRequest
 from modules.procurement.models.delivery_project import ProcDeliveryProject, ProcDeliveryProjectSite
+from modules.procurement.models.invoice_generation_task import ProcInvoiceGenerationTask
 from modules.procurement.models.service_contract import (
     ProcServicePlan,
     ProcServiceRateContract,
@@ -29,8 +31,13 @@ from modules.procurement.models.vendor_quotation import (
     ProcVendorQuotationHeader,
     ProcVendorQuotationLine,
 )
+from modules.procurement.models.vendor_dispatch import (
+    ProcVendorDispatch,
+    ProcVendorDispatchLine,
+)
 
 __all__ = [
+    "ProcApprovalStepOwner",
     "ProcVendorContract",
     "ProcVendorContractLine",
     "ProcGrnHeader",
@@ -41,6 +48,7 @@ __all__ = [
     "ProcInventoryTransferRequest",
     "ProcDeliveryProject",
     "ProcDeliveryProjectSite",
+    "ProcInvoiceGenerationTask",
     "ProcServicePlan",
     "ProcServiceRateContract",
     "ProcServiceVisit",
@@ -63,4 +71,6 @@ __all__ = [
     "ProcVendorComparison",
     "ProcVendorQuotationHeader",
     "ProcVendorQuotationLine",
+    "ProcVendorDispatch",
+    "ProcVendorDispatchLine",
 ]
