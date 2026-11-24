@@ -18,9 +18,19 @@ const KIND_LABELS: Record<string, string> = {
   order_acknowledged: "Order acknowledgement",
   etd_reminder: "ETD reminder",
   delivery_date_shared: "Delivery date update",
+  po_sent_to_vendor: "PO sent to vendor",
+  order_processed: "Order processed",
+  customer_dispatch_shared: "Customer dispatch",
 };
 
-type KindFilter = "all" | "order_acknowledged" | "etd_reminder" | "delivery_date_shared";
+type KindFilter =
+  | "all"
+  | "order_acknowledged"
+  | "etd_reminder"
+  | "delivery_date_shared"
+  | "po_sent_to_vendor"
+  | "order_processed"
+  | "customer_dispatch_shared";
 type StatusFilter = "all" | "delivered" | "pending" | "failed";
 
 function kindLabel(kind: string | null | undefined, eventType?: string | null): string {
@@ -28,14 +38,21 @@ function kindLabel(kind: string | null | undefined, eventType?: string | null): 
   if (eventType?.includes("order_acknowledged")) return KIND_LABELS.order_acknowledged;
   if (eventType?.includes("etd_reminder")) return KIND_LABELS.etd_reminder;
   if (eventType?.includes("delivery_date_shared")) return KIND_LABELS.delivery_date_shared;
+  if (eventType?.includes("po_sent_to_vendor")) return KIND_LABELS.po_sent_to_vendor;
+  if (eventType?.includes("order_processed")) return KIND_LABELS.order_processed;
+  if (eventType?.includes("customer_dispatch_shared")) return KIND_LABELS.customer_dispatch_shared;
   return eventType?.replace("procurement.", "") || "Correspondence";
 }
 
 function resolveKind(row: ScmCorrespondenceDelivery): string {
-  if (row.kind) return row.kind;
+  if (row.kind && KIND_LABELS[row.kind]) return row.kind;
   if (row.event_type?.includes("order_acknowledged")) return "order_acknowledged";
   if (row.event_type?.includes("etd_reminder")) return "etd_reminder";
   if (row.event_type?.includes("delivery_date_shared")) return "delivery_date_shared";
+  if (row.event_type?.includes("po_sent_to_vendor")) return "po_sent_to_vendor";
+  if (row.event_type?.includes("order_processed")) return "order_processed";
+  if (row.event_type?.includes("customer_dispatch_shared")) return "customer_dispatch_shared";
+  if (row.kind) return row.kind;
   return "other";
 }
 
@@ -86,7 +103,7 @@ export function CorrespondenceListPage() {
     setLoading(true);
     setError(null);
     try {
-      setRows(await listScmCorrespondence(200));
+      setRows(await listScmCorrespondence(500));
     } catch (err) {
       setError(formatApiError(err, "Failed to load correspondence"));
       setRows([]);
@@ -167,9 +184,12 @@ export function CorrespondenceListPage() {
             className="flex h-9 w-52 cursor-pointer rounded-md border border-border/80 bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-primary/25"
           >
             <option value="all">All types</option>
+            <option value="po_sent_to_vendor">PO sent to vendor</option>
+            <option value="order_processed">Order processed</option>
             <option value="order_acknowledged">Order acknowledgement</option>
             <option value="etd_reminder">ETD reminder</option>
             <option value="delivery_date_shared">Delivery date update</option>
+            <option value="customer_dispatch_shared">Customer dispatch</option>
           </select>
         </label>
         <label className="space-y-1">

@@ -716,7 +716,12 @@ class ScmDeliveryNotificationService:
         return self._ntf_repo.list_deliveries_for_order(ctx.tenant_id, order_id=order_id, limit=100)
 
     def list_recent_correspondence(self, ctx: TenantContext, *, limit: int = 100) -> list[dict]:
-        return self._ntf_repo.list_scm_deliveries(ctx.tenant_id, limit=limit)
+        # All procurement.* kinds (PO send, order processed, ack, ETD, dispatch, …).
+        return self._ntf_repo.list_scm_deliveries(
+            ctx.tenant_id,
+            event_types=list(EVENT_BY_KIND.values()),
+            limit=limit,
+        )
 
     def list_templates_for_order(
         self, ctx: TenantContext, order_id: UUID

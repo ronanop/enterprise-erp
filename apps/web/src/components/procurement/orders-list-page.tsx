@@ -337,18 +337,23 @@ export function OrdersListPage() {
 
   async function onExport() {
     setError(null);
-    if (enriched.length === 0) {
+    // Export the currently filtered list (All = every PO). Commercial fields
+    // fill customer/vendor amounts, margin, and payment terms.
+    const visible = filtered;
+    if (visible.length === 0) {
       setError("No purchase orders available to export.");
       return;
     }
     setExportBusy(true);
     try {
       const commercial = await listPurchaseOrders({ includeCommercial: true });
-      const idSet = new Set(enriched.map((row) => row.id));
-      const source = commercial.filter((row) => idSet.has(row.id));
+      const idSet = new Set(visible.map((row) => row.id));
+      const byId = new Map(commercial.map((row) => [row.id, row]));
+      const source = visible.map((row) => byId.get(row.id) || row);
       const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
       const exportRows = buildOrderExportRows(source, vendors);
-      await exportOrdersXlsx(`purchase-orders-all-${stamp}.xlsx`, exportRows);
+      const suffix = statusFilter === "all" && !bucketFilter ? "all" : statusFilter || "filtered";
+      await exportOrdersXlsx(`purchase-orders-${suffix}-${stamp}.xlsx`, exportRows);
     } catch (err) {
       setError(formatApiError(err, "Failed to export purchase orders"));
     } finally {

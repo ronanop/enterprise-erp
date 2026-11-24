@@ -579,7 +579,7 @@ function grnLineMoneyFields(
   const qty = Number(qtyRaw);
   const rate = Number(rateRaw);
   const taxPct = Number(taxPctRaw);
-  if (!Number.isFinite(qty) || !Number.isFinite(rate) || qty <= 0) {
+  if (!Number.isFinite(qty) || !Number.isFinite(rate) || qty <= 0 || rate < 0) {
     return { tax: "-", totalAmount: "-" };
   }
   const taxable = qty * rate;
@@ -589,6 +589,82 @@ function grnLineMoneyFields(
     tax: formatGrnMoney(taxAmt),
     totalAmount: formatGrnMoney(taxable + taxAmt),
   };
+}
+
+function findOrderLineForGrnProduct(
+  product: string,
+  order: ProcOrder | null | undefined,
+): ProcOrder["lines"][number] | undefined {
+  const lines = order?.lines || [];
+  if (!lines.length) return undefined;
+  const key = ovfProductKey(product);
+  if (!key) return undefined;
+  const exact = lines.find(
+    (ln) => ovfProductKey(ln.product_name || ln.product_code || "") === key,
+  );
+  if (exact) return exact;
+  return lines.find((ln) => {
+    const name = ovfProductKey(ln.product_name || ln.product_code || "");
+    return Boolean(name) && (key.includes(name) || name.includes(key));
+  });
+}
+
+/**
+ * Challan / billing rows often store qty only (rate/description blank).
+ * Fill Description / Unit rate / Tax / Total from the PO line (or batch-derived row).
+ */
+function enrichDeliveryStatusGrnRows(
+  rows: DeliveryStatusGrnItemRow[],
+  order: ProcOrder | null,
+  fallbackRows: DeliveryStatusGrnItemRow[],
+  challanTaxPct: string | number | null | undefined,
+): DeliveryStatusGrnItemRow[] {
+  if (rows.length === 0) return rows;
+  const fallbackByProduct = new Map(
+    fallbackRows.map((row) => [ovfProductKey(row.product), row] as const),
+  );
+  const defaultTaxPct = Number(challanTaxPct) || 0;
+
+  return rows.map((row) => {
+    const productKey = ovfProductKey(row.product);
+    const ol = findOrderLineForGrnProduct(row.product, order);
+    const fallback = productKey ? fallbackByProduct.get(productKey) : undefined;
+    const existingRate = Number(row.unitCost);
+    const hasRate = Number.isFinite(existingRate) && existingRate > 0;
+    const orderRate = Number(ol?.unit_cost);
+    const fallbackRate = Number(fallback?.unitCost);
+    const rate = hasRate
+      ? existingRate
+      : Number.isFinite(orderRate) && orderRate > 0
+        ? orderRate
+        : Number.isFinite(fallbackRate) && fallbackRate > 0
+          ? fallbackRate
+          : Number.isFinite(existingRate)
+            ? existingRate
+            : NaN;
+    const unitCost = Number.isFinite(rate) ? String(rate) : row.unitCost || "-";
+
+    const existingDesc = (row.description || "").trim();
+    const orderDesc = lineDescription(
+      row.product,
+      ol?.description || ol?.product_code,
+    );
+    const fallbackDesc = (fallback?.description || "").trim();
+    const description =
+      existingDesc && existingDesc !== "-"
+        ? existingDesc
+        : orderDesc || (fallbackDesc && fallbackDesc !== "-" ? fallbackDesc : "-");
+
+    const taxPct =
+      Number(ol?.tax_rate) > 0 ? Number(ol.tax_rate) : defaultTaxPct;
+
+    return {
+      ...row,
+      description: description || "-",
+      unitCost,
+      ...grnLineMoneyFields(row.grnQty, unitCost, taxPct),
+    };
+  });
 }
 
 export function deliveryStatusGrnItemRowsFromChallan(
@@ -657,6 +733,34 @@ export function deliveryStatusGrnItemRowsFromBatches(
   return [...byLine.values()].map(({ _rate: _r, _taxPct: _t, ...row }) => row);
 }
 
+/** Last-resort Set dispatch rows from PO lines when challan/GRN money fields are blank. */
+export function deliveryStatusGrnItemRowsFromOrder(
+  order: ProcOrder | null,
+): DeliveryStatusGrnItemRow[] {
+  const lines = order?.lines || [];
+  if (!lines.length) return [];
+  return lines
+    .map((ol, index) => {
+      const product = (ol.product_name || ol.product_code || `Line ${ol.line_number || index + 1}`).trim();
+      const received = Number(ol.quantity_received) || 0;
+      const ordered = Number(ol.quantity) || 0;
+      const qty = received > 0 ? received : ordered;
+      if (qty <= 0) return null;
+      const rate = Number(ol.unit_cost) || 0;
+      const taxPct = Number(ol.tax_rate) || 0;
+      return {
+        id: ol.id || `order-line-${index}`,
+        product,
+        description: lineDescription(product, ol.description || ol.product_code) || "-",
+        orderedQty: String(ordered || "-"),
+        grnQty: String(qty),
+        unitCost: rate > 0 ? String(rate) : "-",
+        ...grnLineMoneyFields(qty, rate, taxPct),
+      } satisfies DeliveryStatusGrnItemRow;
+    })
+    .filter((row): row is DeliveryStatusGrnItemRow => row != null);
+}
+
 /** Expand "PO/001, PO/002" style labels into individual GRN numbers. */
 export function expandGrnNumberList(
   values: ReadonlyArray<string | null | undefined>,
@@ -704,10 +808,50 @@ export function resolveDeliveryStatusGrnItems(input: {
   invoiceQuantity?: number | null;
 }): DeliveryStatusGrnItemRow[] {
   const fromChallan = deliveryStatusGrnItemRowsFromChallan(input.challan);
+  const fromBatches = deliveryStatusGrnItemRowsFromBatches(
+    input.matchedBatches,
+    input.order,
+  );
   const challanHasQty = fromChallan.some((row) => (Number(row.grnQty) || 0) > 0);
+  const challanHasMoney = fromChallan.some((row) => (Number(row.unitCost) || 0) > 0);
+
+  // Prefer challan qty (billed/shipped selection). If challan lines have no rates,
+  // still keep those qtys but enrich Description / Unit rate / Tax / Total from PO.
   let rows = challanHasQty
-    ? fromChallan
-    : deliveryStatusGrnItemRowsFromBatches(input.matchedBatches, input.order);
+    ? enrichDeliveryStatusGrnRows(
+        fromChallan,
+        input.order,
+        fromBatches,
+        input.challan.taxPercentage,
+      )
+    : fromBatches.length > 0
+      ? fromBatches
+      : enrichDeliveryStatusGrnRows(
+          fromChallan,
+          input.order,
+          fromBatches,
+          input.challan.taxPercentage,
+        );
+
+  // Billing summary lines sometimes collapse to one generic row with no PO match.
+  // Fall back to GRN/PO lines so Description / rates still show on Set dispatch.
+  const stillMissingMoney = rows.every((row) => !(Number(row.unitCost) > 0));
+  const stillMissingDesc = rows.every(
+    (row) => !row.description || row.description === "-",
+  );
+  if (
+    challanHasQty &&
+    !challanHasMoney &&
+    rows.length <= 1 &&
+    (stillMissingMoney || stillMissingDesc)
+  ) {
+    if (fromBatches.length > 0) {
+      rows = fromBatches;
+    } else {
+      const fromOrder = deliveryStatusGrnItemRowsFromOrder(input.order);
+      if (fromOrder.length > 0) rows = fromOrder;
+    }
+  }
 
   const invoiceQty = Number(input.invoiceQuantity);
   if (!(invoiceQty > 0) || rows.length === 0) return rows;
@@ -718,12 +862,15 @@ export function resolveDeliveryStatusGrnItems(input: {
   const taxPct = Number(input.challan.taxPercentage) || 0;
   if (rows.length === 1) {
     const row = rows[0];
-    const rate = Number(row.unitCost) || 0;
+    const ol = findOrderLineForGrnProduct(row.product, input.order);
+    const rate = Number(row.unitCost) || Number(ol?.unit_cost) || 0;
+    const pct = Number(ol?.tax_rate) > 0 ? Number(ol.tax_rate) : taxPct;
     return [
       {
         ...row,
         grnQty: String(invoiceQty),
-        ...grnLineMoneyFields(invoiceQty, rate, taxPct),
+        unitCost: rate > 0 ? String(rate) : row.unitCost,
+        ...grnLineMoneyFields(invoiceQty, rate, pct),
       },
     ];
   }
@@ -731,11 +878,14 @@ export function resolveDeliveryStatusGrnItems(input: {
   const scale = invoiceQty / shownQty;
   return rows.map((row) => {
     const nextQty = Math.round((Number(row.grnQty) || 0) * scale * 1e6) / 1e6;
-    const rate = Number(row.unitCost) || 0;
+    const ol = findOrderLineForGrnProduct(row.product, input.order);
+    const rate = Number(row.unitCost) || Number(ol?.unit_cost) || 0;
+    const pct = Number(ol?.tax_rate) > 0 ? Number(ol.tax_rate) : taxPct;
     return {
       ...row,
       grnQty: String(nextQty),
-      ...grnLineMoneyFields(nextQty, rate, taxPct),
+      unitCost: rate > 0 ? String(rate) : row.unitCost,
+      ...grnLineMoneyFields(nextQty, rate, pct),
     };
   });
 }

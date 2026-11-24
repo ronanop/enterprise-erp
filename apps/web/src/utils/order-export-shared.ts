@@ -1,46 +1,34 @@
 export const ORDER_EXPORT_HEADERS = [
+  "PO number",
+  "Company entity name",
   "Customer name",
-  "Customer PO",
-  "Customer PO date",
-  "Customer PO amount",
-  "Tax amount",
-  "Total amount with tax",
-  "Description",
+  "Customer pay terms",
   "Vendor name",
-  "Payment term",
-  "Cache PO",
-  "Cache PO date",
-  "Vendor amount",
-  "Vendor tax",
-  "Total with tax",
+  "Vendor payment terms",
+  "Customer amt",
+  "Vendor amt",
   "Margin",
-  "Margin %",
-  "PO status",
+  "Margin perc",
+  "Status",
 ] as const;
 
 export type OrderExportRow = Record<(typeof ORDER_EXPORT_HEADERS)[number], string | number>;
 
 export const ORDER_EXPORT_COLUMN_WIDTHS = [
+  20,
+  28,
+  26,
+  18,
   26,
   20,
-  20,
-  22,
   16,
-  26,
-  44,
-  26,
-  20,
-  20,
-  20,
-  20,
-  18,
-  18,
-  20,
+  16,
+  14,
   14,
   18,
 ];
 
-const PO_STATUS_HEADER = "PO status";
+const PO_STATUS_HEADER = "Status";
 
 /** PO status labels for Excel (maps sent → Open). */
 export function formatPoStatusForExport(status: string): string {
