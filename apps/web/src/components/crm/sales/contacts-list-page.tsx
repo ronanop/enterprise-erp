@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus, Users } from "lucide-react";
 
-import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
+import {
+  CrmErrorBanner,
+  CrmListPanel,
+  CrmPage,
+  CrmSerialTd,
+  CrmSerialTh,
+  CRM_TABLE_HEAD_ROW,
+} from "@/components/crm/crm-ui";
 import { FinanceField, FinanceSelect } from "@/components/finance/journals/finance-form-field";
 import {
   RequiredFieldsDialog,
@@ -202,6 +209,7 @@ export function ContactsListPage({
           <table className="w-full min-w-[860px] text-left text-sm">
             <thead>
               <tr className={CRM_TABLE_HEAD_ROW}>
+                <CrmSerialTh />
                 <CrmSortableTh label="Name" sortKey="name" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Company" sortKey="company" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Title" sortKey="title" activeKey={sortBy} dir={sortDir} onSort={onSort} />
@@ -213,19 +221,20 @@ export function ContactsListPage({
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
                     Loading contacts…
                   </td>
                 </tr>
               ) : sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
                     No contacts yet. Use “New Contact” to add one.
                   </td>
                 </tr>
               ) : (
-                sorted.map((row) => (
+                sorted.map((row, index) => (
                   <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
+                    <CrmSerialTd index={index} />
                     <td className="px-4 py-2.5 font-medium text-foreground">
                       {row.first_name} {row.last_name ?? ""}
                       {row.is_primary ? <Badge variant="secondary" className="ml-1.5">Primary</Badge> : null}

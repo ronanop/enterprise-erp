@@ -13,7 +13,6 @@ import {
   itAssetWorkspaceNav,
   nonItAssetWorkspaceNav,
 } from "@/config/assets";
-import { hrNavGroups, isHrPath, type HrNavItem } from "@/config/hr-nav";
 import type { NavItem } from "@/config/navigation";
 import { WORKSPACE_SIDEBARS } from "@/config/workspace-sidebars";
 
@@ -33,29 +32,6 @@ export type ShellSearchScope =
 
 function underRoot(pathname: string, root: string): boolean {
   return pathname === root || pathname.startsWith(`${root}/`);
-}
-
-function flattenHrItems(items: readonly HrNavItem[], groupLabel: string): ShellSearchHit[] {
-  const out: ShellSearchHit[] = [];
-  for (const item of items) {
-    out.push({
-      id: `hr:${item.href}`,
-      title: item.title,
-      subtitle: groupLabel,
-      href: item.href,
-      keywords: item.description,
-    });
-    for (const child of item.children ?? []) {
-      out.push({
-        id: `hr:${child.href}`,
-        title: child.title,
-        subtitle: `${groupLabel} · ${item.title}`,
-        href: child.href,
-        keywords: child.description,
-      });
-    }
-  }
-  return out;
 }
 
 function assetPanes(): ShellSearchHit[] {
@@ -81,10 +57,6 @@ function assetPanes(): ShellSearchHit[] {
   return out;
 }
 
-function hrPanes(): ShellSearchHit[] {
-  return hrNavGroups.flatMap((group) => flattenHrItems(group.items, group.label || "HRMS"));
-}
-
 function workspacePanes(root: string, title: string): ShellSearchHit[] | null {
   const config = WORKSPACE_SIDEBARS.find((entry) => entry.root === root);
   if (!config) return null;
@@ -101,9 +73,6 @@ export function modulePaneCatalog(pathname: string): {
   moduleTitle: string;
   panes: ShellSearchHit[];
 } | null {
-  if (isHrPath(pathname)) {
-    return { moduleTitle: "HRMS", panes: hrPanes() };
-  }
   if (underRoot(pathname, "/marketing")) {
     return {
       moduleTitle: "Marketing",

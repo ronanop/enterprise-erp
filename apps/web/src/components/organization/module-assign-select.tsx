@@ -19,6 +19,10 @@ export const NON_ASSIGNABLE_MODULE_KEYS = new Set([
   "voice-agent",
   "organization",
   "master-data",
+  // HRMS is a separate app; ERP only imports employees via API.
+  "hr",
+  "recruitment",
+  "payroll",
 ]);
 
 type ModuleOption = {

@@ -2,7 +2,12 @@
 
 import { CalendarDays } from "lucide-react";
 
-import { CRM_TABLE_HEAD_CELL, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
+import {
+  CrmSerialTd,
+  CrmSerialTh,
+  CRM_TABLE_HEAD_CELL,
+  CRM_TABLE_HEAD_ROW,
+} from "@/components/crm/crm-ui";
 import { CrmSortableTh, type SortDir } from "@/components/crm/sales/crm-table-sort";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import {
@@ -33,7 +38,7 @@ type MeetingsDataTableProps = {
   };
 };
 
-const COL_COUNT = 7;
+const COL_COUNT = 8;
 
 export function MeetingsDataTable({
   rows,
@@ -47,6 +52,7 @@ export function MeetingsDataTable({
       <table className="w-full min-w-[1040px] text-left text-sm">
         <thead>
           <tr className={CRM_TABLE_HEAD_ROW}>
+            <CrmSerialTh />
             {sortable ? (
               <>
                 <CrmSortableTh
@@ -129,11 +135,12 @@ export function MeetingsDataTable({
               </td>
             </tr>
           ) : (
-            rows.map((row) => (
+            rows.map((row, index) => (
               <tr
                 key={row.id}
                 className="border-b border-border/50 last:border-0 hover:bg-accent/30"
               >
+                <CrmSerialTd index={index} />
                 <td className="px-4 py-2.5">
                   <div className="font-medium text-foreground">{row.title}</div>
                   <div className="text-[11px] text-muted-foreground">{row.meeting_code}</div>

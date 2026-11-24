@@ -6,7 +6,6 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { ElevenLabsConvaiWidget } from "@/components/elevenlabs/convai-widget";
 import { AppTopbar } from "@/components/layout/app-topbar";
 import { ShellSidebar } from "@/components/layout/module-sidebar-registry";
-import { isHrPath } from "@/config/hr-nav";
 import { useMainScrollChain } from "@/hooks/use-main-scroll-chain";
 import { useStandaloneChrome } from "@/hooks/use-standalone-chrome";
 
@@ -21,7 +20,6 @@ export function AppShell({ children }: AppShellProps) {
   const standalone = useStandaloneChrome();
   const mainRef = useRef<HTMLElement>(null);
   useMainScrollChain(mainRef);
-  const hrMode = isHrPath(pathname);
   /** QR scan focus mode — full portal without the assets dock (better on phones). */
   const qrScanMode =
     searchParams.get("from") === "qr" && pathname.startsWith("/assets/information-portal/");
@@ -53,14 +51,6 @@ export function AppShell({ children }: AppShellProps) {
             {children}
           </div>
         </main>
-        {hrMode ? (
-          <footer className="border-t border-border/70 bg-card/40 px-4 py-3 text-[11px] text-muted-foreground sm:px-6">
-            <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-2">
-              <span className="font-medium tracking-tight">HRMS workspace</span>
-              <span>Workforce · Leave · Attendance · Talent · Hire · Pay</span>
-            </div>
-          </footer>
-        ) : null}
       </div>
       <ElevenLabsConvaiWidget />
     </div>

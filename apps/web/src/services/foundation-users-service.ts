@@ -21,15 +21,6 @@ export type FoundationUser = {
   company_ids?: string[];
 };
 
-export type HrmsUserSyncResult = {
-  employee_count: number;
-  created: number;
-  linked: number;
-  updated: number;
-  deactivated: number;
-  skipped: number;
-};
-
 export type ModuleAccessRole = "admin" | "member";
 
 export type TemporaryPassword = {
@@ -56,15 +47,6 @@ export async function listFoundationUsers(): Promise<FoundationUser[]> {
   const res = await apiClient<FoundationUser[]>("/users");
   const data = res.data;
   return Array.isArray(data) ? data : [];
-}
-
-/** ERP admin: create / link logins for HRMS onboarded employees. */
-export async function syncHrmsUsers(): Promise<HrmsUserSyncResult> {
-  const res = await apiClient<HrmsUserSyncResult>("/users/sync-hrms", { method: "POST" });
-  if (!res.data) {
-    throw new Error(res.message || "HRMS sync returned an empty response");
-  }
-  return res.data;
 }
 
 /** ERP admin: give a user Admin or User access to one or more modules (one email). */

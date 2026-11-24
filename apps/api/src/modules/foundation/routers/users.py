@@ -11,7 +11,13 @@ from modules.foundation.dependencies import require_permission
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.schemas import (
     AssignRoleRequest,
-    HrmsUserSyncResultResponse,
+    HrmsIntegrationSettingsResponse,
+    HrmsIntegrationSettingsUpsertRequest,
+    HrmsIntegrationSyncResponse,
+    HrmsIntegrationTestResponse,
+    HrmsIntegrationTestSample,
+    HrmsLeaveBalanceItem,
+    HrmsUserProfileResponse,
     ModuleAccessRequest,
     TemporaryPasswordResponse,
     UserCreateRequest,
@@ -20,7 +26,10 @@ from modules.foundation.schemas import (
     UserResponse,
     UserUpdateRequest,
 )
-from modules.foundation.service.hrms_user_sync_service import HrmsUserSyncService
+from modules.foundation.service.hrms_integration_settings_service import (
+    HrmsIntegrationSettingsService,
+)
+from modules.foundation.service.hrms_user_profile_service import HrmsUserProfileService
 from modules.foundation.service.module_access_service import ModuleAccessService
 from modules.foundation.service.user_service import UserService
 from shared.schemas import APIResponse
@@ -39,26 +48,198 @@ def list_users(
     )
 
 
-@router.post("/sync-hrms", response_model=APIResponse[HrmsUserSyncResultResponse])
-def sync_hrms_users(
-    ctx: Annotated[TenantContext, Depends(require_permission("foundation.user:update"))],
+@router.get(
+    "/hrms-integration",
+    response_model=APIResponse[HrmsIntegrationSettingsResponse],
+)
+def get_hrms_integration_settings(
+    ctx: Annotated[TenantContext, Depends(require_permission("foundation.user:read"))],
     db: Annotated[Session, Depends(get_db)],
-) -> APIResponse[HrmsUserSyncResultResponse]:
-    """Create / link ERP logins for HRMS onboarded employees with a valid employee id."""
+) -> APIResponse[HrmsIntegrationSettingsResponse]:
     UserService(db).require_erp_admin(ctx.tenant_id, ctx.user_id)
-    result = HrmsUserSyncService(db).sync(tenant_id=ctx.tenant_id, actor_user_id=ctx.user_id)
-    db.commit()
+    view = HrmsIntegrationSettingsService(db).get(ctx.tenant_id)
     return APIResponse(
-        message="HRMS employees synced",
-        data=HrmsUserSyncResultResponse(
-            employee_count=result.employee_count,
-            created=result.created,
-            linked=result.linked,
-            updated=result.updated,
-            deactivated=result.deactivated,
-            skipped=result.skipped,
+        message="HRMS integration settings",
+        data=HrmsIntegrationSettingsResponse(
+            base_url=view.base_url,
+            employees_path=view.employees_path,
+            page_size=view.page_size,
+            has_api_key=view.has_api_key,
+            api_key_masked=view.api_key_masked,
+            api_key=view.api_key,
         ),
     )
+
+
+@router.put(
+    "/hrms-integration",
+    response_model=APIResponse[HrmsIntegrationSettingsResponse],
+)
+def upsert_hrms_integration_settings(
+    body: HrmsIntegrationSettingsUpsertRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("foundation.user:update"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[HrmsIntegrationSettingsResponse]:
+    UserService(db).require_erp_admin(ctx.tenant_id, ctx.user_id)
+    view = HrmsIntegrationSettingsService(db).save(
+        tenant_id=ctx.tenant_id,
+        actor_id=ctx.user_id,
+        base_url=body.base_url,
+        employees_path=body.employees_path,
+        page_size=body.page_size,
+        api_key=body.api_key,
+    )
+    db.commit()
+    return APIResponse(
+        message="HRMS integration settings saved",
+        data=HrmsIntegrationSettingsResponse(
+            base_url=view.base_url,
+            employees_path=view.employees_path,
+            page_size=view.page_size,
+            has_api_key=view.has_api_key,
+            api_key_masked=view.api_key_masked,
+            api_key=view.api_key,
+        ),
+    )
+
+
+@router.post(
+    "/hrms-integration/test",
+    response_model=APIResponse[HrmsIntegrationTestResponse],
+)
+def test_hrms_integration(
+    ctx: Annotated[TenantContext, Depends(require_permission("foundation.user:update"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[HrmsIntegrationTestResponse]:
+    UserService(db).require_erp_admin(ctx.tenant_id, ctx.user_id)
+    result = HrmsIntegrationSettingsService(db).test(ctx.tenant_id)
+    return APIResponse(
+        message=result.message,
+        data=HrmsIntegrationTestResponse(
+            ok=result.ok,
+            status_code=result.status_code,
+            total=result.total,
+            sample_count=result.sample_count,
+            message=result.message,
+            sample=[HrmsIntegrationTestSample(**row) for row in result.sample],
+        ),
+    )
+
+
+@router.post(
+    "/hrms-integration/sync",
+    response_model=APIResponse[HrmsIntegrationSyncResponse],
+)
+def sync_hrms_integration(
+    ctx: Annotated[TenantContext, Depends(require_permission("foundation.user:update"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[HrmsIntegrationSyncResponse]:
+    """Fetch employees from the configured remote HRMS API, upsert masters, then sync logins."""
+    UserService(db).require_erp_admin(ctx.tenant_id, ctx.user_id)
+    result = HrmsIntegrationSettingsService(db).sync(
+        tenant_id=ctx.tenant_id,
+        actor_user_id=ctx.user_id,
+    )
+    db.commit()
+    return APIResponse(
+        message="HRMS API employees synced",
+        data=HrmsIntegrationSyncResponse(
+            fetched=result.fetched,
+            employees_created=result.employees_created,
+            employees_updated=result.employees_updated,
+            employees_skipped=result.employees_skipped,
+            employee_count=result.user_sync.employee_count,
+            created=result.user_sync.created,
+            linked=result.user_sync.linked,
+            updated=result.user_sync.updated,
+            deactivated=result.user_sync.deactivated,
+            skipped=result.user_sync.skipped,
+        ),
+    )
+
+
+def _hrms_profile_response(view) -> HrmsUserProfileResponse:
+    return HrmsUserProfileResponse(
+        user_id=view.user_id,
+        employee_id=view.employee_id,
+        employee_code=view.employee_code,
+        display_name=view.display_name,
+        first_name=view.first_name,
+        last_name=view.last_name,
+        email=view.email,
+        mobile=view.mobile,
+        designation=view.designation,
+        department=view.department,
+        manager=view.manager,
+        manager_code=view.manager_code,
+        branch=view.branch,
+        company=view.company,
+        status=view.status,
+        date_of_joining=view.date_of_joining,
+        date_of_leaving=view.date_of_leaving,
+        gender=view.gender,
+        date_of_birth=view.date_of_birth,
+        employment_type=view.employment_type,
+        work_location=view.work_location,
+        is_manager=view.is_manager,
+        leave_balances=[
+            HrmsLeaveBalanceItem(
+                leave_type_code=b.leave_type_code,
+                leave_type_name=b.leave_type_name,
+                opening_balance=b.opening_balance,
+                accrued=b.accrued,
+                used=b.used,
+                closing_balance=b.closing_balance,
+                year=b.year,
+            )
+            for b in view.leave_balances
+        ],
+        leave_balance_total=view.leave_balance_total,
+        leave_used_total=view.leave_used_total,
+        profile_fetched_at=view.profile_fetched_at,
+        leave_fetched_at=view.leave_fetched_at,
+        leave_refreshed=view.leave_refreshed,
+    )
+
+
+@router.get(
+    "/{user_id}/hrms-profile",
+    response_model=APIResponse[HrmsUserProfileResponse],
+)
+def get_hrms_user_profile(
+    user_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("foundation.user:read"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[HrmsUserProfileResponse]:
+    """Return saved HRMS profile; always refresh leave balances from remote."""
+    view = HrmsUserProfileService(db).get_for_user(
+        tenant_id=ctx.tenant_id,
+        user_id=user_id,
+        actor_user_id=ctx.user_id,
+        force_refresh=False,
+    )
+    db.commit()
+    return APIResponse(message="HRMS user profile", data=_hrms_profile_response(view))
+
+
+@router.post(
+    "/{user_id}/hrms-profile/refresh",
+    response_model=APIResponse[HrmsUserProfileResponse],
+)
+def refresh_hrms_user_profile(
+    user_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("foundation.user:read"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[HrmsUserProfileResponse]:
+    """Force re-fetch of full HRMS profile + leave balances, then persist."""
+    view = HrmsUserProfileService(db).get_for_user(
+        tenant_id=ctx.tenant_id,
+        user_id=user_id,
+        actor_user_id=ctx.user_id,
+        force_refresh=True,
+    )
+    db.commit()
+    return APIResponse(message="HRMS user profile refreshed", data=_hrms_profile_response(view))
 
 
 @router.post("/{user_id}/module-access", response_model=APIResponse[UserResponse])

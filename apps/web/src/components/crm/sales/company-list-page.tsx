@@ -4,7 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Building2, Plus } from "lucide-react";
 
-import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
+import {
+  CrmErrorBanner,
+  CrmListPanel,
+  CrmPage,
+  CrmSerialTd,
+  CrmSerialTh,
+  CRM_TABLE_HEAD_ROW,
+} from "@/components/crm/crm-ui";
 import { PageHeader } from "@/components/layout/page-header";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import {
@@ -157,7 +164,7 @@ export function CompanyListPage() {
     }
   }
 
-  const colSpan = Math.max(columnOrder.length, 1);
+  const colSpan = Math.max(columnOrder.length, 1) + 1;
 
   return (
     <CrmPage>
@@ -200,6 +207,7 @@ export function CompanyListPage() {
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
               <tr className={CRM_TABLE_HEAD_ROW}>
+                <CrmSerialTh />
                 {columnOrder.map((col) => (
                   <CrmSortableTh
                     key={col}
@@ -226,11 +234,12 @@ export function CompanyListPage() {
                   </td>
                 </tr>
               ) : (
-                sorted.map((row) => (
+                sorted.map((row, index) => (
                   <tr
                     key={row.id}
                     className="border-b border-border/50 transition-colors last:border-0 hover:bg-accent/30"
                   >
+                    <CrmSerialTd index={index} />
                     {columnOrder.map((col) => (
                       <td
                         key={col}

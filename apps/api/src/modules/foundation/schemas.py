@@ -141,6 +141,94 @@ class HrmsUserSyncResultResponse(BaseModel):
     skipped: int
 
 
+class HrmsIntegrationSettingsResponse(BaseModel):
+    base_url: str
+    employees_path: str
+    page_size: int
+    has_api_key: bool
+    api_key_masked: str
+    # Full key for ERP-admin curl preview (this endpoint is admin-gated).
+    api_key: str = ""
+
+
+class HrmsIntegrationSettingsUpsertRequest(BaseModel):
+    base_url: str = Field(max_length=500)
+    employees_path: str = Field(default="/api/v1/hr/integration/employees", max_length=300)
+    page_size: int = Field(default=100, ge=1, le=500)
+    api_key: str | None = Field(default=None, max_length=500)
+
+
+class HrmsIntegrationTestSample(BaseModel):
+    employee_code: str | None = None
+    name: str | None = None
+    email: str | None = None
+    department: str | None = None
+    status: str | None = None
+
+
+class HrmsIntegrationTestResponse(BaseModel):
+    ok: bool
+    status_code: int
+    total: int
+    sample_count: int
+    message: str
+    sample: list[HrmsIntegrationTestSample] = Field(default_factory=list)
+
+
+class HrmsIntegrationSyncResponse(BaseModel):
+    fetched: int
+    employees_created: int
+    employees_updated: int
+    employees_skipped: int
+    employee_count: int
+    created: int
+    linked: int
+    updated: int
+    deactivated: int
+    skipped: int
+
+
+class HrmsLeaveBalanceItem(BaseModel):
+    leave_type_code: str = ""
+    leave_type_name: str = ""
+    opening_balance: float = 0
+    accrued: float = 0
+    used: float = 0
+    closing_balance: float = 0
+    year: int | None = None
+
+
+class HrmsUserProfileResponse(BaseModel):
+    user_id: UUID
+    employee_id: UUID | None = None
+    employee_code: str
+    display_name: str
+    first_name: str = ""
+    last_name: str = ""
+    email: str = ""
+    mobile: str = ""
+    designation: str = ""
+    department: str = ""
+    manager: str = ""
+    manager_code: str = ""
+    branch: str = ""
+    company: str = ""
+    status: str = "active"
+    date_of_joining: str | None = None
+    date_of_leaving: str | None = None
+    gender: str | None = None
+    date_of_birth: str | None = None
+    employment_type: str | None = None
+    work_location: str | None = None
+    is_manager: bool = False
+    leave_balances: list[HrmsLeaveBalanceItem] = Field(default_factory=list)
+    leave_balance_total: float = 0
+    leave_used_total: float = 0
+    profile_fetched_at: datetime | None = None
+    leave_fetched_at: datetime | None = None
+    leave_refreshed: bool = False
+
+
 class ModuleAccessRequest(BaseModel):
     """Grant Admin/User on one or more modules.
 

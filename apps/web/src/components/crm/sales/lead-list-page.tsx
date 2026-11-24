@@ -4,7 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { UserPlus } from "lucide-react";
 
-import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
+import {
+  CrmErrorBanner,
+  CrmListPanel,
+  CrmPage,
+  CrmSerialTd,
+  CrmSerialTh,
+  CRM_TABLE_HEAD_ROW,
+} from "@/components/crm/crm-ui";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import {
@@ -161,6 +168,7 @@ export function LeadListPage({
           <table className="w-full min-w-[800px] text-left text-sm">
             <thead>
               <tr className={CRM_TABLE_HEAD_ROW}>
+                <CrmSerialTh />
                 {orderedColumns.map((col) => (
                   <CrmSortableTh
                     key={col}
@@ -178,7 +186,7 @@ export function LeadListPage({
               {loading ? (
                 <tr>
                   <td
-                    colSpan={orderedColumns.length + 1}
+                    colSpan={orderedColumns.length + 2}
                     className="px-4 py-10 text-center text-muted-foreground"
                   >
                     Loading leads…
@@ -187,15 +195,16 @@ export function LeadListPage({
               ) : sorted.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={orderedColumns.length + 1}
+                    colSpan={orderedColumns.length + 2}
                     className="px-4 py-10 text-center text-muted-foreground"
                   >
                     No active leads. Converted leads appear under Opportunities only.
                   </td>
                 </tr>
               ) : (
-                sorted.map((row) => (
+                sorted.map((row, index) => (
                   <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
+                    <CrmSerialTd index={index} />
                     {orderedColumns.map((col) => (
                       <td
                         key={col}

@@ -4,7 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ClipboardCheck } from "lucide-react";
 
-import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
+import {
+  CrmErrorBanner,
+  CrmListPanel,
+  CrmPage,
+  CrmSerialTd,
+  CrmSerialTh,
+  CRM_TABLE_HEAD_ROW,
+} from "@/components/crm/crm-ui";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { PageHeader } from "@/components/layout/page-header";
@@ -111,6 +118,7 @@ export function OvfListPage({
           <table className="w-full min-w-[860px] text-left text-sm">
             <thead>
               <tr className={CRM_TABLE_HEAD_ROW}>
+                <CrmSerialTh />
                 <CrmSortableTh label="OVF No." sortKey="ovf_no" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="State" sortKey="blueprint_state" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="PO Number" sortKey="po_number" activeKey={sortBy} dir={sortDir} onSort={onSort} />
@@ -123,19 +131,20 @@ export function OvfListPage({
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
                     Loading OVFs…
                   </td>
                 </tr>
               ) : sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
                     No OVFs yet.
                   </td>
                 </tr>
               ) : (
-                sorted.map((row) => (
+                sorted.map((row, index) => (
                   <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
+                    <CrmSerialTd index={index} />
                     <td className="px-4 py-2.5 font-medium text-foreground">
                       <Link href={`/crm/ovf/${row.id}`} className="cursor-pointer hover:underline">
                         {formatCrmCode(row.ovf_no)}

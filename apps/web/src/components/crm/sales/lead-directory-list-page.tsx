@@ -4,7 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BookUser } from "lucide-react";
 
-import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
+import {
+  CrmErrorBanner,
+  CrmListPanel,
+  CrmPage,
+  CrmSerialTd,
+  CrmSerialTh,
+  CRM_TABLE_HEAD_ROW,
+} from "@/components/crm/crm-ui";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { PageHeader } from "@/components/layout/page-header";
@@ -250,6 +257,7 @@ export function LeadDirectoryListPage({
           <table className="w-full min-w-180 text-left text-sm">
             <thead>
               <tr className={CRM_TABLE_HEAD_ROW}>
+                <CrmSerialTh />
                 <CrmSortableTh label={meta.columns[0]} sortKey="primary" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label={meta.columns[1]} sortKey="secondary" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh
@@ -265,13 +273,13 @@ export function LeadDirectoryListPage({
             <tbody>
               {loading && sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
                     Loading…
                   </td>
                 </tr>
               ) : sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
                     No {meta.title.toLowerCase()} records yet
                     {kind === "oem"
                       ? " - add them from a lead form (choose New OEM)."
@@ -279,8 +287,9 @@ export function LeadDirectoryListPage({
                   </td>
                 </tr>
               ) : (
-                sorted.map((row) => (
+                sorted.map((row, index) => (
                   <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
+                    <CrmSerialTd index={index} />
                     <td className="px-4 py-2.5 font-medium">
                       {row.primary}
                       {row.leadCount > 1 ? (

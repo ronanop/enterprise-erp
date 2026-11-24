@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Package, Plus } from "lucide-react";
 
-import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
+import {
+  CrmErrorBanner,
+  CrmListPanel,
+  CrmPage,
+  CrmSerialTd,
+  CrmSerialTh,
+  CRM_TABLE_HEAD_ROW,
+} from "@/components/crm/crm-ui";
 import { FinanceField, FinanceSelect } from "@/components/finance/journals/finance-form-field";
 import {
   RequiredFieldsDialog,
@@ -156,6 +163,7 @@ export function ProductsListPage({
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead>
               <tr className={CRM_TABLE_HEAD_ROW}>
+                <CrmSerialTh />
                 <CrmSortableTh label="Product Code" sortKey="product_code" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Name" sortKey="product_name" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Type" sortKey="product_type" activeKey={sortBy} dir={sortDir} onSort={onSort} />
@@ -167,19 +175,20 @@ export function ProductsListPage({
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
                     Loading products…
                   </td>
                 </tr>
               ) : sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
                     No products yet. Use “New Product” to add one.
                   </td>
                 </tr>
               ) : (
-                sorted.map((row) => (
+                sorted.map((row, index) => (
                   <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
+                    <CrmSerialTd index={index} />
                     <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{row.product_code}</td>
                     <td className="px-4 py-2.5 font-medium text-foreground">{row.product_name}</td>
                     <td className="px-4 py-2.5">

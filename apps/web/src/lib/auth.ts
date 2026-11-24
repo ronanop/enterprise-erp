@@ -145,9 +145,12 @@ export function isAuthenticated(): boolean {
 export function redirectToLogin(): void {
   if (typeof window === "undefined") return;
   const path = window.location.pathname;
-  if (path.startsWith("/login") || path.startsWith("/onboarding")) return;
+  if (path.startsWith("/login") || path.startsWith("/admin-login") || path.startsWith("/onboarding")) {
+    return;
+  }
   const next = `${path}${window.location.search}`;
-  window.location.assign(`/login?next=${encodeURIComponent(next)}`);
+  const loginBase = path === "/admin" || path.startsWith("/admin/") ? "/admin-login" : "/login";
+  window.location.assign(`${loginBase}?next=${encodeURIComponent(next)}`);
 }
 
 /** Best-effort JWT `sub` for UI-only checks (SoD hints). Not a security boundary. */

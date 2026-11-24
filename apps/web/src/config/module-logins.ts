@@ -29,24 +29,24 @@ export type ServiceTeamLoginAccount = {
   href: string;
 };
 
-/** Platform / tenant admins land on the overview dashboard. */
+/** Platform / tenant admins land on the admin panel. */
 export const adminLoginAccounts: AdminLoginAccount[] = [
   {
     email: "admin@example.com",
     displayName: "Platform Admin",
-    href: "/home",
+    href: "/admin",
     kind: "platform",
   },
   {
     email: "techbank@cachedigitech.com",
     displayName: "TechBank (Platform Admin)",
-    href: "/home",
+    href: "/admin",
     kind: "platform",
   },
   {
     email: "tenant.admin@example.com",
     displayName: "Tenant Admin",
-    href: "/home",
+    href: "/admin",
     kind: "tenant",
   },
 ];

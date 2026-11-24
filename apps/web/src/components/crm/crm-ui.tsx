@@ -25,3 +25,22 @@ export {
 
 export { KpiCard as CrmKpiCard } from "@/components/shared/kpi-card";
 export { ErrorBanner as CrmErrorBanner } from "@/components/shared/error-banner";
+
+/** Fixed leading serial column header for CRM hand-built tables. */
+export function CrmSerialTh() {
+  return (
+    <th
+      scope="col"
+      className="w-12 px-3 py-2.5 text-center text-xs font-semibold tracking-wide text-foreground uppercase tabular-nums"
+    >
+      #
+    </th>
+  );
+}
+
+/** 1-based serial cell; pass the row index from the current visible list. */
+export function CrmSerialTd({ index }: { index: number }) {
+  return (
+    <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">{index + 1}</td>
+  );
+}
