@@ -49,6 +49,18 @@ from modules.hr.models.shift_swap import HrShiftSwapRequest
 from modules.hr.models.digital_onboarding import HrDigitalOnboarding
 from modules.hr.models.profile_update_request import HrProfileUpdateRequest
 from modules.hr.models.lifecycle_event import HrLifecycleEvent
+from modules.hr.models.workplace_feed import (
+    HrWorkplaceFeedComment,
+    HrWorkplaceFeedLike,
+    HrWorkplaceFeedMedia,
+    HrWorkplaceFeedPost,
+)
+from modules.hr.models.workplace_task import (
+    HrWorkplaceTask,
+    HrWorkplaceTaskAssignee,
+    HrWorkplaceTaskEvent,
+    HrWorkplaceTaskProof,
+)
 
 __all__ = [
     "HrDesignation",
@@ -103,4 +115,12 @@ __all__ = [
     "HrJobLevel",
     "HrGrade",
     "HrRosterEntry",
+    "HrWorkplaceFeedPost",
+    "HrWorkplaceFeedMedia",
+    "HrWorkplaceFeedLike",
+    "HrWorkplaceFeedComment",
+    "HrWorkplaceTask",
+    "HrWorkplaceTaskAssignee",
+    "HrWorkplaceTaskEvent",
+    "HrWorkplaceTaskProof",
 ]

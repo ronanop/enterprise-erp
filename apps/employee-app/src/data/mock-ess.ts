@@ -51,6 +51,22 @@ export const MOCK_DEMO_EMPLOYEE_CODE = "CT5354";
 export const MOCK_DEMO_PASSWORD = "CT535415102003";
 export const MOCK_DEMO_MOBILE = "9876543210";
 
+/** Live API one-click demos (seeded by scripts.seed_ess_cdpl_demo). */
+export const LIVE_DEMO_COMPANY = "CDPL";
+export const LIVE_DEMO_PASSWORD = "Secure1!";
+export const LIVE_DEMO_EMPLOYEE = {
+  mobile: "9000000002",
+  employee_code: "ESSEMP01",
+  password: LIVE_DEMO_PASSWORD,
+  role: "employee" as const,
+};
+export const LIVE_DEMO_MANAGER = {
+  mobile: "9000000001",
+  employee_code: "ESSMGR01",
+  password: LIVE_DEMO_PASSWORD,
+  role: "manager" as const,
+};
+
 export const mockMe: EssMe = {
   employee_id: "emp-demo-001",
   company_id: "co-demo-001",

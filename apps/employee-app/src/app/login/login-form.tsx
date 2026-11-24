@@ -10,6 +10,9 @@ import {
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  LIVE_DEMO_COMPANY,
+  LIVE_DEMO_EMPLOYEE,
+  LIVE_DEMO_MANAGER,
   MOCK_DEMO_COMPANY,
   MOCK_DEMO_EMPLOYEE_CODE,
   MOCK_DEMO_MOBILE,
@@ -334,15 +337,16 @@ export default function LoginForm() {
     }
   }
 
-  async function afterLogin() {
+  async function afterLogin(roleOverride?: LoginRole) {
+    const role = roleOverride ?? loginRole;
     const meRes = await essService.me();
     const me = meRes.data;
     clearFaceVerified();
-    persistLoginRole(loginRole);
+    persistLoginRole(role);
 
     const forcedNext = searchParams.get("next");
 
-    if (loginRole === "manager") {
+    if (role === "manager") {
       if (!me?.can_approve_team_leave && !me?.is_manager) {
         clearTokens();
         throw new ApiClientError(
@@ -354,7 +358,7 @@ export default function LoginForm() {
       return;
     }
 
-    if (loginRole === "hr_team") {
+    if (role === "hr_team") {
       if (!me?.is_ess_admin && me?.ess_role !== "admin") {
         clearTokens();
         throw new ApiClientError(
@@ -496,6 +500,119 @@ export default function LoginForm() {
     resetPhoneGate();
   }
 
+  async function quickDemoLogin(kind: "employee" | "manager") {
+    setLoading(true);
+    setError(null);
+    setInfo(null);
+
+    const demo =
+      kind === "manager"
+        ? env.useMock
+          ? {
+              company: MOCK_DEMO_COMPANY,
+              mobile: MOCK_DEMO_MOBILE,
+              employee_code: MOCK_DEMO_EMPLOYEE_CODE,
+              password: MOCK_DEMO_PASSWORD,
+              role: "manager" as LoginRole,
+            }
+          : {
+              company: LIVE_DEMO_COMPANY,
+              mobile: LIVE_DEMO_MANAGER.mobile,
+              employee_code: LIVE_DEMO_MANAGER.employee_code,
+              password: LIVE_DEMO_MANAGER.password,
+              role: "manager" as LoginRole,
+            }
+        : env.useMock
+          ? {
+              company: MOCK_DEMO_COMPANY,
+              mobile: MOCK_DEMO_MOBILE,
+              employee_code: MOCK_DEMO_EMPLOYEE_CODE,
+              password: MOCK_DEMO_PASSWORD,
+              role: "employee" as LoginRole,
+            }
+          : {
+              company: LIVE_DEMO_COMPANY,
+              mobile: LIVE_DEMO_EMPLOYEE.mobile,
+              employee_code: LIVE_DEMO_EMPLOYEE.employee_code,
+              password: LIVE_DEMO_EMPLOYEE.password,
+              role: "employee" as LoginRole,
+            };
+
+    try {
+      setLoginRole(demo.role);
+      setCompanyCode(demo.company);
+      setMobile(demo.mobile);
+      setEmployeeCode(demo.employee_code);
+      setPassword(demo.password);
+
+      if (!env.useMock) {
+        await authService.lookupEssPhone({
+          company_code: demo.company,
+          mobile: demo.mobile,
+        });
+        const captchaRes = await authService.essCaptcha();
+        const challenge = captchaRes.data;
+        if (!challenge?.captcha_id || !challenge.code) {
+          throw new ApiClientError("Could not load demo captcha. Retry.", 500);
+        }
+        await authService.verifyEssPhone({
+          company_code: demo.company,
+          mobile: demo.mobile,
+          captcha_id: challenge.captcha_id,
+          captcha_answer: challenge.code,
+        });
+      }
+
+      const login = await authService.essLogin({
+        company_code: demo.company,
+        employee_code: demo.employee_code,
+        password: demo.password,
+        login_role: demo.role,
+      });
+      if (login.data?.mfa_required) {
+        setError("MFA is required for this account.");
+        return;
+      }
+
+      await afterLogin(demo.role);
+    } catch (err) {
+      if (err instanceof ApiClientError) {
+        setError(err.message || "Demo login failed.");
+      } else {
+        setError("Demo login failed. Check API connection and seed data.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const demoLoginButtons =
+    env.showDemoLogin ? (
+      <div className="space-y-2">
+        <p className="text-center text-xs font-medium uppercase tracking-wide text-[#9ca3af]">
+          Quick test login
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => void quickDemoLogin("employee")}
+            className="min-h-11 cursor-pointer rounded-xl border border-[#e5e7eb] bg-white px-3 py-2.5 text-sm font-semibold text-[#374151] transition duration-200 hover:border-[#7c5cfc]/40 hover:bg-[#faf8ff] hover:text-[#5b3fd4] disabled:cursor-not-allowed disabled:opacity-55"
+          >
+            {loading ? "Signing in…" : "Demo Employee"}
+          </button>
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => void quickDemoLogin("manager")}
+            className="min-h-11 cursor-pointer rounded-xl border border-[#e5e7eb] bg-white px-3 py-2.5 text-sm font-semibold text-[#374151] transition duration-200 hover:border-[#7c5cfc]/40 hover:bg-[#faf8ff] hover:text-[#5b3fd4] disabled:cursor-not-allowed disabled:opacity-55"
+          >
+            {loading ? "Signing in…" : "Demo Manager"}
+          </button>
+        </div>
+      </div>
+    ) : null;
+
   const selectedCompany = companies.find(
     (c) => c.company_code.trim().toUpperCase() === companyCode.trim().toUpperCase(),
   );
@@ -537,6 +654,7 @@ export default function LoginForm() {
                 : "Select your entity and enter your registered mobile."
               : "Enter your employee ID and password."}
           </p>
+          {demoLoginButtons ? <div className="mt-5 w-full max-w-sm">{demoLoginButtons}</div> : null}
           <div className="mt-4 flex items-center gap-2 text-xs font-medium text-[#6b7280]">
             <span
               className={
@@ -562,16 +680,6 @@ export default function LoginForm() {
 
         {step === 1 ? (
           <form onSubmit={onStep1Submit} className="space-y-4 overflow-visible">
-          {env.useMock ? (
-              <div className="rounded-xl border border-[#7c5cfc]/20 bg-[#f3efff] px-3.5 py-3 text-xs text-[#5b3fd4]">
-              <p className="font-semibold">Demo login</p>
-              <p className="mt-0.5 text-[#374151]/80">
-                  Phone: {MOCK_DEMO_MOBILE} · Code: {MOCK_DEMO_EMPLOYEE_CODE} · Password:{" "}
-                  {MOCK_DEMO_PASSWORD}
-              </p>
-            </div>
-          ) : null}
-
             <div className="space-y-1.5">
               <span className={labelClass}>Company / Entity</span>
               {companies.length > 0 || companiesLoading ? (

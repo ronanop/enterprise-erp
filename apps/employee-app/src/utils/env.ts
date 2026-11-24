@@ -10,4 +10,10 @@ export const env = {
    */
   usePayslipMock:
     (process.env.NEXT_PUBLIC_PAYSLIP_MOCK ?? "true").toLowerCase() === "true",
+  /**
+   * One-click Demo Employee / Demo Manager buttons on /login.
+   * Set NEXT_PUBLIC_SHOW_DEMO_LOGIN=false to hide in shared environments.
+   */
+  showDemoLogin:
+    (process.env.NEXT_PUBLIC_SHOW_DEMO_LOGIN ?? "true").toLowerCase() === "true",
 } as const;

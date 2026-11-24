@@ -459,8 +459,13 @@ class AuthService:
         if employee is None:
             raise InvalidCredentialsException()
 
+        from uuid import uuid4 as _uuid4
+
         from modules.hr.models import HrEmployeeProfile
-        from security.ess_default_password import verify_ess_dob_password
+        from security.ess_default_password import (
+            parse_ess_dob_password,
+            verify_ess_dob_password,
+        )
 
         profile = self._db.scalar(
             select(HrEmployeeProfile).where(
@@ -479,6 +484,40 @@ class AuthService:
 
         if not password_valid and profile and profile.date_of_birth:
             if verify_ess_dob_password(password, employee.employee_code, profile.date_of_birth):
+                password_valid = True
+                user = self._ensure_ess_login_user(
+                    employee=employee,
+                    company_code=code,
+                    password=password,
+                    existing_user=user,
+                )
+
+        # First-time ESS bootstrap: CODE+DDMMYYYY when profile DOB is missing.
+        # Persists DOB on profile and binds/resets the SecUser password hash.
+        if not password_valid:
+            parsed_dob = parse_ess_dob_password(password, employee.employee_code)
+            if parsed_dob is not None and (
+                profile is None or profile.date_of_birth is None
+            ):
+                import modules.organization.models  # noqa: F401 — FK metadata
+
+                actor = employee.user_id or _uuid4()
+                if profile is None:
+                    profile = HrEmployeeProfile(
+                        id=_uuid4(),
+                        tenant_id=employee.tenant_id,
+                        company_id=employee.company_id,
+                        branch_id=employee.branch_id,
+                        employee_id=employee.id,
+                        date_of_birth=parsed_dob,
+                        status="active",
+                        created_by=actor,
+                        updated_by=actor,
+                    )
+                    self._db.add(profile)
+                else:
+                    profile.date_of_birth = parsed_dob
+                self._db.flush()
                 password_valid = True
                 user = self._ensure_ess_login_user(
                     employee=employee,

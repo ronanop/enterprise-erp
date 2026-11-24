@@ -33,7 +33,20 @@ from modules.ess.schemas import (
     EssFaceStatusResponse,
     EssFaceVerifyResponse,
     EssFaceEnabledBody,
+    EssFeedCommentCreate,
+    EssFeedCommentItem,
+    EssFeedLikeResponse,
+    EssDepartmentDirectoryItem,
+    EssEmployeeDirectoryItem,
+    EssFeedPostCaptionUpdate,
+    EssFeedPostCreate,
+    EssFeedPostItem,
     EssHolidayCalendarResponse,
+    EssTaskCompleteBody,
+    EssTaskCreate,
+    EssTaskItem,
+    EssTaskReassign,
+    EssTaskRequestRedoBody,
     EssKycResponse,
     EssLeaveBalanceResponse,
     EssLeaveRequestCreate,
@@ -78,7 +91,9 @@ from modules.ess.schemas import (
     EssWfhCreate,
     EssWfhResponse,
 )
+from modules.ess.feed_service import EssFeedService
 from modules.ess.service import EssService
+from modules.ess.task_service import EssTaskService
 from modules.foundation.domain.value_objects import TenantContext
 from shared.schemas import APIResponse
 
@@ -812,6 +827,310 @@ def list_announcements(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=EssService(db).list_announcements(ctx))
+
+
+@ess_router.get("/feed/posts", response_model=APIResponse[list[EssFeedPostItem]])
+def list_feed_posts(
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+    limit: Annotated[int, Query(ge=1, le=50)] = 30,
+    before_id: Annotated[UUID | None, Query()] = None,
+):
+    return APIResponse(
+        message="OK",
+        data=EssFeedService(db).list_posts(ctx, limit=limit, before_id=before_id),
+    )
+
+
+@ess_router.post("/feed/posts", response_model=APIResponse[EssFeedPostItem])
+def create_feed_post(
+    body: EssFeedPostCreate,
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Posted",
+        data=EssFeedService(db).create_post(ctx, body),
+    )
+
+
+@ess_router.get("/feed/posts/{post_id}/image")
+def download_feed_image(
+    post_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+    index: Annotated[int, Query(ge=0, le=4)] = 0,
+):
+    download = EssFeedService(db).resolve_image(ctx, post_id, index=index)
+    # ASCII-only filename — spaces/unicode in Content-Disposition break some clients
+    safe_name = quote(download.filename.replace('"', "").replace("\n", " "))
+    headers = {
+        "Content-Disposition": f"inline; filename*=UTF-8''{safe_name}",
+        "Cache-Control": "private, max-age=300",
+    }
+    return StreamingResponse(
+        BytesIO(download.content),
+        media_type=download.media_type or "application/octet-stream",
+        headers=headers,
+    )
+
+
+@ess_router.post(
+    "/feed/posts/{post_id}/like",
+    response_model=APIResponse[EssFeedLikeResponse],
+)
+def toggle_feed_like(
+    post_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=EssFeedService(db).toggle_like(ctx, post_id),
+    )
+
+
+@ess_router.get(
+    "/feed/posts/{post_id}/comments",
+    response_model=APIResponse[list[EssFeedCommentItem]],
+)
+def list_feed_comments(
+    post_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=EssFeedService(db).list_comments(ctx, post_id),
+    )
+
+
+@ess_router.post(
+    "/feed/posts/{post_id}/comments",
+    response_model=APIResponse[EssFeedCommentItem],
+)
+def add_feed_comment(
+    post_id: UUID,
+    body: EssFeedCommentCreate,
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Comment added",
+        data=EssFeedService(db).add_comment(ctx, post_id, body),
+    )
+
+
+@ess_router.patch(
+    "/feed/posts/{post_id}",
+    response_model=APIResponse[EssFeedPostItem],
+)
+def update_feed_post_caption(
+    post_id: UUID,
+    body: EssFeedPostCaptionUpdate,
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Updated",
+        data=EssFeedService(db).update_caption(ctx, post_id, body.caption),
+    )
+
+
+@ess_router.delete("/feed/posts/{post_id}", response_model=APIResponse[dict])
+def delete_feed_post(
+    post_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    EssFeedService(db).delete_post(ctx, post_id)
+    return APIResponse(message="Deleted", data={"id": str(post_id)})
+
+
+@ess_router.get(
+    "/employees",
+    response_model=APIResponse[list[EssEmployeeDirectoryItem]],
+)
+def search_ess_employees(
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+    q: Annotated[str, Query()] = "",
+    limit: Annotated[int, Query(ge=1, le=50)] = 30,
+    department_id: Annotated[UUID | None, Query()] = None,
+):
+    return APIResponse(
+        message="OK",
+        data=EssTaskService(db).search_employees(
+            ctx, q=q, limit=limit, department_id=department_id
+        ),
+    )
+
+
+@ess_router.get(
+    "/departments",
+    response_model=APIResponse[list[EssDepartmentDirectoryItem]],
+)
+def list_ess_departments(
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+    q: Annotated[str, Query()] = "",
+):
+    return APIResponse(
+        message="OK",
+        data=EssTaskService(db).list_departments(ctx, q=q),
+    )
+
+
+@ess_router.get("/tasks", response_model=APIResponse[list[EssTaskItem]])
+def list_ess_tasks(
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+    scope: Annotated[str, Query()] = "all",
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+):
+    if scope not in {"all", "assigned", "created"}:
+        scope = "all"
+    return APIResponse(
+        message="OK",
+        data=EssTaskService(db).list_tasks(ctx, scope=scope, limit=limit),
+    )
+
+
+@ess_router.post("/tasks", response_model=APIResponse[EssTaskItem])
+def create_ess_task(
+    body: EssTaskCreate,
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Task created",
+        data=EssTaskService(db).create_task(ctx, body),
+    )
+
+
+@ess_router.get("/tasks/{task_id}", response_model=APIResponse[EssTaskItem])
+def get_ess_task(
+    task_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=EssTaskService(db).get_task(ctx, task_id))
+
+
+@ess_router.post(
+    "/tasks/{task_id}/reassign",
+    response_model=APIResponse[EssTaskItem],
+)
+def reassign_ess_task(
+    task_id: UUID,
+    body: EssTaskReassign,
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Reassigned",
+        data=EssTaskService(db).reassign(ctx, task_id, body),
+    )
+
+
+@ess_router.post("/tasks/{task_id}/accept", response_model=APIResponse[EssTaskItem])
+def accept_ess_task(
+    task_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Accepted",
+        data=EssTaskService(db).accept(ctx, task_id),
+    )
+
+
+@ess_router.post("/tasks/{task_id}/decline", response_model=APIResponse[EssTaskItem])
+def decline_ess_task(
+    task_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Declined",
+        data=EssTaskService(db).decline(ctx, task_id),
+    )
+
+
+@ess_router.post("/tasks/{task_id}/start", response_model=APIResponse[EssTaskItem])
+def start_ess_task(
+    task_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Started",
+        data=EssTaskService(db).start(ctx, task_id),
+    )
+
+
+@ess_router.post("/tasks/{task_id}/complete", response_model=APIResponse[EssTaskItem])
+def complete_ess_task(
+    task_id: UUID,
+    body: EssTaskCompleteBody,
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Submitted for verification",
+        data=EssTaskService(db).complete(ctx, task_id, body),
+    )
+
+
+@ess_router.post(
+    "/tasks/{task_id}/assignees/{assignee_id}/verify",
+    response_model=APIResponse[EssTaskItem],
+)
+def verify_ess_task_assignee(
+    task_id: UUID,
+    assignee_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Verified",
+        data=EssTaskService(db).verify_assignee(ctx, task_id, assignee_id),
+    )
+
+
+@ess_router.post(
+    "/tasks/{task_id}/assignees/{assignee_id}/request-redo",
+    response_model=APIResponse[EssTaskItem],
+)
+def request_ess_task_redo(
+    task_id: UUID,
+    assignee_id: UUID,
+    body: EssTaskRequestRedoBody,
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Redo requested",
+        data=EssTaskService(db).request_redo(ctx, task_id, assignee_id, body),
+    )
+
+
+@ess_router.get("/tasks/{task_id}/proofs/{proof_id}/download")
+def download_ess_task_proof(
+    task_id: UUID,
+    proof_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    download = EssTaskService(db).resolve_proof_download(ctx, task_id, proof_id)
+    headers = {
+        "Content-Disposition": f'attachment; filename="{quote(download.filename)}"'
+    }
+    return StreamingResponse(
+        BytesIO(download.content or b""),
+        media_type=download.media_type,
+        headers=headers,
+    )
 
 
 @ess_router.get("/assets", response_model=APIResponse[list[EssAssetItem]])
