@@ -11,15 +11,29 @@ import { procurementUi } from "@/components/procurement/procurement-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { listProcurementInventory, createInvoiceGenerationTasks, listOrderReceiptBatches } from "@/services/procurement-service";
+import {
+  createInvoiceGenerationTasks,
+  listInvoiceGenerationTasksForOrder,
+  listOrderReceiptBatches,
+  listProcurementInventory,
+  type ProcInvoiceGenerationTask,
+} from "@/services/procurement-service";
 import { ApiClientError } from "@/services/api-client";
 import {
+  challanBillingTotals,
+  formatChallanItemsSummary,
   getDeliveryChallan,
   listDeliveryChallans,
   upsertDeliveryChallan,
   type DeliveryChallanRecord,
 } from "@/utils/delivery-challan-storage";
-import { invoiceAlreadyCreatedForChallan, invoiceNumberForDeliveryChallan } from "@/utils/grn-challan-pending";
+import {
+  addPendingGrnChallan,
+  invoiceAlreadyCreatedForChallan,
+  invoiceNumberForDeliveryChallan,
+  rememberBillingReceiptBatch,
+  upsertPendingGrnChallan,
+} from "@/utils/grn-challan-pending";
 import {
   buildDeliveryStatusExportRows,
   exportDeliveryStatusXlsx,
@@ -30,6 +44,7 @@ import {
   deliveryStatusRowFromChallan,
   deliveryStatusUiMode,
   shipmentStatusBadgeVariant,
+  upsertDeliveryChallanBilling,
   type DeliveryStatusRow,
 } from "@/utils/delivery-status-storage";
 import {
@@ -44,6 +59,8 @@ type DeliveryStatusListRow = DeliveryStatusRow & {
   directBilling: boolean;
   /** Invoice number found on any challan / billing record of the same PO. */
   groupInvoice?: string;
+  /** My Jobs invoice task exists (pending or completed) for this PO / DC. */
+  invoiceJobOpen?: boolean;
 };
 
 function documentNumbers(row: DeliveryStatusListRow): { challan: string; invoice: string } {
@@ -111,12 +128,85 @@ function loadDeliveryStatusRows(): DeliveryStatusListRow[] {
   return collapseRowsByPo(rows);
 }
 
-async function enrichDeliveryStatusGrnNumbers(
+function pickAccountsInvoiceTask(
+  tasks: ProcInvoiceGenerationTask[],
+  challan: DeliveryChallanRecord | null,
+): ProcInvoiceGenerationTask | null {
+  if (tasks.length === 0) return null;
+  const batchIds = new Set(
+    (challan?.selectedGrnKeys || [])
+      .map((key) => key.trim())
+      .filter((key) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          key,
+        ),
+      ),
+  );
+  const matching = batchIds.size
+    ? tasks.filter((task) => batchIds.has(String(task.receipt_batch_id || "").trim()))
+    : tasks;
+  const pool = matching.length > 0 ? matching : tasks;
+  const completed = pool.find(
+    (task) =>
+      String(task.status || "").toLowerCase() === "completed" &&
+      Boolean(String(task.invoice_number || "").trim()),
+  );
+  if (completed) return completed;
+  return pool.find((task) => String(task.status || "").toLowerCase() === "pending") || pool[0] || null;
+}
+
+function rememberCompletedInvoiceLocally(
+  challan: DeliveryChallanRecord,
+  task: ProcInvoiceGenerationTask,
+): void {
+  const invoiceNumber = String(task.invoice_number || "").trim();
+  if (!invoiceNumber || /^DC\//i.test(invoiceNumber)) return;
+  const invoiceDate = String(task.invoice_date || "").trim().slice(0, 10);
+  const qty = Number(task.invoice_quantity ?? task.suggested_quantity) || 0;
+  upsertDeliveryChallanBilling({
+    challanId: challan.id,
+    billStatus: "fully_billed",
+    billedQuantity: qty > 0 ? String(qty) : "0",
+    billInvoiceNumber: invoiceNumber,
+    billInvoiceDate: invoiceDate || undefined,
+  });
+  const batchKey = `dc-invoice:${challan.id}`;
+  upsertPendingGrnChallan({
+    orderId: challan.orderId || challan.id,
+    batchKey,
+    grnNumber: challan.selectedGrnNumbers.join(", ") || task.grn_number || "-",
+    purchaseOrderNumber: challan.purchaseOrderNumber,
+    vendorName: challan.vendorName,
+    customerName: challan.customerName,
+    itemsSummary: formatChallanItemsSummary(challan.lines),
+    kind: "billing",
+    sourceChallanId: challan.id,
+    source: "grn",
+    status: "saved",
+    docNumber: invoiceNumber,
+    docDate: invoiceDate || undefined,
+  });
+  const receiptBatchId = String(task.receipt_batch_id || "").trim();
+  if (receiptBatchId) {
+    rememberBillingReceiptBatch(
+      {
+        id: batchKey,
+        orderId: challan.orderId || challan.id,
+        batchKey,
+        kind: "billing",
+      },
+      receiptBatchId,
+    );
+  }
+}
+
+async function enrichDeliveryStatusRows(
   rows: DeliveryStatusListRow[],
 ): Promise<DeliveryStatusListRow[]> {
+  let withGrn = rows;
   try {
     const inventory = await listProcurementInventory();
-    return rows.map((row) => {
+    withGrn = rows.map((row) => {
       const challan = getDeliveryChallan(row.challanId);
       if (!challan) return row;
       const numbers = resolveChallanDisplayGrnNumbers(challan, inventory);
@@ -135,8 +225,57 @@ async function enrichDeliveryStatusGrnNumbers(
       return { ...row, grnSummary: label };
     });
   } catch {
-    return rows;
+    withGrn = rows;
   }
+
+  const orderIds = [
+    ...new Set(
+      withGrn
+        .map((row) => (row.orderId || "").trim())
+        .filter(Boolean),
+    ),
+  ];
+  const tasksByOrder = new Map<string, ProcInvoiceGenerationTask[]>();
+  await Promise.all(
+    orderIds.map(async (orderId) => {
+      try {
+        tasksByOrder.set(orderId, await listInvoiceGenerationTasksForOrder(orderId));
+      } catch {
+        tasksByOrder.set(orderId, []);
+      }
+    }),
+  );
+
+  return withGrn.map((row) => {
+    const challan = getDeliveryChallan(row.challanId);
+    const orderId = (row.orderId || "").trim();
+    const tasks = tasksByOrder.get(orderId) || [];
+    const task = pickAccountsInvoiceTask(tasks, challan);
+    const invoiceNumber = String(task?.invoice_number || "").trim();
+    const completed =
+      Boolean(task) &&
+      String(task?.status || "").toLowerCase() === "completed" &&
+      Boolean(invoiceNumber) &&
+      !/^DC\//i.test(invoiceNumber);
+    if (completed && challan) {
+      rememberCompletedInvoiceLocally(challan, task!);
+    }
+    const localInvoice = challan ? invoiceNumberForDeliveryChallan(challan) : "";
+    return {
+      ...row,
+      groupInvoice: completed
+        ? invoiceNumber
+        : localInvoice || row.groupInvoice || "",
+      invoiceJobOpen:
+        Boolean(task) ||
+        Boolean(challan && invoiceAlreadyCreatedForChallan(challan)) ||
+        Boolean(localInvoice) ||
+        completed,
+      billInvoiceNumber: completed
+        ? invoiceNumber
+        : row.billInvoiceNumber,
+    };
+  });
 }
 
 export function DeliveryStatusListPage() {
@@ -157,7 +296,7 @@ export function DeliveryStatusListPage() {
     setFlash(consumeDeliveryStatusFlash());
     const base = loadDeliveryStatusRows();
     setRows(base);
-    void enrichDeliveryStatusGrnNumbers(base).then(setRows);
+    void enrichDeliveryStatusRows(base).then(setRows);
   }, [version]);
 
   const filtered = useMemo(() => {
@@ -225,20 +364,56 @@ export function DeliveryStatusListPage() {
     setExportError(null);
     setInvoiceNotice(null);
     try {
+      const totals = challanBillingTotals(challan.lines);
+      const itemsSummary = challan.lines
+        .map((line) => {
+          const label = (line.itemName || line.product || "")
+            .replace(/^\[quote:[^\]]+\]\s*/i, "")
+            .trim();
+          if (!label) return "";
+          const qty = String(line.quantitySent || "").trim() || "0";
+          return `${label} (${qty})`;
+        })
+        .filter(Boolean)
+        .join(", ");
       await createInvoiceGenerationTasks({
         order_id: challan.orderId,
         receipt_batch_id: batchId,
-        items_summary: challan.lines
-          .map((line) => (line.itemName || line.product || "").replace(/^\[quote:[^\]]+\]\s*/i, "").trim())
-          .filter(Boolean)
-          .join(", "),
+        items_summary: itemsSummary,
         vendor_name: challan.vendorName,
         customer_name: challan.customerName,
         grn_number: challan.selectedGrnNumbers.join(", ") || undefined,
+        billing_quantity: totals.quantity > 0 ? totals.quantity : undefined,
+        billing_amount: totals.amount > 0 ? totals.amount : undefined,
       });
+      const batchKey = `dc-invoice:${challan.id}`;
+      if (!invoiceAlreadyCreatedForChallan(challan)) {
+        addPendingGrnChallan({
+          orderId: challan.orderId,
+          batchKey,
+          grnNumber: challan.selectedGrnNumbers.join(", ") || "-",
+          purchaseOrderNumber: challan.purchaseOrderNumber,
+          vendorName: challan.vendorName,
+          customerName: challan.customerName,
+          itemsSummary,
+          kind: "billing",
+          sourceChallanId: challan.id,
+          source: "grn",
+        });
+      }
+      rememberBillingReceiptBatch(
+        {
+          id: batchKey,
+          orderId: challan.orderId,
+          batchKey,
+          kind: "billing",
+        },
+        batchId,
+      );
       setInvoiceNotice(
         "Invoice generation was sent to the Invoice generation user. It appears in their My Jobs.",
       );
+      load();
     } catch (err) {
       const detail =
         err instanceof ApiClientError
@@ -392,7 +567,13 @@ export function DeliveryStatusListPage() {
                           {(() => {
                             const source = getDeliveryChallan(row.challanId);
                             if (!source || source.grnKind === "billing") return null;
-                            if (invoiceAlreadyCreatedForChallan(source)) return null;
+                            if (
+                              row.invoiceJobOpen ||
+                              documentNumbers(row).invoice ||
+                              invoiceAlreadyCreatedForChallan(source)
+                            ) {
+                              return null;
+                            }
                             return (
                               <Button
                                 type="button"
@@ -413,7 +594,7 @@ export function DeliveryStatusListPage() {
                             );
                           })()}
                         </>
-                      ) : row.directBilling ? null : (
+                      ) : (
                         <Link
                           href={deliveryStatusUpdateHref(row.challanId)}
                           className={cn(

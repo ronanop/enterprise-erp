@@ -232,7 +232,36 @@ export function formatChallanItemsSummary(lines: DeliveryChallanLine[]): string 
     const label = (items[0].itemName || "").trim() || (items[0].product || "").trim() || "Item";
     return `${label} (${items[0].quantitySent || "0"})`;
   }
-  return `${items.length} items`;
+  return items
+    .map((ln) => {
+      const label = (ln.itemName || "").trim() || (ln.product || "").trim() || "Item";
+      const qty = String(ln.quantitySent || "0").trim() || "0";
+      return `${label} (${qty})`;
+    })
+    .join(", ")
+    .slice(0, 500);
+}
+
+/** Qty and amount for invoice generation from DC / billing challan lines. */
+export function challanBillingTotals(lines: DeliveryChallanLine[]): {
+  quantity: number;
+  amount: number;
+} {
+  let quantity = 0;
+  let amount = 0;
+  for (const line of lines) {
+    const qty = Number.parseFloat(String(line.quantitySent ?? "").replace(/,/g, ""));
+    if (!Number.isFinite(qty) || qty <= 0) continue;
+    quantity += qty;
+    const rate = Number.parseFloat(String(line.rate ?? "").replace(/,/g, ""));
+    if (Number.isFinite(rate) && rate > 0) {
+      amount += qty * rate;
+    }
+  }
+  return {
+    quantity: Math.round(quantity * 1000) / 1000,
+    amount: Math.round(amount * 100) / 100,
+  };
 }
 
 export function emptyChallanLine(): DeliveryChallanLine {

@@ -91,7 +91,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
     if (!mounted || checking || authed) return;
     const nextPath = safeNextPath(pathname, searchParams.toString());
     const next = nextPath ? `?next=${encodeURIComponent(nextPath)}` : "";
-    router.replace(`/login${next}`);
+    const loginBase =
+      pathname === "/admin" || (pathname?.startsWith("/admin/") ?? false)
+        ? "/admin-login"
+        : "/login";
+    router.replace(`${loginBase}${next}`);
   }, [pathname, searchParams, router, mounted, checking, authed]);
 
   // Temporary passwords (issued by an ERP admin) must be replaced before using the ERP.

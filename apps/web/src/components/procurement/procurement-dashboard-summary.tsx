@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import {
   BarChart3,
   Boxes,
-  ClipboardList,
   IndianRupee,
   PackageCheck,
   PackageOpen,
@@ -622,8 +621,8 @@ function InventoryStat({
 
 export function ProcurementDashboardSummary({
   loading,
-  openOvfCount,
-  holdOvfCount,
+  openOvfCount: _openOvfCount,
+  holdOvfCount: _holdOvfCount,
   openPoCount,
   poBucketCounts,
   inventorySummary,
@@ -635,15 +634,9 @@ export function ProcurementDashboardSummary({
   poBucketCounts: PoBucketCounts;
   inventorySummary?: ProcurementInventoryStockSummary | null;
 }) {
-  const openOvfIncludingHold = openOvfCount + holdOvfCount;
+  void _openOvfCount;
+  void _holdOvfCount;
   const cards: SummaryCard[] = [
-    {
-      label: "OPEN OVF",
-      value: openOvfIncludingHold.toLocaleString("en-IN"),
-      href: "/procurement/scm?filter=open",
-      icon: ClipboardList,
-      tint: "amber",
-    },
     {
       label: "OPEN PO",
       value: openPoCount.toLocaleString("en-IN"),
@@ -669,12 +662,6 @@ export function ProcurementDashboardSummary({
 
   const histogram: HistRow[] = [
     {
-      key: "ovf",
-      name: "Open OVF",
-      count: openOvfIncludingHold,
-      href: "/procurement/scm?filter=open",
-    },
-    {
       key: "open",
       name: PO_OVERVIEW_BUCKET_LABELS.open,
       count: poBucketCounts.open,
@@ -698,7 +685,7 @@ export function ProcurementDashboardSummary({
     <div className="space-y-4">
       <section
         aria-label="Procurement overview"
-        className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-5"
+        className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 xl:gap-5"
       >
         {cards.map((card) => (
           <KpiCard key={card.label} {...card} loading={loading} />

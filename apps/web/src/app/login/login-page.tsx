@@ -97,7 +97,17 @@ export default function LoginPage() {
   }
 
   return (
-    <AuthCardShell description="Sign in with your work email ID or employee code.">
+    <AuthCardShell
+      description="Sign in with your work email ID or employee code."
+      footer={
+        <Link
+          href="/admin-login"
+          className="cursor-pointer font-medium text-primary underline-offset-2 transition-colors duration-200 hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Admin sign-in
+        </Link>
+      }
+    >
       <form className="space-y-5" onSubmit={(e) => void onSubmit(e)} noValidate>
         <AuthFormError message={error} />
 

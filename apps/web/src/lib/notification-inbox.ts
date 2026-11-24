@@ -1,4 +1,3 @@
-import { isHrPath } from "@/config/hr-nav";
 import { WORKSPACE_SIDEBARS } from "@/config/workspace-sidebars";
 
 export const NOTIFICATION_POLL_MS = 15_000;
@@ -93,7 +92,6 @@ export function mapInboxHref(href: string | null | undefined, kind: string): str
 
 /** Resolve which module's notifications the shell bell should show. */
 export function resolveNotificationModuleScope(pathname: string): NotificationModuleScope {
-  if (isHrPath(pathname)) return "hr";
   for (const entry of CUSTOM_ROOTS) {
     if (underRoot(pathname, entry.root)) return entry.scope;
   }

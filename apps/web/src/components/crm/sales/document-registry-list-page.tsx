@@ -4,7 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { FileStack } from "lucide-react";
 
-import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
+import {
+  CrmErrorBanner,
+  CrmListPanel,
+  CrmPage,
+  CrmSerialTd,
+  CrmSerialTh,
+  CRM_TABLE_HEAD_ROW,
+} from "@/components/crm/crm-ui";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { SalesStageBadge } from "@/components/crm/sales/sales-stage-badge";
@@ -186,6 +193,7 @@ export function DocumentRegistryListPage({
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
               <tr className={CRM_TABLE_HEAD_ROW}>
+                <CrmSerialTh />
                 <CrmSortableTh label="Document" sortKey="document" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Opportunity" sortKey="opportunity" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Stage" sortKey="stage" activeKey={sortBy} dir={sortDir} onSort={onSort} />
@@ -195,19 +203,20 @@ export function DocumentRegistryListPage({
             <tbody>
               {loading && sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
                     Loading…
                   </td>
                 </tr>
               ) : sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
                     No {meta.title.toLowerCase()} documents yet.
                   </td>
                 </tr>
               ) : (
-                sorted.map((row) => (
+                sorted.map((row, index) => (
                   <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
+                    <CrmSerialTd index={index} />
                     <td className="px-4 py-2.5 font-medium">
                       {row.attachmentId ? (
                         <button

@@ -2,6 +2,7 @@
 
 from modules.foundation.models.audit import AuditEvent, AuditLog
 from modules.foundation.models.config import CfgSetting
+from modules.foundation.models.hrms_user_profile import HrmsUserProfile
 from modules.foundation.models.notification import NtfDelivery, NtfEvent, NtfTemplate
 from modules.foundation.models.device_token import NtfDeviceToken
 from modules.foundation.models.security import (
@@ -22,6 +23,7 @@ __all__ = [
     "AuditEvent",
     "AuditLog",
     "CfgSetting",
+    "HrmsUserProfile",
     "NtfDelivery",
     "NtfEvent",
     "NtfTemplate",

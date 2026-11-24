@@ -1,10 +1,11 @@
 """SCM workspace routers - OVF queue, create vendor PO, GRN line updates."""
 
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from core.exceptions import AppException
-from fastapi import APIRouter, Depends, Query, status
+from core.exceptions import AppException, ValidationException
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -1017,6 +1018,31 @@ def create_invoice_generation_tasks(
 
 
 @scm_router.get(
+    "/invoice-generation-tasks",
+    response_model=APIResponse[list[ProcInvoiceGenerationTaskResponse]],
+)
+def list_invoice_generation_tasks(
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    status: str | None = Query(
+        default=None,
+        description="Optional status filter (pending|completed). Omit for recent tasks.",
+    ),
+    limit: int = Query(default=200, ge=1, le=500),
+) -> APIResponse[list[ProcInvoiceGenerationTaskResponse]]:
+    """Tenant-wide invoice tasks for Delivery → Billing queue sync."""
+    service = ProcInvoiceGenerationTaskService(db)
+    rows = service.list_for_tenant(ctx, status=status, limit=limit)
+    return APIResponse(
+        message="Invoice generation tasks retrieved",
+        data=[
+            ProcInvoiceGenerationTaskResponse.model_validate(payload)
+            for payload in service.serialize_many(ctx, rows)
+        ],
+    )
+
+
+@scm_router.get(
     "/invoice-generation-tasks/mine",
     response_model=APIResponse[list[ProcInvoiceGenerationTaskResponse]],
 )
@@ -1098,6 +1124,43 @@ def submit_invoice_generation_task(
         file_name=body.file_name,
         content_base64=body.content_base64,
         content_type=body.content_type,
+    )
+    db.commit()
+    return APIResponse(
+        message="Invoice details saved",
+        data=ProcInvoiceGenerationTaskResponse.model_validate(service.serialize(ctx, row)),
+    )
+
+
+@scm_router.post(
+    "/invoice-generation-tasks/{task_id}/submit-upload",
+    response_model=APIResponse[ProcInvoiceGenerationTaskResponse],
+)
+async def submit_invoice_generation_task_upload(
+    task_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    invoice_number: Annotated[str, Form(min_length=1, max_length=80)],
+    invoice_date: Annotated[date, Form()],
+    file: Annotated[UploadFile, File(description="Invoice document")],
+    invoice_quantity: Annotated[float | None, Form()] = None,
+    invoice_amount: Annotated[float | None, Form()] = None,
+) -> APIResponse[ProcInvoiceGenerationTaskResponse]:
+    """Multipart submit — avoids huge base64 JSON through the Next.js proxy."""
+    raw = await file.read()
+    if not raw:
+        raise ValidationException("Invoice document attachment is required")
+    service = ProcInvoiceGenerationTaskService(db)
+    row = service.submit(
+        ctx,
+        task_id,
+        invoice_number=invoice_number,
+        invoice_date=invoice_date,
+        invoice_quantity=invoice_quantity,
+        invoice_amount=invoice_amount,
+        file_name=file.filename or "invoice",
+        content_bytes=raw,
+        content_type=file.content_type,
     )
     db.commit()
     return APIResponse(
@@ -1553,6 +1616,7 @@ def list_receipt_batch_attachments(
                 file_name=r.file_name,
                 content_type=r.content_type,
                 size=r.size,
+                category=getattr(r, "category", None),
             )
             for r in rows
         ],
@@ -1565,12 +1629,24 @@ def download_receipt_batch_attachment(
     ctx: Annotated[TenantContext, Depends(require_permission("procurement.grn:read"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    path, file_name, content_type = ScmHandoffService(db).resolve_receipt_batch_attachment_file(
-        ctx, attachment_id
-    )
-    return FileResponse(
-        path=path,
-        filename=file_name,
-        media_type=content_type or "application/octet-stream",
-        content_disposition_type="inline",
-    )
+    from fastapi.responses import Response
+
+    from shared.upload_safety import content_disposition_type
+
+    path, file_name, content_type, content = ScmHandoffService(
+        db
+    ).resolve_receipt_batch_attachment_file(ctx, attachment_id)
+    media = content_type or "application/octet-stream"
+    disposition = content_disposition_type(file_name, content_type)
+    # Buffer + Content-Length (same pattern as asset documents). StreamingResponse
+    # through the Next.js /api/v1 rewrite leaves the browser pending until timeout.
+    if content is None:
+        assert path is not None
+        content = path.read_bytes()
+    headers = {
+        "Content-Disposition": f'{disposition}; filename="{file_name}"',
+        "Content-Length": str(len(content)),
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "private, no-store",
+    }
+    return Response(content=content, media_type=media, headers=headers)

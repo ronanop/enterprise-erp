@@ -1001,7 +1001,7 @@ class ScmHandoffService:
         additional_charges: float = 0,
         finance_cost_pct: float = 0,
     ) -> dict:
-        """Queue freight / finance. Live CRM values change only after an approver accepts."""
+        """Apply freight on the OVF immediately. Finance % stays as stored (SCM UI is read-only)."""
         existing = self._orders.find_by_source(
             ctx,
             source_module=self.SOURCE_MODULE,
@@ -1012,11 +1012,14 @@ class ScmHandoffService:
             raise ConflictException(
                 "Freight and finance cannot be changed after a vendor purchase order is created"
             )
-        self._crm.request_scm_charge_change(
+        # Finance is display-only on the SCM OVF margin card — do not overwrite it here.
+        _ = finance_cost_pct
+        self._crm.update_scm_charges(
             ctx,
             ovf_id,
             freight=freight,
-            finance_cost_pct=finance_cost_pct,
+            additional_charges=additional_charges,
+            finance_cost_pct=None,
         )
         return self.get_ovf_preview(ctx, ovf_id)
 
@@ -3524,6 +3527,11 @@ class ScmHandoffService:
     def resolve_receipt_batch_attachment_file(
         self, ctx: TenantContext, attachment_id: UUID
     ) -> tuple:
+        """Return (path|None, file_name, content_type, content|None).
+
+        Supports both local disk and ``s3://`` object-storage uploads (My Jobs
+        invoice documents land in MinIO when object storage is enabled).
+        """
         from modules.crm.service.attachment_service import AttachmentService
 
         service = AttachmentService(self._db)
@@ -3531,7 +3539,8 @@ class ScmHandoffService:
         if row.entity_type != self.RECEIPT_BATCH_ATTACHMENT_ENTITY:
             raise NotFoundException("Attachment not found")
         self.get_receipt_batch(ctx, row.entity_id)
-        return service.resolve_file_path(ctx, attachment_id)
+        download = service.resolve_download(ctx, attachment_id)
+        return download.path, download.file_name, download.content_type, download.content
 
     def _receipt_batch_attachment_summaries(
         self,

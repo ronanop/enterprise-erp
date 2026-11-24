@@ -1,5 +1,9 @@
-import type { ReactNode } from "react";
+import { redirect } from "next/navigation";
 
-export default function HrLayout({ children }: { children: ReactNode }) {
-  return <div className="flex h-full min-h-0 w-full flex-1 flex-col">{children}</div>;
+/**
+ * HRMS UI was removed from this ERP — workforce lives in the separate HRMS app.
+ * Employee data is imported via Organization → Users → API settings.
+ */
+export default function HrLayout() {
+  redirect("/organization/users/hrms-api");
 }

@@ -847,8 +847,8 @@ export const erpModules: ErpModule[] = [
     key: "hr",
     title: "HRMS",
     description:
-      "Workforce lifecycle - profiles, employment, attendance, leave, performance, training, and separation.",
-    href: "/hr",
+      "Retired in this ERP — HRMS is a separate app. Import employees via Organization → Users → API settings.",
+    href: "/organization/users/hrms-api",
     group: "operations",
     icon: "hr",
     resources: [

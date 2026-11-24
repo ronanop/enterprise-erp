@@ -85,12 +85,16 @@ const groupTitles: Record<ErpModule["group"], string> = {
 /** Foundation, organization, and master data stay in the ERP shell; operations open in a new tab. */
 const IN_APP_NAV_GROUPS = new Set<ErpModule["group"]>(["foundation", "organization", "master-data"]);
 
-/** Modules kept in the registry but omitted from the ERP shell sidebar (and home Departments table). */
+/**
+ * Modules kept in the registry but omitted from the ERP shell sidebar (and home Departments table).
+ * HRMS (`hr`) + nested payroll/recruitment run as a separate app; ERP only fetches employees via API.
+ * Parent Assets shell is hidden — IT / Non-IT are assigned and shown separately.
+ */
 export const HIDDEN_FROM_SHELL_NAV = new Set<string>([
+  "hr",
   "recruitment",
   "payroll",
   "inventory",
-  // Parent Assets shell — IT / Non-IT are assigned and shown separately.
   "assets",
 ]);
 
@@ -125,6 +129,13 @@ export const navigation: NavGroup[] = [
         href: "/home",
         description: "Platform status and all modules",
         icon: LayoutDashboard,
+        inApp: true,
+      },
+      {
+        title: "Admin panel",
+        href: "/admin",
+        description: "Platform configuration and access control",
+        icon: Shield,
         inApp: true,
       },
       {

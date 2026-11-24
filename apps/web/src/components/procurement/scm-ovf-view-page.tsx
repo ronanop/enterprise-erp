@@ -17,12 +17,10 @@ import {
   FileDown,
   Package,
   PackageCheck,
-  PauseCircle,
   Percent,
   RefreshCw,
   ShoppingCart,
   Truck,
-  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -33,7 +31,6 @@ import { FinanceField } from "@/components/finance/journals/finance-form-field";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
   scmHoldDayCountBetweenDisplay,
@@ -45,7 +42,6 @@ import { ensureScmOvfPdfAttached } from "@/utils/scm-ovf-pdf-attach";
 import { ApiClientError } from "@/services/api-client";
 import {
   getScmOvfPreview,
-  holdScmOvf,
   listProcurementInventory,
   releaseScmOvfHold,
   updateScmOvfCharges,
@@ -639,11 +635,8 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
   const [poInventoryRows, setPoInventoryRows] = useState<ProcurementInventoryRow[]>([]);
   const [shipInventoryLoading, setShipInventoryLoading] = useState(false);
   const [inventorySelection, setInventorySelection] = useState<InventoryLineSelection>({});
-  const [holdDialogOpen, setHoldDialogOpen] = useState(false);
   const [unholdDialogOpen, setUnholdDialogOpen] = useState(false);
   const [unholdBusy, setUnholdBusy] = useState(false);
-  const [holdBusy, setHoldBusy] = useState(false);
-  const [holdRemark, setHoldRemark] = useState("");
   const [pdfBusy, setPdfBusy] = useState(false);
   const [ovfDocsRefreshKey, setOvfDocsRefreshKey] = useState(0);
   const ovfPdfAttachKeyRef = useRef<string | null>(null);
@@ -719,10 +712,10 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
     router.replace(`/procurement/scm/ovf/${ovfId}`, { scroll: false });
   }, [ovfId, router]);
 
-  async function saveCharges() {
+  async function saveFreight() {
     if (!preview || preview.purchase_order_id) return;
     if (preview.scm_on_hold) {
-      setError("Unhold this OVF before changing freight and finance.");
+      setError("Unhold this OVF before changing freight.");
       return;
     }
     setChargesBusy(true);
@@ -732,41 +725,15 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
       const row = await updateScmOvfCharges(ovfId, {
         freight: Number(freight) || 0,
         additional_charges: Number(preview.additional_charges) || 0,
-        finance_cost_pct: Number(financeCostPct) || 0,
+        finance_cost_pct: Number(preview.finance_cost_pct) || 0,
       });
       setPreview(row);
       syncChargesFromPreview(row);
-      setChargesBanner(
-        "Sent to the Freight & finance approvers. Current charges stay until they accept.",
-      );
+      setChargesBanner("Freight saved.");
     } catch (err) {
-      setError(
-        err instanceof ApiClientError ? err.message : "Failed to update freight and finance",
-      );
+      setError(err instanceof ApiClientError ? err.message : "Failed to update freight");
     } finally {
       setChargesBusy(false);
-    }
-  }
-
-  async function confirmHold() {
-    const remark = holdRemark.trim();
-    if (!remark) {
-      setError("Please enter a hold remark.");
-      return;
-    }
-    setHoldBusy(true);
-    setError(null);
-    try {
-      const row = await holdScmOvf(ovfId, remark);
-      setPreview(row);
-      syncChargesFromPreview(row);
-      setHoldDialogOpen(false);
-      setHoldRemark("");
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to put OVF on hold");
-      setHoldDialogOpen(false);
-    } finally {
-      setHoldBusy(false);
     }
   }
 
@@ -778,7 +745,7 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
       setPreview(row);
       syncChargesFromPreview(row);
       setUnholdDialogOpen(false);
-      setChargesBanner("OVF unheld. You can edit freight and finance or put on hold again if needed.");
+      setChargesBanner("OVF unheld. You can edit freight again.");
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to unhold OVF");
       setUnholdDialogOpen(false);
@@ -813,8 +780,6 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
   const chargesLockedByPo = Boolean(preview?.purchase_order_id);
   const chargesLockedByHold = Boolean(preview?.scm_on_hold || queueStatus === "hold");
   const chargesLocked = chargesLockedByPo || chargesLockedByHold;
-  const holdPending = preview?.scm_hold_request_status === "pending";
-  const canHoldOvf = Boolean(preview?.can_create_po && !preview?.scm_on_hold && !holdPending);
   const canUnholdOvf = Boolean(
     preview?.can_create_po && preview?.scm_on_hold && !chargesLockedByPo,
   );
@@ -1013,7 +978,7 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
               size="sm"
               className="cursor-pointer transition-colors duration-200"
               onClick={() => void load({ soft: Boolean(preview) })}
-              disabled={loading || holdBusy || unholdBusy || refreshing || pdfBusy}
+              disabled={loading || unholdBusy || refreshing || pdfBusy}
             >
               <RefreshCw
                 className={`mr-1.5 size-3.5 ${loading || refreshing ? "animate-spin" : ""}`}
@@ -1060,27 +1025,6 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
               >
                 Unhold
               </Button>
-            ) : null}
-            {canHoldOvf ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="cursor-pointer border-slate-300 bg-slate-50 text-slate-800 transition-colors duration-200 hover:bg-slate-100 hover:text-slate-900"
-                disabled={loading || holdBusy}
-                onClick={() => {
-                  setError(null);
-                  setHoldDialogOpen(true);
-                }}
-              >
-                <PauseCircle className="mr-1.5 size-3.5" />
-                Hold
-              </Button>
-            ) : null}
-            {holdPending ? (
-              <span className="inline-flex h-7 items-center rounded-md border border-amber-300 bg-amber-50 px-2.5 text-xs font-medium text-amber-900">
-                Hold pending approval
-              </span>
             ) : null}
           </div>
         }
@@ -1229,9 +1173,6 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
                 <DetailItem label="Customer name">
                   {textOrDash(preview.customer_name || preview.account_name)}
                 </DetailItem>
-                <DetailItem label="Customer number">
-                  {textOrDash(preview.customer_account_number)}
-                </DetailItem>
                 <DetailItem label="Recipient / contact">
                   {textOrDash(preview.billing_contact_person || preview.shipping_contact_person)}
                 </DetailItem>
@@ -1290,21 +1231,11 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
               <DetailItem label="Margin">{moneyPrecise(marginSummary.margin)}</DetailItem>
               <DetailItem label="Margin %">{pct(marginSummary.marginPct)}</DetailItem>
             </dl>
-          </SectionCard>
-
-          <SectionCard title="Freight & finance" icon={Wallet}>
-            <div className="rounded-md border border-sky-200 bg-sky-50/60 p-3">
+            <div className="mt-4 rounded-md border border-sky-200 bg-sky-50/60 p-3">
               {chargesLockedByHold ? (
                 <p className="mb-3 text-xs font-medium text-amber-900">
                   This OVF is on hold. Use <span className="font-semibold">Unhold</span> above
-                  before editing freight and finance.
-                </p>
-              ) : null}
-              {preview.scm_charge_request_status === "pending" ? (
-                <p className="mb-3 text-xs font-medium text-sky-950">
-                  Waiting for approval: freight ₹{Number(preview.scm_charge_request_freight) || 0} and
-                  finance {Number(preview.scm_charge_request_finance_pct) || 0}%. The values below stay
-                  in use until an approver accepts.
+                  before editing freight.
                 </p>
               ) : null}
               <div className="grid gap-3 sm:grid-cols-2">
@@ -1330,16 +1261,10 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
                     type="text"
                     inputMode="decimal"
                     value={financeCostPct}
-                    onFocus={(e) => e.currentTarget.select()}
-                    onChange={(e) => {
-                      const next = parseChargeInput(e.target.value);
-                      if (next === null) return;
-                      setFinanceCostPct(next);
-                    }}
-                    onBlur={() => setFinanceCostPct((v) => normalizeChargeOnBlur(v))}
-                    disabled={chargesBusy || chargesLocked}
-                    readOnly={chargesLocked}
-                    className={cn("h-8 tabular-nums", CHARGE_NO_SPINNER)}
+                    readOnly
+                    disabled
+                    className={cn("h-8 tabular-nums bg-muted/40", CHARGE_NO_SPINNER)}
+                    title="Finance cost is read-only on this page"
                   />
                 </FinanceField>
               </div>
@@ -1350,13 +1275,9 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
                     size="sm"
                     className="cursor-pointer transition-colors duration-200"
                     disabled={chargesBusy}
-                    onClick={() => void saveCharges()}
+                    onClick={() => void saveFreight()}
                   >
-                    {chargesBusy
-                      ? "Sending…"
-                      : preview.scm_charge_request_status === "pending"
-                        ? "Update approval request"
-                        : "Send for approval"}
+                    {chargesBusy ? "Saving…" : "Save freight"}
                   </Button>
                 </div>
               ) : null}
@@ -1449,37 +1370,6 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
               }
             />
           </div>
-        </div>
-      </ConfirmDialog>
-
-      <ConfirmDialog
-        open={holdDialogOpen}
-        title="Request hold approval?"
-        description="This sends the hold to the Hold approve / reject approvers. The OVF is held only after one of them accepts it."
-        confirmLabel="Send for approval"
-        busy={holdBusy}
-        contentClassName="max-w-lg"
-        onConfirm={() => void confirmHold()}
-        onCancel={() => {
-          if (!holdBusy) {
-            setHoldDialogOpen(false);
-            setHoldRemark("");
-          }
-        }}
-      >
-        <div className="mt-3 space-y-1.5">
-          <label htmlFor="scm-hold-remark" className="text-xs font-medium text-foreground">
-            Hold remark <span className="text-destructive">*</span>
-          </label>
-          <Textarea
-            id="scm-hold-remark"
-            value={holdRemark}
-            onChange={(e) => setHoldRemark(e.target.value)}
-            placeholder="e.g. Waiting for customer confirmation on delivery date"
-            rows={3}
-            className="resize-y text-sm"
-            disabled={holdBusy}
-          />
         </div>
       </ConfirmDialog>
 

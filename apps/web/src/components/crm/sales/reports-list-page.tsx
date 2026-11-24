@@ -9,6 +9,8 @@ import {
   CrmErrorBanner,
   CrmListPanel,
   CrmPage,
+  CrmSerialTd,
+  CrmSerialTh,
   CRM_TABLE_HEAD_CELL,
   CRM_TABLE_HEAD_ROW,
 } from "@/components/crm/crm-ui";
@@ -131,6 +133,7 @@ export function ReportsListPage() {
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
               <tr className={CRM_TABLE_HEAD_ROW}>
+                <CrmSerialTh />
                 <th className={CRM_TABLE_HEAD_CELL}>Report Name</th>
                 <th className={CRM_TABLE_HEAD_CELL}>Folder</th>
                 <th className={CRM_TABLE_HEAD_CELL}>Primary Module</th>
@@ -140,22 +143,23 @@ export function ReportsListPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
                     Loading reports…
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
                     No reports yet. Use “Create Report” to build one.
                   </td>
                 </tr>
               ) : (
-                filtered.map((row) => (
+                filtered.map((row, index) => (
                   <tr
                     key={row.id}
                     className="border-b border-border/50 transition-colors duration-200 last:border-0 hover:bg-accent/30"
                   >
+                    <CrmSerialTd index={index} />
                     <td className="px-4 py-2.5 font-medium text-foreground">
                       <Link
                         href={`/crm/reports/${row.id}`}

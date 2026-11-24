@@ -11,7 +11,6 @@ import {
   ClipboardList,
   Eye,
   Landmark,
-  Minus,
   Package,
   Plus,
   RefreshCw,
@@ -497,22 +496,6 @@ type PoLineRow = {
   inrRateSnapshot: string;
 };
 
-const PAYMENT_TERM_PRESETS = [
-  "Net 15 days",
-  "Net 30 days",
-  "Net 45 days",
-  "Net 60 days",
-  "Net 90 days",
-  "Due on receipt",
-] as const;
-
-const PAYMENT_TERMS_CUSTOM = "__custom__";
-
-function paymentTermsDaysValue(terms: string | null | undefined): string {
-  const match = /^Net\s+(\d+)\s+days$/i.exec((terms || "").trim());
-  return match?.[1] ?? "";
-}
-
 const TAX_OPTIONS = ["0", "5", "12", "18", "28"] as const;
 
 const NO_SPINNER =
@@ -715,8 +698,6 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
   const distributorParam = searchParams.get("distributor");
   const distributorStateParam = (searchParams.get("state") || "").trim();
   const shippingMenuRef = useRef<HTMLDivElement>(null);
-  const paymentTermsMenuRef = useRef<HTMLDivElement>(null);
-  const paymentTermsInputRef = useRef<HTMLInputElement>(null);
   const vendorAddressMenuRef = useRef<HTMLDivElement>(null);
   const ovfPdfAttachKeyRef = useRef<string | null>(null);
   const [preview, setPreview] = useState<ScmOvfPreview | null>(null);
@@ -726,7 +707,6 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [shippingMenuOpen, setShippingMenuOpen] = useState(false);
-  const [paymentTermsMenuOpen, setPaymentTermsMenuOpen] = useState(false);
   const [vendorAddressMenuOpen, setVendorAddressMenuOpen] = useState(false);
   const [vendorAddressSearch, setVendorAddressSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -1107,7 +1087,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
           taxPercentage: current.taxPercentage || uniformSeed,
           financeAmount: current.financeAmount || "0",
           distiAmount: current.distiAmount || "0",
-          distiSign: current.distiSign || "plus",
+          distiSign: "plus",
           foreignAmount:
             current.foreignAmount !== "0"
               ? current.foreignAmount
@@ -1287,14 +1267,11 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
   }, [preview]);
 
   useEffect(() => {
-    if (!shippingMenuOpen && !paymentTermsMenuOpen && !vendorAddressMenuOpen) return;
+    if (!shippingMenuOpen && !vendorAddressMenuOpen) return;
     function onPointerDown(event: MouseEvent) {
       const target = event.target as Node;
       if (shippingMenuOpen && !shippingMenuRef.current?.contains(target)) {
         setShippingMenuOpen(false);
-      }
-      if (paymentTermsMenuOpen && !paymentTermsMenuRef.current?.contains(target)) {
-        setPaymentTermsMenuOpen(false);
       }
       if (vendorAddressMenuOpen && !vendorAddressMenuRef.current?.contains(target)) {
         setVendorAddressMenuOpen(false);
@@ -1303,7 +1280,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
     }
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
-  }, [shippingMenuOpen, paymentTermsMenuOpen, vendorAddressMenuOpen]);
+  }, [shippingMenuOpen, vendorAddressMenuOpen]);
 
   useEffect(() => {
     if (!vendorAddressMenuOpen) setVendorAddressSearch("");
@@ -2566,117 +2543,13 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                 />
               </PoField>
               <PoField label="Payment terms">
-                <div ref={paymentTermsMenuRef} className="space-y-1.5">
-                  <div className="flex flex-wrap items-stretch gap-2">
-                    <div className="relative min-w-0 flex-1">
-                      <div className="flex h-8 overflow-hidden rounded-lg border border-input focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
-                        <Input
-                          ref={paymentTermsInputRef}
-                          value={form.paymentTerms ?? ""}
-                          readOnly
-                          className="h-8 min-w-0 flex-1 cursor-default rounded-none border-0 bg-muted/30 shadow-none focus-visible:ring-0"
-                          placeholder="e.g. Net 15 days or Due on receipt"
-                          aria-label="Payment terms"
-                          autoComplete="off"
-                        />
-                        <button
-                          type="button"
-                          disabled
-                          aria-haspopup="listbox"
-                          aria-expanded={paymentTermsMenuOpen}
-                          aria-label="Payment terms presets"
-                          onClick={() => setPaymentTermsMenuOpen((open) => !open)}
-                          className={cn(
-                            "flex h-8 w-9 shrink-0 cursor-pointer items-center justify-center border-l border-input bg-transparent text-muted-foreground transition-colors duration-200",
-                            "hover:bg-muted/40 hover:text-foreground",
-                            disabled && "cursor-not-allowed opacity-50",
-                          )}
-                        >
-                          <ChevronDown
-                            className={cn(
-                              "size-4 transition-transform duration-200",
-                              paymentTermsMenuOpen && "rotate-180",
-                            )}
-                          />
-                        </button>
-                      </div>
-                      {paymentTermsMenuOpen && !disabled ? (
-                        <ul
-                          role="listbox"
-                          className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border bg-card p-1 shadow-md"
-                        >
-                          {PAYMENT_TERM_PRESETS.map((preset) => {
-                            const selected = form.paymentTerms === preset;
-                            return (
-                              <li key={preset} role="option" aria-selected={selected}>
-                                <button
-                                  type="button"
-                                  onMouseDown={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setField("paymentTerms", preset);
-                                    setPaymentTermsMenuOpen(false);
-                                  }}
-                                  className={cn(
-                                    "flex w-full cursor-pointer rounded-md px-2.5 py-1.5 text-left text-sm transition-colors duration-200",
-                                    selected
-                                      ? "bg-sky-50 font-medium text-sky-900"
-                                      : "text-foreground hover:bg-muted/60",
-                                  )}
-                                >
-                                  {preset}
-                                </button>
-                              </li>
-                            );
-                          })}
-                          <li role="option" aria-selected={false}>
-                            <button
-                              type="button"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setPaymentTermsMenuOpen(false);
-                                window.setTimeout(() => paymentTermsInputRef.current?.focus(), 0);
-                              }}
-                              className="flex w-full cursor-pointer rounded-md px-2.5 py-1.5 text-left text-sm text-foreground transition-colors duration-200 hover:bg-muted/60"
-                              data-value={PAYMENT_TERMS_CUSTOM}
-                            >
-                              Custom…
-                            </button>
-                          </li>
-                        </ul>
-                      ) : null}
-                    </div>
-                    <div className="flex h-8 w-[7.5rem] shrink-0 overflow-hidden rounded-lg border border-input focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
-                      <Input
-                        type="number"
-                        min={1}
-                        step={1}
-                        inputMode="numeric"
-                        readOnly
-                        value={paymentTermsDaysValue(form.paymentTerms)}
-                        onChange={(e) => {
-                          const raw = e.target.value.replace(/[^\d]/g, "");
-                          if (!raw) {
-                            setField("paymentTerms", "");
-                            return;
-                          }
-                          setField("paymentTerms", `Net ${Number(raw)} days`);
-                        }}
-                        className={cn(
-                          "h-8 min-w-0 flex-1 rounded-none border-0 bg-transparent px-2 text-sm shadow-none focus-visible:ring-0",
-                          NO_SPINNER,
-                        )}
-                        placeholder="Days"
-                        aria-label="Custom payment days"
-                        title="Set custom net days"
-                      />
-                      <span className="flex shrink-0 items-center border-l border-input px-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                        days
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                <Input
+                  value={form.paymentTerms ?? ""}
+                  readOnly
+                  className="h-8 cursor-default bg-muted/30 font-medium text-foreground"
+                  placeholder="—"
+                  aria-label="Payment terms"
+                />
               </PoField>
               <PoField label="OVF number">
                 <Input
@@ -2987,58 +2860,6 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
               <div className="flex flex-wrap items-end justify-end gap-4">
                 <div className="flex flex-col items-end gap-2">
                   <div className="flex items-center justify-end gap-2">
-                    <div
-                      role="group"
-                      aria-label="Disti sign"
-                      className={cn(
-                        "relative flex h-8 w-[4.25rem] shrink-0 rounded-full border border-border bg-muted/40 p-0.5",
-                        disabled && "opacity-50",
-                      )}
-                    >
-                      <span
-                        aria-hidden
-                        className={cn(
-                          "pointer-events-none absolute top-0.5 bottom-0.5 w-[calc(50%-2px)] rounded-full shadow-sm transition-all duration-200 ease-out",
-                          form.distiSign === "plus"
-                            ? "left-0.5 bg-emerald-500"
-                            : "left-[calc(50%+1px)] bg-rose-500",
-                        )}
-                      />
-                      <button
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => setField("distiSign", "plus")}
-                        className={cn(
-                          "relative z-10 flex h-full flex-1 cursor-pointer items-center justify-center rounded-full transition-colors duration-200",
-                          form.distiSign === "plus"
-                            ? "text-white"
-                            : "text-muted-foreground hover:text-foreground",
-                          disabled && "cursor-not-allowed",
-                        )}
-                        aria-pressed={form.distiSign === "plus"}
-                        aria-label="Increase unit rate by Disti %"
-                        title="Increase unit rate by Disti %"
-                      >
-                        <Plus className="size-3.5" aria-hidden />
-                      </button>
-                      <button
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => setField("distiSign", "minus")}
-                        className={cn(
-                          "relative z-10 flex h-full flex-1 cursor-pointer items-center justify-center rounded-full transition-colors duration-200",
-                          form.distiSign === "minus"
-                            ? "text-white"
-                            : "text-muted-foreground hover:text-foreground",
-                          disabled && "cursor-not-allowed",
-                        )}
-                        aria-pressed={form.distiSign === "minus"}
-                        aria-label="Decrease unit rate by Disti %"
-                        title="Decrease unit rate by Disti %"
-                      >
-                        <Minus className="size-3.5" aria-hidden />
-                      </button>
-                    </div>
                     <label className="w-[5.5rem] shrink-0 text-right text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       Disti margin
                     </label>

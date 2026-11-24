@@ -113,21 +113,19 @@ class ProcInvoiceGenerationTaskService:
             ]
             if parsed:
                 bill_qty = round(sum(parsed), 4)
+        scm_qty, scm_amt = self.billing_totals_for_batch(
+            ctx,
+            order_id=order_id,
+            receipt_batch_id=receipt_batch_id,
+        )
+        if (bill_qty is None or bill_qty <= 0) and scm_qty > 1e-9:
+            bill_qty = scm_qty
+            if bill_amt is None or bill_amt <= 0:
+                bill_amt = scm_amt
         if bill_qty is not None and (bill_amt is None or bill_amt <= 0):
-            _, estimated = self.billing_totals_for_batch(
-                ctx,
-                order_id=order_id,
-                receipt_batch_id=receipt_batch_id,
-            )
-            if estimated > 0 and bill_qty > 0:
+            if scm_amt > 0 and bill_qty > 0 and scm_qty > 1e-9:
                 # Scale batch estimate when selection qty differs from full GRN bill qty.
-                scm_qty, _ = self.billing_totals_for_batch(
-                    ctx,
-                    order_id=order_id,
-                    receipt_batch_id=receipt_batch_id,
-                )
-                if scm_qty > 1e-9:
-                    bill_amt = round(estimated * (bill_qty / scm_qty), 2)
+                bill_amt = round(scm_amt * (bill_qty / scm_qty), 2)
             if bill_amt is None or bill_amt <= 0:
                 # Estimate from PO line unit cost × selected qty.
                 active_lines = [
@@ -326,6 +324,16 @@ class ProcInvoiceGenerationTaskService:
             raise NotFoundException("Purchase order not found")
         return self._repo.list_for_order(ctx, order_header_id=order_id)
 
+    def list_for_tenant(
+        self,
+        ctx: TenantContext,
+        *,
+        status: str | None = None,
+        limit: int = 200,
+    ) -> list[ProcInvoiceGenerationTask]:
+        """SCM Billing sync: open / recent invoice tasks (not assignee-scoped)."""
+        return self._repo.list_for_tenant(ctx, status=status, limit=limit)
+
     def get_for_batch_prefill(
         self,
         ctx: TenantContext,
@@ -382,6 +390,16 @@ class ProcInvoiceGenerationTaskService:
         )
         by_id = {ln.id: ln for ln in order_lines}
 
+        def _line_amount(order_line_id, bill_qty: float) -> float:
+            ol = by_id.get(order_line_id)
+            if ol is None:
+                return 0.0
+            ordered = float(getattr(ol, "quantity", 0) or 0)
+            line_total = float(getattr(ol, "line_total", 0) or 0)
+            unit_cost = float(getattr(ol, "unit_cost", 0) or 0)
+            unit_net = (line_total / ordered) if ordered > 1e-9 else unit_cost
+            return bill_qty * unit_net
+
         qty_total = 0.0
         amount_total = 0.0
         for bl in batch_lines:
@@ -392,14 +410,17 @@ class ProcInvoiceGenerationTaskService:
             if bill_qty <= 1e-9:
                 continue
             qty_total += bill_qty
-            ol = by_id.get(bl.order_line_id)
-            if ol is None:
-                continue
-            ordered = float(getattr(ol, "quantity", 0) or 0)
-            line_total = float(getattr(ol, "line_total", 0) or 0)
-            unit_cost = float(getattr(ol, "unit_cost", 0) or 0)
-            unit_net = (line_total / ordered) if ordered > 1e-9 else unit_cost
-            amount_total += bill_qty * unit_net
+            amount_total += _line_amount(bl.order_line_id, bill_qty)
+
+        # Stock / delivery-challan path: GRN wave often has billing_quantity = 0.
+        # Fall back to received qty so Accounts still sees totals on the job.
+        if qty_total <= 1e-9:
+            for bl in batch_lines:
+                recv_qty = float(getattr(bl, "quantity", 0) or 0)
+                if recv_qty <= 1e-9:
+                    continue
+                qty_total += recv_qty
+                amount_total += _line_amount(bl.order_line_id, recv_qty)
 
         return round(qty_total, 4), round(amount_total, 4)
 
@@ -478,8 +499,11 @@ class ProcInvoiceGenerationTaskService:
         invoice_amount: float | None = None,
         file_name: str | None = None,
         content_base64: str | None = None,
+        content_bytes: bytes | None = None,
         content_type: str | None = None,
     ) -> ProcInvoiceGenerationTask:
+        import base64
+
         task = self._repo.get(ctx, task_id)
         if task is None:
             raise NotFoundException("Invoice generation task not found")
@@ -494,7 +518,13 @@ class ProcInvoiceGenerationTaskService:
         number = invoice_number.strip()
         if not number:
             raise ConflictException("Invoice number is required")
-        if not (file_name or "").strip() or not (content_base64 or "").strip():
+        raw = content_bytes
+        if raw is None and (content_base64 or "").strip():
+            try:
+                raw = base64.b64decode(content_base64, validate=False)
+            except Exception as exc:  # noqa: BLE001
+                raise ConflictException("Invoice document is not valid base64") from exc
+        if not (file_name or "").strip() or not raw:
             raise ConflictException("Invoice document attachment is required")
 
         scm_qty, scm_amount = self.billing_totals_for_batch(
@@ -521,6 +551,10 @@ class ProcInvoiceGenerationTaskService:
         # Mirror completed invoice onto the Billing GRN batch for Billing/challan prefill.
         from modules.procurement.service.scm_handoff_service import ScmHandoffService
 
+        encoded = content_base64
+        if not (encoded or "").strip():
+            encoded = base64.b64encode(raw).decode("ascii")
+
         ScmHandoffService(self._db).update_receipt_batch_vendor_invoice(
             ctx,
             task.receipt_batch_id,
@@ -529,7 +563,7 @@ class ProcInvoiceGenerationTaskService:
             vendor_invoice_quantity=float(qty),
             vendor_invoice_subtotal=float(amount),
             file_name=file_name,
-            content_base64=content_base64,
+            content_base64=encoded,
             content_type=content_type,
             branch_id=task.branch_id,
             company_id=task.company_id,

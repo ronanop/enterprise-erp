@@ -2,14 +2,12 @@ import type { ReactNode } from "react";
 
 import { AssetsModuleSidebar } from "@/components/assets/assets-module-sidebar";
 import { CrmSidebar } from "@/components/crm/crm-workspace-nav";
-import { HrSidebar } from "@/components/hr/hr-sidebar";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { WorkspaceModuleSidebar } from "@/components/layout/workspace-module-sidebar";
 import { MarketingSidebar } from "@/components/marketing/marketing-workspace-nav";
 import { ProcurementSidebar } from "@/components/procurement/procurement-workspace-nav";
 import { ProjectsSidebar } from "@/components/projects/projects-workspace-nav";
 import { ServiceSidebar } from "@/components/service/service-workspace-nav";
-import { isHrPath } from "@/config/hr-nav";
 import { WORKSPACE_SIDEBARS } from "@/config/workspace-sidebars";
 
 type SidebarEntry = { root: string; render: () => ReactNode };
@@ -43,8 +41,9 @@ type ShellSidebarInput = {
 };
 
 /**
- * Which left sidebar the route gets: `"hr"`, `"app"` (global rail), a module
+ * Which left sidebar the route gets: `"app"` (global rail), a module
  * workspace root such as `"/crm"`, or `null` for none.
+ * HRMS UI was removed from this ERP (separate app + employee API import only).
  */
 export function resolveShellSidebarKey({
   pathname,
@@ -52,16 +51,14 @@ export function resolveShellSidebarKey({
   hideSidebar = false,
 }: ShellSidebarInput): string | null {
   if (hideSidebar) return null;
-  if (isHrPath(pathname)) return "hr";
   if (!standalone) return "app";
   return MODULE_SIDEBARS.find((entry) => underRoot(pathname, entry.root))?.root ?? null;
 }
 
-/** Left sidebar for the current route. HR, module workspaces, and platform routes each get their rail. */
+/** Left sidebar for the current route. Module workspaces and platform routes each get their rail. */
 export function ShellSidebar(props: ShellSidebarInput) {
   const key = resolveShellSidebarKey(props);
   if (key === null) return null;
-  if (key === "hr") return <HrSidebar />;
   if (key === "app") return <AppSidebar />;
   return MODULE_SIDEBARS.find((entry) => entry.root === key)?.render() ?? null;
 }

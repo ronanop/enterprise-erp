@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClipboardList, Plus } from "lucide-react";
 
-import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
+import {
+  CrmErrorBanner,
+  CrmListPanel,
+  CrmPage,
+  CrmSerialTd,
+  CrmSerialTh,
+  CRM_TABLE_HEAD_ROW,
+} from "@/components/crm/crm-ui";
 import { FollowupFormDialog } from "@/components/crm/sales/followup-form-dialog";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
@@ -152,6 +159,7 @@ export function FollowupsListPage({
           <table className="w-full min-w-[960px] text-left text-sm">
             <thead>
               <tr className={CRM_TABLE_HEAD_ROW}>
+                <CrmSerialTh />
                 <CrmSortableTh label="Customer Name" sortKey="customer_name" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Date" sortKey="date" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Time" sortKey="time" activeKey={sortBy} dir={sortDir} onSort={onSort} />
@@ -164,19 +172,20 @@ export function FollowupsListPage({
             <tbody>
               {loading && sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
                     Loading…
                   </td>
                 </tr>
               ) : sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
                     No follow-ups yet.
                   </td>
                 </tr>
               ) : (
-                sorted.map((row) => (
+                sorted.map((row, index) => (
                   <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
+                    <CrmSerialTd index={index} />
                     <td className="px-4 py-2.5 font-medium">
                       {row.customer_name || "-"}
                       <div className="text-[11px] font-normal text-muted-foreground">

@@ -270,28 +270,73 @@ class NotificationRepository(TenantScopedRepository):
         event_types: list[str] | None = None,
         limit: int = 100,
     ) -> list[dict]:
-        """Recent SCM / delivery correspondence across all orders."""
-        types = event_types or [
-            "procurement.order_acknowledged",
-            "procurement.etd_reminder",
-            "procurement.delivery_date_shared",
-        ]
+        """Recent SCM / delivery correspondence across all orders.
+
+        Includes every ``procurement.*`` mail kind (PO to vendor, order processed,
+        acknowledgement, ETD chase, delivery date, dispatch), not only the three
+        reminder types — otherwise the Mails page looks like “failed only”.
+        """
+        type_filter = (
+            NtfEvent.event_type.in_(event_types)
+            if event_types
+            else NtfEvent.event_type.like("procurement.%")
+        )
         stmt = (
             select(NtfDelivery)
             .options(joinedload(NtfDelivery.event))
             .join(NtfEvent, NtfEvent.id == NtfDelivery.event_id)
             .where(
                 NtfDelivery.tenant_id == tenant_id,
-                NtfEvent.event_type.in_(types),
+                type_filter,
             )
             .order_by(NtfDelivery.id.desc())
             .limit(limit)
         )
         rows = list(self.db.scalars(stmt).unique().all())
+        order_ids: list[UUID] = []
+        for d in rows:
+            event = d.event
+            payload = event.payload_json if event and isinstance(event.payload_json, dict) else {}
+            raw_oid = payload.get("order_id")
+            if not raw_oid:
+                continue
+            try:
+                order_ids.append(UUID(str(raw_oid)))
+            except (TypeError, ValueError):
+                continue
+        po_by_order: dict[str, str] = {}
+        if order_ids:
+            from modules.procurement.models.order import ProcOrderHeader
+
+            uniq = list(dict.fromkeys(order_ids))
+            for order in self.db.scalars(
+                select(ProcOrderHeader).where(
+                    ProcOrderHeader.tenant_id == tenant_id,
+                    ProcOrderHeader.id.in_(uniq),
+                    ProcOrderHeader.is_deleted.is_(False),
+                )
+            ).all():
+                po = (order.company_po_number or order.document_number or "").strip()
+                if po:
+                    po_by_order[str(order.id)] = po
+
         result: list[dict] = []
         for d in rows:
             event = d.event
             payload = event.payload_json if event and isinstance(event.payload_json, dict) else {}
+            order_id = payload.get("order_id")
+            company_po = (payload.get("company_po_number") or "").strip() or None
+            if not company_po and order_id:
+                company_po = po_by_order.get(str(order_id))
+            kind = payload.get("kind")
+            if not kind and event and event.event_type:
+                # procurement.order_processed -> order_processed
+                prefix = "procurement."
+                kind = (
+                    event.event_type[len(prefix) :]
+                    if event.event_type.startswith(prefix)
+                    else event.event_type
+                )
             result.append(
                 {
                     "id": str(d.id),
@@ -306,9 +351,9 @@ class NotificationRepository(TenantScopedRepository):
                     "event_status": event.status if event else None,
                     "created_at": event.created_at.isoformat() if event and event.created_at else None,
                     "subject": payload.get("_subject"),
-                    "order_id": payload.get("order_id"),
-                    "company_po_number": payload.get("company_po_number"),
-                    "kind": payload.get("kind"),
+                    "order_id": order_id,
+                    "company_po_number": company_po,
+                    "kind": kind,
                 }
             )
         return result

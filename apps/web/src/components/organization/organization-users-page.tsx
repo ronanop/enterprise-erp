@@ -10,12 +10,13 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import Link from "next/link";
 import {
+  Cable,
   ChevronDown,
   Copy,
   Crown,
   KeyRound,
-  RefreshCw,
   ShieldCheck,
   Trash2,
   UserPlus,
@@ -47,14 +48,13 @@ import {
   issueTemporaryPassword,
   listFoundationUsers,
   revokeModuleAccess,
-  syncHrmsUsers,
   updateUserModules,
   type FoundationUser,
   type ModuleAccessRole,
   type TemporaryPassword,
 } from "@/services/foundation-users-service";
 
-type TableVariant = "erp" | "admin" | "member";
+type TableVariant = "erp" | "admin" | "member" | "synced";
 
 /** One table row: ERP admins have no moduleKey; admin/member rows are per module. */
 type AccessTableRow = {
@@ -199,6 +199,8 @@ function UsersTableCard({
   const open = expanded || Boolean(query.trim());
   const showModule = variant === "admin" || variant === "member";
   const colSpan = (showModule ? 4 : 3) + (canEdit ? 1 : 0);
+  const canAssign = variant === "admin" || variant === "member" || variant === "synced";
+  const canRemove = variant === "admin" || variant === "member";
 
   return (
     <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
@@ -276,14 +278,19 @@ function UsersTableCard({
                       className="border-b border-border/50 transition-colors duration-150 last:border-0 hover:bg-accent/30"
                     >
                       <td className="px-4 py-2.5 text-left">
-                        <div className="flex items-center gap-2.5">
+                        <Link
+                          href={`/organization/users/${user.id}`}
+                          className="group flex cursor-pointer items-center gap-2.5 rounded-md transition-colors duration-200 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                        >
                           <UserAvatar
                             displayName={user.display_name}
                             size="sm"
                             className="!size-8 !text-[10px]"
                           />
-                          <span className="font-medium text-foreground">{user.display_name}</span>
-                        </div>
+                          <span className="font-medium text-foreground transition-colors duration-200 group-hover:text-primary">
+                            {user.display_name}
+                          </span>
+                        </Link>
                       </td>
                       <td className="px-4 py-2.5 text-left font-mono text-xs text-muted-foreground">
                         {user.employee_code ?? "—"}
@@ -297,7 +304,7 @@ function UsersTableCard({
                       {canEdit ? (
                         <td className="px-4 py-2.5 text-left">
                           <div className="inline-flex gap-1.5">
-                            {variant !== "erp" ? (
+                            {canAssign ? (
                               <Button
                                 type="button"
                                 size="sm"
@@ -311,7 +318,7 @@ function UsersTableCard({
                                 Assign
                               </Button>
                             ) : null}
-                            {variant === "admin" || variant === "member" ? (
+                            {canRemove ? (
                               <Button
                                 type="button"
                                 size="sm"
@@ -452,7 +459,7 @@ function AssignAccessCard({
             Assign module access
           </p>
           <p className="text-xs text-muted-foreground">
-            HRMS onboarded employees ({users.length}). Sync from HRMS after onboard / offboard.
+            Employees from HRMS API ({users.length}). Fetch via API settings after onboard / offboard.
           </p>
         </div>
       </div>
@@ -574,14 +581,12 @@ export function OrganizationUsersPage({
   const erpAdmin = isErpAdmin(sessionUser?.userType);
   const [rows, setRows] = useState<FoundationUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [tempPassword, setTempPassword] = useState<TemporaryPassword | null>(null);
   const [busy, setBusy] = useState<{ userId: string; key: string } | null>(null);
   const [assignUserId, setAssignUserId] = useState("");
   const assignRef = useRef<HTMLDivElement>(null);
-  const autoSynced = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -595,30 +600,7 @@ export function OrganizationUsersPage({
     }
   }, []);
 
-  const runSync = useCallback(
-    async (manual: boolean) => {
-      setSyncing(true);
-      if (manual) setError(null);
-      try {
-        const result = await syncHrmsUsers();
-        // Always refresh the assign list so onboard / offboard changes appear immediately.
-        await load();
-        if (manual || result.created || result.linked || result.updated || result.deactivated) {
-          setNotice(
-            `HRMS sync: ${result.employee_count} onboarded employees · ${result.created} new logins · ` +
-            `${result.linked} linked · ${result.updated} updated · ${result.deactivated} deactivated.`,
-          );
-        }
-      } catch (err) {
-        if (manual) setError(formatApiError(err, "HRMS sync failed"));
-      } finally {
-        setSyncing(false);
-      }
-    },
-    [load],
-  );
-
-  // Drop a selected employee from Assign if HRMS sync removed them from the assignable set.
+  // Drop a selected employee from Assign if they are no longer assignable after a refresh.
   useEffect(() => {
     if (!assignUserId) return;
     const stillThere = rows.some(
@@ -634,12 +616,6 @@ export function OrganizationUsersPage({
   useEffect(() => {
     void load();
   }, [load]);
-
-  useEffect(() => {
-    if (!erpAdmin || autoSynced.current) return;
-    autoSynced.current = true;
-    void runSync(false);
-  }, [erpAdmin, runSync]);
 
   function mergeUser(updated: FoundationUser) {
     setRows((prev) =>
@@ -736,6 +712,16 @@ export function OrganizationUsersPage({
     () => sortByName(rows.filter((r) => r.hrms_valid && !isErpAdmin(r.user_type) && r.status !== "inactive")),
     [rows],
   );
+  const syncedUsers = useMemo(
+    () =>
+      sortAccessRows(
+        assignable.map((user) => ({
+          user,
+          moduleKey: null,
+        })),
+      ),
+    [assignable],
+  );
 
   const tableProps = {
     loading,
@@ -755,14 +741,15 @@ export function OrganizationUsersPage({
         actions={
           erpAdmin ? (
             <Button
+              asChild
               type="button"
               variant="outline"
-              className="h-9 cursor-pointer gap-1.5"
-              disabled={syncing}
-              onClick={() => void runSync(true)}
+              className="h-9 cursor-pointer gap-1.5 transition-colors duration-200"
             >
-              <RefreshCw className={cn("size-3.5", syncing && "animate-spin motion-reduce:animate-none")} />
-              {syncing ? "Syncing HRMS…" : "Sync from HRMS"}
+              <Link href="/organization/users/hrms-api">
+                <Cable className="size-3.5" />
+                API settings
+              </Link>
             </Button>
           ) : null
         }
@@ -832,6 +819,15 @@ export function OrganizationUsersPage({
 
       <UsersTableCard
         {...tableProps}
+        title={`Synced users (${syncedUsers.length})`}
+        icon={<UserRound className="size-4" />}
+        rows={syncedUsers}
+        emptyLabel="No HRMS employees synced yet. Use API settings → Sync employees."
+        variant="synced"
+        defaultOpen
+      />
+      <UsersTableCard
+        {...tableProps}
         title="ERP admins"
         icon={<Crown className="size-4" />}
         rows={erpAdmins}
@@ -845,7 +841,6 @@ export function OrganizationUsersPage({
         rows={moduleAdmins}
         emptyLabel="No module admins assigned yet."
         variant="admin"
-        defaultOpen
       />
       <UsersTableCard
         {...tableProps}

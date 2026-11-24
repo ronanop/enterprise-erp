@@ -21,6 +21,10 @@ export const NON_ASSIGNABLE_MODULE_KEYS = new Set([
   "master-data",
   // Parent Assets — assign IT Assets / Non-IT Assets submodules instead.
   "assets",
+  // HRMS is a separate app; ERP only imports employees via API.
+  "hr",
+  "recruitment",
+  "payroll",
 ]);
 
 type ModuleOption = {

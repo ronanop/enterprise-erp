@@ -6,6 +6,9 @@ const ADMIN_USER_TYPES = new Set(["super_admin", "tenant_admin"]);
 /** Sidebar groups / modules only ERP platform admins may open. */
 const ERP_ADMIN_ONLY_GROUPS = new Set(["foundation", "organization", "master-data"]);
 
+/** Modules no longer part of this ERP product surface (HRMS is a separate app). */
+const RETIRED_ERP_MODULE_KEYS = new Set(["hr", "recruitment", "payroll"]);
+
 export function isModuleAdmin(userType?: string): boolean {
   return Boolean(userType && ADMIN_USER_TYPES.has(userType));
 }
@@ -16,7 +19,7 @@ export function isErpAdmin(userType?: string): boolean {
 }
 
 export function allErpModuleKeys(): string[] {
-  return erpModules.map((m) => m.key);
+  return erpModules.map((m) => m.key).filter((key) => !RETIRED_ERP_MODULE_KEYS.has(key));
 }
 
 /** True when every ERP module is assigned as module-admin (All modules entitlement). */
@@ -33,6 +36,7 @@ const ASSET_PARENT_KEY = "assets";
 
 export function moduleKeyForHref(href: string): string | null {
   if (href === "/" || href === "/home" || href === "/my-jobs") return null;
+  if (href === "/admin" || href.startsWith("/admin/")) return null;
   // External absolute URLs (e.g. Feedback Microsoft Form) are not module-gated.
   if (/^https?:\/\//i.test(href)) return null;
   if (href === "/organization/users" || href.startsWith("/organization/")) {
@@ -92,6 +96,9 @@ export function canAccessHref(
   adminModuleKeys: string[] = [],
 ): boolean {
   if (href === "/" || href === "/home" || href === "/my-jobs") return true;
+  if (href === "/admin" || href.startsWith("/admin/")) {
+    return isErpAdmin(userType);
+  }
 
   const group = moduleGroupForHref(href);
   if (group && ERP_ADMIN_ONLY_GROUPS.has(group)) {

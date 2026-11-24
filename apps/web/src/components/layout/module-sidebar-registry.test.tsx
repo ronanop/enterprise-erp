@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/components/assets/assets-module-sidebar", () => ({ AssetsModuleSidebar: () => null }));
 vi.mock("@/components/crm/crm-workspace-nav", () => ({ CrmSidebar: () => null }));
-vi.mock("@/components/hr/hr-sidebar", () => ({ HrSidebar: () => null }));
 vi.mock("@/components/layout/app-sidebar", () => ({ AppSidebar: () => null }));
 vi.mock("@/components/layout/workspace-module-sidebar", () => ({
   WorkspaceModuleSidebar: () => null,
@@ -25,8 +24,8 @@ describe("resolveShellSidebarKey", () => {
     expect(resolveShellSidebarKey({ pathname: "/finance", standalone: true })).toBe("/finance");
   });
 
-  it("uses the HR rail on /hr and the global rail on platform routes", () => {
-    expect(resolveShellSidebarKey({ pathname: "/hr/leave", standalone: true })).toBe("hr");
+  it("uses the global rail on platform routes (HRMS UI removed from this ERP)", () => {
+    expect(resolveShellSidebarKey({ pathname: "/hr/leave", standalone: true })).toBeNull();
     expect(resolveShellSidebarKey({ pathname: "/organization", standalone: false })).toBe("app");
   });
 

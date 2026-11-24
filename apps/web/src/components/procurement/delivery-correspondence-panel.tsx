@@ -32,6 +32,11 @@ function kindLabel(kind: string | null | undefined, eventType?: string | null): 
   if (eventType?.includes("order_acknowledged")) return KIND_LABELS.order_acknowledged;
   if (eventType?.includes("etd_reminder")) return KIND_LABELS.etd_reminder;
   if (eventType?.includes("delivery_date_shared")) return KIND_LABELS.delivery_date_shared;
+  if (eventType?.includes("po_sent_to_vendor")) return KIND_LABELS.po_sent_to_vendor;
+  if (eventType?.includes("order_processed")) return KIND_LABELS.order_processed;
+  if (eventType?.includes("customer_dispatch_shared")) {
+    return KIND_LABELS.customer_dispatch_shared;
+  }
   return eventType?.replace("procurement.", "") || "Correspondence";
 }
 

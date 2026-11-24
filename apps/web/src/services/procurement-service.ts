@@ -2,8 +2,14 @@ import { listSheetTrackers } from "@/services/sheet-tracker-service";
 import { getAccessToken } from "@/lib/auth";
 import { cachedFetch, invalidateClientCache, peekCachedValue } from "@/lib/client-cache";
 import { isInlineSafeAttachment, triggerBlobDownload } from "@/lib/safe-attachment";
-import { ApiClientError, apiClient, resourceService } from "@/services/api-client";
-import { env } from "@/utils/env";
+import {
+  ApiClientError,
+  apiClient,
+  apiGetBlob,
+  apiUpload,
+  resourceService,
+} from "@/services/api-client";
+import { env, getApiUrl } from "@/utils/env";
 
 /** Short TTL so tab switches reuse in-flight / recent list responses. */
 const PROCUREMENT_LIST_TTL_MS = 300_000;
@@ -1469,6 +1475,21 @@ export async function listMyInvoiceGenerationTasks(
   return unwrapData(res);
 }
 
+/** Tenant-wide invoice tasks (SCM Billing sync — not assignee-scoped). */
+export async function listInvoiceGenerationTasks(options?: {
+  status?: string | null;
+  limit?: number;
+}): Promise<ProcInvoiceGenerationTask[]> {
+  const params = new URLSearchParams();
+  if (options?.status) params.set("status", options.status);
+  if (options?.limit != null) params.set("limit", String(options.limit));
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const res = await apiClient<ProcInvoiceGenerationTask[]>(
+    `${SCM_API}/invoice-generation-tasks${qs}`,
+  );
+  return unwrapData(res);
+}
+
 export async function getInvoiceGenerationTaskForBatch(
   receiptBatchId: string,
 ): Promise<ProcInvoiceGenerationTask | null> {
@@ -1496,14 +1517,44 @@ export async function submitInvoiceGenerationTask(
     invoice_date: string;
     invoice_quantity?: number | null;
     invoice_amount?: number | null;
+    /** Preferred — multipart upload (fast, reliable through Next rewrite). */
+    file?: File | null;
     file_name?: string | null;
     content_base64?: string | null;
     content_type?: string | null;
   },
 ): Promise<ProcInvoiceGenerationTask> {
+  if (body.file) {
+    const form = new FormData();
+    form.append("invoice_number", body.invoice_number);
+    form.append("invoice_date", body.invoice_date);
+    if (body.invoice_quantity != null && Number.isFinite(Number(body.invoice_quantity))) {
+      form.append("invoice_quantity", String(body.invoice_quantity));
+    }
+    if (body.invoice_amount != null && Number.isFinite(Number(body.invoice_amount))) {
+      form.append("invoice_amount", String(body.invoice_amount));
+    }
+    form.append("file", body.file, body.file.name || body.file_name || "invoice");
+    const res = await apiUpload<ProcInvoiceGenerationTask>(
+      `${SCM_API}/invoice-generation-tasks/${encodeURIComponent(taskId)}/submit-upload`,
+      form,
+    );
+    return unwrapData(res);
+  }
   const res = await apiClient<ProcInvoiceGenerationTask>(
     `${SCM_API}/invoice-generation-tasks/${encodeURIComponent(taskId)}/submit`,
-    { method: "POST", body },
+    {
+      method: "POST",
+      body: {
+        invoice_number: body.invoice_number,
+        invoice_date: body.invoice_date,
+        invoice_quantity: body.invoice_quantity ?? null,
+        invoice_amount: body.invoice_amount ?? null,
+        file_name: body.file_name ?? null,
+        content_base64: body.content_base64 ?? null,
+        content_type: body.content_type ?? null,
+      },
+    },
   );
   return unwrapData(res);
 }
@@ -1832,6 +1883,7 @@ export type ReceiptBatchAttachment = {
   file_name: string;
   content_type: string | null;
   size: number | null;
+  category?: string | null;
 };
 
 export async function listReceiptBatchAttachments(
@@ -1843,37 +1895,88 @@ export async function listReceiptBatchAttachments(
   return unwrapData(res);
 }
 
-export async function openReceiptBatchAttachment(attachmentId: string): Promise<void> {
-  const token = getAccessToken();
-  const response = await fetch(
-    `${env.apiUrl}${SCM_API}/receipt-batch-attachments/${attachmentId}/content`,
+/** Prefer the My Jobs vendor-invoice upload over older GRN/PO PDFs on the same batch. */
+export function pickVendorInvoiceAttachment(
+  attachments: ReceiptBatchAttachment[],
+): ReceiptBatchAttachment | null {
+  if (!attachments.length) return null;
+  const byCategory = attachments.find(
+    (file) => (file.category || "").toLowerCase() === "vendor_invoice",
+  );
+  if (byCategory) return byCategory;
+  const byName = [...attachments]
+    .reverse()
+    .find((file) => /invoice|bill|tax/i.test(file.file_name || ""));
+  if (byName) return byName;
+  const pdf = [...attachments].reverse().find((file) => /\.pdf$/i.test(file.file_name || ""));
+  return pdf || attachments[attachments.length - 1] || attachments[0] || null;
+}
+
+/**
+ * Download (and optionally open) a receipt-batch attachment.
+ * Uses the shared API blob client so auth / same-origin rewrite match the rest of the app.
+ */
+export async function openReceiptBatchAttachment(
+  attachmentId: string,
+  options?: {
+    download?: boolean;
+    fileName?: string | null;
+    /** Window opened synchronously on click (survives popup blockers after await). */
+    pendingWindow?: Window | null;
+    /** Override blob fetch timeout (default 90s for invoice documents). */
+    timeoutMs?: number;
+  },
+): Promise<void> {
+  const forceDownload = options?.download !== false;
+  const pending = options?.pendingWindow ?? null;
+  // Prefer absolute API origin for binary downloads when configured — avoids Next
+  // rewrite buffering hangs on attachment content (same approach as asset documents).
+  const configured = (process.env.NEXT_PUBLIC_API_URL || "").trim().replace(/\/+$/, "");
+  const binaryBase = /^https?:\/\//i.test(configured)
+    ? configured
+    : /^https?:\/\//i.test(env.apiUrlFallback)
+      ? env.apiUrlFallback
+      : undefined;
+  const result = await apiGetBlob(
+    `${SCM_API}/receipt-batch-attachments/${encodeURIComponent(attachmentId)}/content`,
+    undefined,
     {
-      headers: {
-        Accept: "*/*",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      cache: "no-store",
+      ...(binaryBase ? { baseUrl: binaryBase } : {}),
+      timeoutMs: options?.timeoutMs ?? 90_000,
     },
   );
-  if (!response.ok) {
-    throw new Error(`Failed to open attachment (${response.status})`);
+  if (result.kind === "legacy") {
+    if (pending && !pending.closed) {
+      pending.location.href = result.externalUrl;
+      return;
+    }
+    window.open(result.externalUrl, "_blank", "noopener,noreferrer");
+    return;
   }
-  const headerType = response.headers.get("content-type");
-  const disposition = response.headers.get("content-disposition") || "";
-  const nameMatch = /filename\*?=(?:UTF-8''|")?([^\";]+)/i.exec(disposition);
-  const fileName = nameMatch ? decodeURIComponent(nameMatch[1].replace(/"/g, "")) : "invoice";
-  const raw = await response.blob();
-  const blob =
-    headerType && !raw.type
-      ? new Blob([raw], { type: headerType.split(";")[0].trim() })
-      : raw;
-  if (isInlineSafeAttachment(fileName, blob.type || headerType)) {
-    const url = URL.createObjectURL(blob);
-    window.open(url, "_blank", "noopener,noreferrer");
+  if (!result.blob || result.blob.size <= 0) {
+    pending?.close();
+    throw new Error("Invoice document is empty or could not be loaded.");
+  }
+  const fileName =
+    (options?.fileName || "").trim() || result.filename || "invoice.pdf";
+  if (forceDownload) {
+    triggerBlobDownload(result.blob, fileName);
+  }
+  const url = URL.createObjectURL(result.blob);
+  if (pending && !pending.closed) {
+    pending.location.href = url;
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     return;
   }
-  triggerBlobDownload(blob, fileName || "invoice");
+  if (!forceDownload && isInlineSafeAttachment(fileName, result.contentType || result.blob.type)) {
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    if (opened) return;
+  }
+  if (!forceDownload) {
+    triggerBlobDownload(result.blob, fileName);
+  }
+  window.setTimeout(() => URL.revokeObjectURL(url), 2_000);
 }
 
 export type ScmCommercialAttachment = {
