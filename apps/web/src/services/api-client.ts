@@ -233,7 +233,15 @@ async function apiClientExecute<T>(
   try {
     payload = (await response.json()) as ApiResponse<T> | ErrorResponse;
   } catch {
-    throw new ApiClientError("Invalid API response", response.status);
+    const hint =
+      response.status === 413
+        ? "Upload is too large for the proxy. Try a smaller file."
+        : response.status === 422
+          ? "Server rejected the upload (validation or antivirus). Try again with a smaller PDF."
+          : response.status >= 500
+            ? "Server error while saving. Try again."
+            : "Invalid API response";
+    throw new ApiClientError(hint, response.status);
   }
 
   if (auth && response.status === 401 && !_retried) {
@@ -325,7 +333,15 @@ async function apiUploadUnqueued<T>(
   try {
     payload = (await response.json()) as ApiResponse<T> | ErrorResponse;
   } catch {
-    throw new ApiClientError("Invalid API response", response.status);
+    const hint =
+      response.status === 413
+        ? "Upload is too large for the proxy. Try a smaller file."
+        : response.status === 422
+          ? "Server rejected the upload (validation or antivirus). Try again with a smaller PDF."
+          : response.status >= 500
+            ? "Server error while saving. Try again."
+            : "Invalid API response";
+    throw new ApiClientError(hint, response.status);
   }
 
   if (!response.ok || payload.success === false) {

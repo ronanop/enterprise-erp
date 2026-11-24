@@ -113,6 +113,25 @@ class ProcInvoiceGenerationTaskRepository:
         )
         return list(self._db.scalars(stmt).all())
 
+    def list_for_tenant(
+        self,
+        ctx: TenantContext,
+        *,
+        status: str | None = None,
+        limit: int = 200,
+    ) -> list[ProcInvoiceGenerationTask]:
+        """Recent invoice-generation tasks for SCM Billing queue sync."""
+        stmt = select(ProcInvoiceGenerationTask).where(
+            ProcInvoiceGenerationTask.tenant_id == ctx.tenant_id,
+            ProcInvoiceGenerationTask.is_deleted.is_(False),
+        )
+        if status:
+            stmt = stmt.where(ProcInvoiceGenerationTask.status == status)
+        stmt = stmt.order_by(ProcInvoiceGenerationTask.created_at.desc()).limit(
+            max(1, min(int(limit or 200), 500))
+        )
+        return list(self._db.scalars(stmt).all())
+
     def add(self, row: ProcInvoiceGenerationTask) -> ProcInvoiceGenerationTask:
         self._db.add(row)
         self._db.flush()

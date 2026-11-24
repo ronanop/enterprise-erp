@@ -13,7 +13,6 @@ import {
   submitInvoiceGenerationTask,
   type ProcInvoiceGenerationTask,
 } from "@/services/procurement-service";
-import { fileToBase64 } from "@/services/sales-crm-service";
 
 type InvoiceGenerationTaskDialogProps = {
   open: boolean;
@@ -168,17 +167,12 @@ export function InvoiceGenerationTaskDialog({
     setError(null);
     try {
       assertSafeUploadFile(attachment);
-      const file_name = attachment.name;
-      const content_base64 = await fileToBase64(attachment);
-      const content_type = attachment.type || null;
       await submitInvoiceGenerationTask(task.id, {
         invoice_number: invoiceNumber.trim(),
         invoice_date: invoiceDate.trim(),
         invoice_quantity: qty,
         invoice_amount: amount,
-        file_name,
-        content_base64,
-        content_type,
+        file: attachment,
       });
       onCompleted?.();
       onClose();

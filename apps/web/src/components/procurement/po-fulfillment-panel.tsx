@@ -563,6 +563,12 @@ export function PoFulfillmentPanel({ order, isAdmin, onSaved }: Props) {
       const rows = await listProcurementInventory().catch(() => [] as ProcurementInventoryRow[]);
       setPoInventoryRows(rows);
 
+      if (shipKind === "billing") {
+        // Invoice job already sent to My Jobs — land on Delivery → Billing.
+        router.push("/procurement/delivery-challan?tab=billing");
+        return;
+      }
+
       router.push(
         poGrnStockChallanHref(
           order.id,

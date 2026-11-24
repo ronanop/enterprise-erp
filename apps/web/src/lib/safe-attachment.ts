@@ -78,6 +78,9 @@ export function triggerBlobDownload(blob: Blob, fileName: string): void {
   a.href = url;
   a.download = fileName || "download";
   a.rel = "noopener noreferrer";
+  a.style.display = "none";
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }

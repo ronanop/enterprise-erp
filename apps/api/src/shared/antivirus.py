@@ -33,7 +33,8 @@ def _clamd_instream(raw: bytes, *, host: str, port: int, timeout: float) -> Scan
     with socket.create_connection((host, port), timeout=timeout) as sock:
         sock.settimeout(timeout)
         sock.sendall(b"zINSTREAM\x00")
-        chunk_size = 2048
+        # 64 KiB chunks — 2 KiB was far too chatty for multi-MB invoice PDFs.
+        chunk_size = 64 * 1024
         view = memoryview(raw)
         for offset in range(0, len(view), chunk_size):
             piece = view[offset : offset + chunk_size]

@@ -14,11 +14,16 @@ import { cn } from "@/lib/utils";
 import {
   createInvoiceGenerationTasks,
   getInvoiceGenerationTaskForBatch,
+  listInvoiceGenerationTasks,
   listInvoiceGenerationTasksForOrder,
   listOrderReceiptBatches,
   listProcurementInventory,
+  listReceiptBatchAttachments,
+  openReceiptBatchAttachment,
+  pickVendorInvoiceAttachment,
   type ProcInvoiceGenerationTask,
   type ProcurementInventoryRow,
+  type ReceiptBatchAttachment,
 } from "@/services/procurement-service";
 import { ApiClientError } from "@/services/api-client";
 import {
@@ -26,8 +31,12 @@ import {
   downloadDeliveryChallanPdf,
 } from "@/utils/delivery-challan-pdf";
 import {
+  challanBillingTotals,
+  emptyChallanLine,
   formatChallanItemsSummary,
   getDeliveryChallan,
+  listDeliveryChallansByOrderId,
+  peekNextDeliveryChallanNumber,
   upsertDeliveryChallan,
   type DeliveryChallanRecord,
   type GrnChallanKind,
@@ -40,12 +49,15 @@ import {
   pendingGrnChallanHref,
   rememberBillingReceiptBatch,
   invoiceAlreadyCreatedForChallan,
+  upsertPendingGrnChallan,
   type PendingGrnChallan,
 } from "@/utils/grn-challan-pending";
 import { deliveryStatusUpdateHref } from "@/utils/delivery-status-routes";
 import {
   deliveryStatusUiMode,
+  ensureDeliveryStatusForChallan,
   getDeliveryStatus,
+  upsertDeliveryChallanBilling,
 } from "@/utils/delivery-status-storage";
 import {
   formatGeneratedGrnNumbers,
@@ -69,6 +81,9 @@ type BillingInvoiceReadyMap = Record<
     amount?: number;
     grnNumber?: string;
     status?: string;
+    receiptBatchId?: string;
+    attachmentId?: string;
+    attachmentFileName?: string;
   }
 >;
 
@@ -130,17 +145,112 @@ function pickInvoiceTaskForRow(
     const byBatch = tasks.find((t) => String(t.receipt_batch_id) === batchId);
     if (byBatch) return byBatch;
   }
-  const summary = (row.itemsSummary || "").trim().toLowerCase();
+  const docNumber = (row.docNumber || "").trim().toLowerCase();
+  if (docNumber && docNumber !== "-") {
+    const byInvoice = tasks.find(
+      (t) => (t.invoice_number || "").trim().toLowerCase() === docNumber,
+    );
+    if (byInvoice) return byInvoice;
+  }
+  const summary = stripQuoteTag(row.itemsSummary || "").toLowerCase();
   if (summary && summary !== "-") {
     const bySummary = tasks.find(
-      (t) => (t.items_summary || "").trim().toLowerCase() === summary,
+      (t) => stripQuoteTag(t.items_summary || "").toLowerCase() === summary,
     );
     if (bySummary) return bySummary;
   }
-  const pending = tasks.find((t) => t.status === "pending");
-  if (pending) return pending;
-  const completed = tasks.find((t) => t.status === "completed");
-  return completed || tasks[0] || null;
+  // Only fall back to a lone task for this order — never stamp one completed
+  // invoice onto every unmatched billing row (that duplicates invoice numbers).
+  if (tasks.length === 1) return tasks[0];
+  const pendingOnly = tasks.filter((t) => t.status === "pending");
+  if (pendingOnly.length === 1) return pendingOnly[0];
+  return null;
+}
+
+/**
+ * Mirror open / recent My Jobs invoice-generation tasks into the Billing queue.
+ * GRN save creates server tasks without always writing localStorage rows.
+ */
+function syncBillingQueueFromInvoiceTasks(tasks: ProcInvoiceGenerationTask[]): void {
+  const byBatch = new Map<string, ProcInvoiceGenerationTask>();
+  for (const task of tasks) {
+    const batchId = String(task.receipt_batch_id || "").trim();
+    if (!looksLikeUuid(batchId)) continue;
+    const prev = byBatch.get(batchId);
+    const prevAt = prev?.created_at || "";
+    const nextAt = task.created_at || "";
+    if (!prev || nextAt >= prevAt) {
+      byBatch.set(batchId, task);
+    }
+  }
+  for (const task of byBatch.values()) {
+    const batchId = String(task.receipt_batch_id).trim();
+    const orderId = String(task.order_header_id || "").trim();
+    if (!looksLikeUuid(orderId)) continue;
+    const companyPo = (task.purchase_order_number || "").trim();
+    const invoiceNumber = (task.invoice_number || "").trim();
+    const invoiceDate = (task.invoice_date || "").trim().slice(0, 10);
+    const completed = String(task.status || "").toLowerCase() === "completed";
+    upsertPendingGrnChallan({
+      orderId,
+      batchKey: batchId,
+      grnNumber: (task.grn_number || "").trim() || "-",
+      purchaseOrderNumber: companyPo,
+      vendorName: (task.vendor_name || "").trim(),
+      customerName: (task.customer_name || "").trim(),
+      itemsSummary: stripQuoteTag(task.items_summary) || "-",
+      kind: "billing",
+      source: "grn",
+      createdAt: task.created_at || undefined,
+      docNumber: invoiceNumber || undefined,
+      docDate: invoiceDate || undefined,
+      ...(completed && invoiceNumber
+        ? { status: "saved" as const }
+        : {}),
+    });
+    rememberBillingReceiptBatch(
+      {
+        id: batchId,
+        orderId,
+        batchKey: batchId,
+        kind: "billing",
+      },
+      batchId,
+    );
+  }
+}
+
+/** One billing row per invoice (or per receipt batch / queue id when still pending). */
+function collapseBillingQueueRows(
+  rows: PendingGrnChallan[],
+  readiness: BillingInvoiceReadyMap,
+): PendingGrnChallan[] {
+  const groups = new Map<string, PendingGrnChallan>();
+  const rank = (row: PendingGrnChallan) => {
+    const meta = readiness[row.id];
+    const invoice = (meta?.invoiceNumber || row.docNumber || "").trim();
+    const date = (meta?.invoiceDate || row.docDate || row.createdAt || "").trim();
+    return `${date}\0${row.createdAt}\0${invoice}`;
+  };
+  for (const row of rows) {
+    const meta = readiness[row.id];
+    const invoice = (meta?.invoiceNumber || row.docNumber || "").trim().toLowerCase();
+    const po = (row.purchaseOrderNumber || row.orderId || "").trim().toLowerCase();
+    const batch = looksLikeUuid(row.batchKey || "")
+      ? (row.batchKey || "").trim().toLowerCase()
+      : "";
+    const key =
+      invoice && invoice !== "-"
+        ? `inv:${po}:${invoice}`
+        : batch
+          ? `batch:${batch}`
+          : `id:${row.savedRecordId || row.id}`;
+    const existing = groups.get(key);
+    if (!existing || rank(row) > rank(existing)) {
+      groups.set(key, row);
+    }
+  }
+  return [...groups.values()];
 }
 
 function taskBillingMeta(task: ProcInvoiceGenerationTask | null): BillingInvoiceReadyMap[string] {
@@ -160,6 +270,7 @@ function taskBillingMeta(task: ProcInvoiceGenerationTask | null): BillingInvoice
   const invoiceNumber = task.invoice_number?.trim() || undefined;
   const invoiceDate = task.invoice_date?.slice(0, 10) || undefined;
   const ready = task.status === "completed" && Boolean(invoiceNumber || invoiceDate);
+  const receiptBatchId = String(task.receipt_batch_id || "").trim() || undefined;
   return {
     ready,
     invoiceNumber,
@@ -169,7 +280,169 @@ function taskBillingMeta(task: ProcInvoiceGenerationTask | null): BillingInvoice
     amount,
     grnNumber: task.grn_number?.trim() || undefined,
     status: task.status,
+    receiptBatchId: receiptBatchId && looksLikeUuid(receiptBatchId) ? receiptBatchId : undefined,
   };
+}
+
+function pickInvoiceAttachment(
+  attachments: ReceiptBatchAttachment[],
+): ReceiptBatchAttachment | null {
+  return pickVendorInvoiceAttachment(attachments);
+}
+
+/** Prefer the delivery challan for Set dispatch; fall back to a billing record. */
+function resolveBillingDispatchChallanId(
+  row: PendingGrnChallan,
+  invoiceNumber?: string,
+): string | null {
+  if (row.sourceChallanId && getDeliveryChallan(row.sourceChallanId)) {
+    return row.sourceChallanId;
+  }
+  if (row.savedRecordId) {
+    const saved = getDeliveryChallan(row.savedRecordId);
+    if (saved?.sourceChallanId && getDeliveryChallan(saved.sourceChallanId)) {
+      return saved.sourceChallanId;
+    }
+  }
+  const orderId = (row.orderId || "").trim();
+  if (orderId) {
+    const delivery = listDeliveryChallansByOrderId(orderId).find(
+      (challan) => (challan.grnKind || "delivery_challan") !== "billing",
+    );
+    if (delivery) return delivery.id;
+  }
+  if (row.savedRecordId && getDeliveryChallan(row.savedRecordId)) {
+    return row.savedRecordId;
+  }
+  const invoice = (invoiceNumber || row.docNumber || "").trim().toLowerCase();
+  if (invoice && invoice !== "-") {
+    const byInvoice = listDeliveryChallansByOrderId(orderId || row.orderId || "").find(
+      (challan) =>
+        challan.grnKind === "billing" &&
+        (challan.invoiceNumber || challan.challanNumber || "").trim().toLowerCase() ===
+          invoice,
+    );
+    if (byInvoice) return byInvoice.id;
+  }
+  if (orderId) {
+    const billing = listDeliveryChallansByOrderId(orderId).find(
+      (challan) => challan.grnKind === "billing",
+    );
+    if (billing) return billing.id;
+  }
+  return null;
+}
+
+/** Ensure a challan exists so Billing Open can land on Delivery Status Set dispatch. */
+function ensureBillingDispatchChallan(
+  row: PendingGrnChallan,
+  meta: BillingInvoiceReadyMap[string],
+): string {
+  const invoiceNumber = (meta.invoiceNumber || row.docNumber || "").trim();
+  const existingId = resolveBillingDispatchChallanId(row, invoiceNumber);
+  const invoiceDate =
+    (meta.invoiceDate || row.docDate || "").trim().slice(0, 10) ||
+    new Date().toISOString().slice(0, 10);
+
+  if (existingId) {
+    if (meta.ready && invoiceNumber) {
+      upsertDeliveryChallanBilling({
+        challanId: existingId,
+        billStatus: "fully_billed",
+        billedQuantity:
+          meta.quantity != null && meta.quantity > 0 ? String(meta.quantity) : "0",
+        billInvoiceNumber: invoiceNumber,
+        billInvoiceDate: invoiceDate,
+      });
+    }
+    const existing = getDeliveryChallan(existingId);
+    const isDelivery =
+      Boolean(existing) && (existing!.grnKind || "delivery_challan") !== "billing";
+    patchPendingGrnChallan(row.orderId, row.batchKey, "billing", {
+      status: "saved",
+      ...(isDelivery
+        ? { sourceChallanId: existingId }
+        : { savedRecordId: existingId }),
+      docNumber: invoiceNumber || row.docNumber,
+      docDate: invoiceDate || row.docDate,
+    });
+    return existingId;
+  }
+
+  const batchKey = looksLikeUuid(row.batchKey || "") ? (row.batchKey || "").trim() : "";
+  const qtyLabel =
+    meta.quantity != null && meta.quantity > 0 ? String(meta.quantity) : "";
+  const line = emptyChallanLine();
+  const summary = stripQuoteTag(meta.itemsSummary || row.itemsSummary || "");
+  if (summary && summary !== "-") {
+    line.itemName = summary.replace(/\s*\(\d+(?:\.\d+)?\)/g, "").trim() || summary;
+    line.quantitySent = qtyLabel;
+  } else if (qtyLabel) {
+    line.itemName = "Item";
+    line.quantitySent = qtyLabel;
+  }
+
+  const saved = upsertDeliveryChallan({
+    id: crypto.randomUUID(),
+    orderId: looksLikeUuid(row.orderId || "") ? row.orderId : null,
+    challanNumber: invoiceNumber || peekNextDeliveryChallanNumber(),
+    challanDate: invoiceDate,
+    entityName: "",
+    entityAddressBlock: "",
+    entityGstBlock: "",
+    documentType: "TAX INVOICE",
+    copyLabel: "ORIGINAL FOR CONSIGNEE",
+    customerName: row.customerName?.trim() || "Customer",
+    customerBillTo: "",
+    customerShipTo: "",
+    customerGstNo: "",
+    kindAttn: "",
+    purchaseOrderNumber: row.purchaseOrderNumber || "",
+    poDate: "",
+    poNumberDate: "",
+    shipFromAddress: "",
+    billingState: "",
+    shippingState: "",
+    taxPercentage: "18",
+    remarks: "",
+    taxRemarks: "",
+    preparedBy: "",
+    deliveredBy: "",
+    vendorName: row.vendorName || "",
+    itemsSourceMode: "selected_grns",
+    selectedGrnKeys: batchKey ? [batchKey] : [],
+    selectedGrnNumbers:
+      row.grnNumber && row.grnNumber !== "-"
+        ? [row.grnNumber]
+        : meta.grnNumber
+          ? [meta.grnNumber]
+          : [],
+    grnKind: "billing",
+    invoiceNumber: invoiceNumber || undefined,
+    invoiceDate,
+    sourceChallanId: row.sourceChallanId,
+    companyPoNumber: row.purchaseOrderNumber || "",
+    lines: [line],
+    deliveryMode: "NRGP",
+    transportDetails: "",
+    driverVehicleDetails: "",
+    senderSignature: "",
+    receiverSignature: "",
+  });
+  ensureDeliveryStatusForChallan(saved, {
+    billStatus: invoiceNumber ? "fully_billed" : "unbilled",
+    billInvoiceNumber: invoiceNumber || undefined,
+    billInvoiceDate: invoiceNumber ? invoiceDate : undefined,
+    billedQuantity:
+      meta.quantity != null && meta.quantity > 0 ? String(meta.quantity) : undefined,
+  });
+  patchPendingGrnChallan(row.orderId, row.batchKey, "billing", {
+    status: "saved",
+    savedRecordId: saved.id,
+    docNumber: invoiceNumber || row.docNumber,
+    docDate: invoiceDate || row.docDate,
+  });
+  return saved.id;
 }
 
 function enrichQueueRowsWithGeneratedGrns(
@@ -234,6 +507,65 @@ export function DeliveryChallanListPage() {
     }
   }
 
+  async function onDownloadBillingInvoicePdf(
+    row: PendingGrnChallan,
+    meta: BillingInvoiceReadyMap[string] | undefined,
+  ) {
+    const busyKey = `billing:${row.id}`;
+    setPdfBusyId(busyKey);
+    setPdfError(null);
+    // Open synchronously so the invoice still appears if download is blocked after await.
+    const pendingWindow = window.open("about:blank", "_blank");
+    if (pendingWindow) {
+      try {
+        pendingWindow.document.title = "Loading invoice…";
+        pendingWindow.document.body.innerHTML =
+          '<p style="font:14px system-ui;padding:24px;color:#334155">Loading invoice document…</p>';
+      } catch {
+        /* cross-origin / opaque about:blank — ignore */
+      }
+    }
+    try {
+      let attachmentId = (meta?.attachmentId || "").trim();
+      let fileName = (meta?.attachmentFileName || "").trim();
+      let batchId =
+        meta?.receiptBatchId?.trim() ||
+        (looksLikeUuid(row.batchKey || "") ? (row.batchKey || "").trim() : "");
+
+      if (!attachmentId) {
+        if (!batchId) {
+          batchId = (await resolveReceiptBatchId(row)) || "";
+        }
+        if (!batchId) {
+          throw new Error(
+            "No invoice document is attached for this billing row yet. Complete the My Jobs invoice with a file first.",
+          );
+        }
+        const attachments = await listReceiptBatchAttachments(batchId);
+        const file = pickInvoiceAttachment(attachments);
+        attachmentId = String(file?.id || "").trim();
+        fileName = (file?.file_name || fileName || "").trim();
+      }
+      if (!attachmentId) {
+        throw new Error(
+          "No invoice document is attached for this billing row yet. Complete the My Jobs invoice with a file first.",
+        );
+      }
+      await openReceiptBatchAttachment(attachmentId, {
+        download: true,
+        fileName: fileName || "invoice.pdf",
+        pendingWindow,
+      });
+    } catch (err) {
+      pendingWindow?.close();
+      setPdfError(
+        err instanceof Error ? err.message : "Failed to download billing invoice PDF",
+      );
+    } finally {
+      setPdfBusyId(null);
+    }
+  }
+
   useEffect(() => {
     try {
       const msg = sessionStorage.getItem("erp.procurement.accounts-invoice-notified");
@@ -247,6 +579,14 @@ export function DeliveryChallanListPage() {
   }, []);
 
   const load = useCallback(async () => {
+    // Pull My Jobs invoice tasks into Billing so GRN-created jobs always appear.
+    try {
+      const openTasks = await listInvoiceGenerationTasks({ limit: 200 });
+      syncBillingQueueFromInvoiceTasks(openTasks);
+    } catch {
+      /* local queue still usable if tenant task list is unavailable */
+    }
+
     const billing = listDeliveryChallanQueueByKind("billing");
     const dc = listDeliveryChallanQueueByKind("delivery_challan");
     setPendingBilling(billing);
@@ -303,14 +643,20 @@ export function DeliveryChallanListPage() {
           const receiptBatchId = await resolveReceiptBatchId(row);
           if (receiptBatchId) {
             try {
+              const summary = stripQuoteTag(row.itemsSummary);
+              const parsedQty = [...summary.matchAll(/\((\d+(?:\.\d+)?)\)/g)]
+                .map((m) => Number(m[1]))
+                .filter((n) => Number.isFinite(n) && n > 0)
+                .reduce((a, b) => a + b, 0);
               const created = await createInvoiceGenerationTasks({
                 order_id: orderId,
                 receipt_batch_id: receiptBatchId,
-                items_summary: stripQuoteTag(row.itemsSummary),
+                items_summary: summary,
                 vendor_name: row.vendorName,
                 customer_name: row.customerName || "",
                 grn_number:
                   row.grnNumber && row.grnNumber !== "-" ? row.grnNumber : undefined,
+                billing_quantity: parsedQty > 0 ? parsedQty : undefined,
               });
               task = created[0] || null;
               if (!looksLikeUuid(batchId)) {
@@ -343,6 +689,12 @@ export function DeliveryChallanListPage() {
         if (!meta.grnNumber && row.grnNumber?.trim() && row.grnNumber !== "-") {
           meta.grnNumber = row.grnNumber.trim();
         }
+        const companyPo = (task?.purchase_order_number || "").trim();
+        if (companyPo && companyPo !== (row.purchaseOrderNumber || "").trim()) {
+          patchPendingGrnChallan(row.orderId, row.batchKey, "billing", {
+            purchaseOrderNumber: companyPo,
+          });
+        }
         if (
           (meta.quantity == null || meta.quantity <= 0) &&
           meta.itemsSummary
@@ -353,19 +705,35 @@ export function DeliveryChallanListPage() {
           const sum = parsed.reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0);
           if (sum > 0) meta.quantity = sum;
         }
+        if (!meta.receiptBatchId && looksLikeUuid(batchId)) {
+          meta.receiptBatchId = batchId;
+        }
+        if (meta.ready && meta.receiptBatchId && !meta.attachmentId) {
+          try {
+            const attachments = await listReceiptBatchAttachments(meta.receiptBatchId);
+            const file = pickInvoiceAttachment(attachments);
+            if (file?.id) {
+              meta.attachmentId = String(file.id);
+              meta.attachmentFileName = file.file_name || undefined;
+            }
+          } catch {
+            /* attachment optional until Accounts file is readable */
+          }
+        }
         readiness[row.id] = meta;
         if (meta.ready && (meta.invoiceNumber || meta.invoiceDate)) {
           patchPendingGrnChallan(row.orderId, row.batchKey, "billing", {
             docNumber: meta.invoiceNumber || row.docNumber,
             docDate: meta.invoiceDate || row.docDate,
           });
+          // Surface the PO on Delivery Status so Set dispatch can start from Billing.
+          ensureBillingDispatchChallan(row, meta);
         }
       }),
     );
     setBillingInvoiceReady(readiness);
-    if (Object.values(readiness).some((r) => r.ready)) {
-      setPendingBilling(listDeliveryChallanQueueByKind("billing"));
-    }
+    // Re-read after task sync / company-PO patches / dispatch challan ensures.
+    setPendingBilling(listDeliveryChallanQueueByKind("billing"));
   }, []);
 
   useEffect(() => {
@@ -417,6 +785,7 @@ export function DeliveryChallanListPage() {
         return;
       }
       const summary = stripQuoteTag(formatChallanItemsSummary(challan.lines));
+      const totals = challanBillingTotals(challan.lines);
       await createInvoiceGenerationTasks({
         order_id: challan.orderId,
         receipt_batch_id: receiptBatchId,
@@ -424,6 +793,8 @@ export function DeliveryChallanListPage() {
         vendor_name: challan.vendorName,
         customer_name: challan.customerName,
         grn_number: challan.selectedGrnNumbers.join(", ") || undefined,
+        billing_quantity: totals.quantity > 0 ? totals.quantity : undefined,
+        billing_amount: totals.amount > 0 ? totals.amount : undefined,
       });
       rememberBillingReceiptBatch(
         {
@@ -464,8 +835,20 @@ export function DeliveryChallanListPage() {
     void load();
   }, [load]);
 
-  const pendingForTab = tab === "billing" ? pendingBilling : pendingDc;
+  const pendingForTab =
+    tab === "billing"
+      ? collapseBillingQueueRows(pendingBilling, billingInvoiceReady)
+      : pendingDc;
   const tableRows = [...pendingForTab].sort((a, b) => {
+    if (tab === "billing") {
+      const aMeta = billingInvoiceReady[a.id];
+      const bMeta = billingInvoiceReady[b.id];
+      const aStamp = `${aMeta?.invoiceDate || a.docDate || ""}\0${a.createdAt}`;
+      const bStamp = `${bMeta?.invoiceDate || b.docDate || ""}\0${b.createdAt}`;
+      const byStamp = bStamp.localeCompare(aStamp);
+      if (byStamp !== 0) return byStamp;
+      return b.createdAt.localeCompare(a.createdAt);
+    }
     const aPending = !a.status || a.status === "pending";
     const bPending = !b.status || b.status === "pending";
     if (aPending !== bPending) return aPending ? -1 : 1;
@@ -569,6 +952,7 @@ export function DeliveryChallanListPage() {
         pdfBusyId={pdfBusyId}
         invoiceBusyId={invoiceBusyId}
         onDownloadPdf={onDownloadPdf}
+        onDownloadBillingPdf={onDownloadBillingInvoicePdf}
         onCreateInvoice={createInvoiceFromChallan}
         emptyLabel={
           tab === "billing" ? "No billing documents." : "No delivery challans."
@@ -587,6 +971,7 @@ function PendingGrnQueueCard({
   pdfBusyId,
   invoiceBusyId,
   onDownloadPdf,
+  onDownloadBillingPdf,
   onCreateInvoice,
 }: {
   label: string;
@@ -597,6 +982,10 @@ function PendingGrnQueueCard({
   pdfBusyId: string | null;
   invoiceBusyId: string | null;
   onDownloadPdf: (challan: DeliveryChallanRecord) => void | Promise<void>;
+  onDownloadBillingPdf: (
+    row: PendingGrnChallan,
+    meta: BillingInvoiceReadyMap[string] | undefined,
+  ) => void | Promise<void>;
   onCreateInvoice: (challan: DeliveryChallanRecord) => void | Promise<void>;
 }) {
   const router = useRouter();
@@ -613,7 +1002,9 @@ function PendingGrnQueueCard({
               <tr>
                 <th className={procurementUi.th}>{isBilling ? "Invoice number" : "Challan number"}</th>
                 <th className={procurementUi.th}>{isBilling ? "Invoice date" : "Challan date"}</th>
-                <th className={procurementUi.th}>PO number</th>
+                <th className={procurementUi.th}>
+                  {isBilling ? "Company PO number" : "PO number"}
+                </th>
                 {isBilling ? (
                   <>
                     <th className={procurementUi.th}>Items</th>
@@ -641,11 +1032,21 @@ function PendingGrnQueueCard({
                   const savedChallan =
                     isSaved && row.savedRecordId ? getDeliveryChallan(row.savedRecordId) : null;
                   const openDispatch = Boolean(savedChallan) && !isBilling;
-                  const href = openDispatch && savedChallan
-                    ? deliveryStatusUpdateHref(savedChallan.id)
-                    : isSaved && row.savedRecordId
-                      ? `/procurement/delivery-challan/${row.savedRecordId}`
-                      : pendingGrnChallanHref(row);
+                  const billingDispatchId = isBilling
+                    ? resolveBillingDispatchChallanId(
+                        row,
+                        invoiceMeta?.invoiceNumber || row.docNumber,
+                      )
+                    : null;
+                  const href = isBilling
+                    ? billingDispatchId
+                      ? deliveryStatusUpdateHref(billingDispatchId)
+                      : "/procurement/delivery-status"
+                    : openDispatch && savedChallan
+                      ? deliveryStatusUpdateHref(savedChallan.id)
+                      : isSaved && row.savedRecordId
+                        ? `/procurement/delivery-challan/${row.savedRecordId}`
+                        : pendingGrnChallanHref(row);
                   const displayInvoiceNumber =
                     row.docNumber ||
                     invoiceMeta?.invoiceNumber ||
@@ -662,7 +1063,19 @@ function PendingGrnQueueCard({
                     rawItems === "-"
                       ? "-"
                       : stripQuoteTag(rawItems.replace(/\s*\(\d+(?:\.\d+)?\)/g, "")) || rawItems;
+                  const billingPdfBusy = pdfBusyId === `billing:${row.id}`;
                   const pdfBusy = Boolean(savedChallan && pdfBusyId === savedChallan.id);
+                  const billingDispatched = Boolean(
+                    billingDispatchId && challanWasDispatched(billingDispatchId),
+                  );
+                  const goBillingDispatch = () => {
+                    if (!canOpen || !isBilling) return;
+                    const challanId = ensureBillingDispatchChallan(
+                      row,
+                      invoiceMeta || { ready: true },
+                    );
+                    router.push(deliveryStatusUpdateHref(challanId));
+                  };
                   return (
                     <tr
                       key={row.id}
@@ -676,12 +1089,20 @@ function PendingGrnQueueCard({
                       tabIndex={canOpen ? 0 : undefined}
                       onClick={() => {
                         if (!canOpen) return;
+                        if (isBilling) {
+                          goBillingDispatch();
+                          return;
+                        }
                         router.push(href);
                       }}
                       onKeyDown={(e) => {
                         if (!canOpen) return;
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
+                          if (isBilling) {
+                            goBillingDispatch();
+                            return;
+                          }
                           router.push(href);
                         }
                       }}
@@ -714,22 +1135,38 @@ function PendingGrnQueueCard({
                       <td className={procurementUi.td}>{row.customerName?.trim() || "-"}</td>
                       <td className={procurementUi.td} onClick={(e) => e.stopPropagation()}>
                         <div className={procurementUi.rowActions}>
-                          {canOpen && !(isBilling && isSaved) ? (
-                            <Link
-                              href={href}
-                              className={cn(
-                                buttonVariants({ size: "sm", variant: "ghost" }),
-                                procurementUi.actionBtn,
-                                "text-[#0369A1] hover:text-[#0369A1]",
-                              )}
-                            >
-                              {openDispatch
-                                ? savedChallan && challanWasDispatched(savedChallan.id)
-                                  ? "Update status"
-                                  : "Set dispatch"
-                                : "Open"}
-                            </Link>
-                          ) : canOpen ? null : (
+                          {canOpen ? (
+                            isBilling ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className={cn(
+                                  procurementUi.actionBtn,
+                                  "cursor-pointer text-[#0369A1] hover:text-[#0369A1]",
+                                )}
+                                title="Open Delivery Status to set dispatch"
+                                onClick={goBillingDispatch}
+                              >
+                                {billingDispatched ? "Update status" : "Open"}
+                              </Button>
+                            ) : (
+                              <Link
+                                href={href}
+                                className={cn(
+                                  buttonVariants({ size: "sm", variant: "ghost" }),
+                                  procurementUi.actionBtn,
+                                  "text-[#0369A1] hover:text-[#0369A1]",
+                                )}
+                              >
+                                {openDispatch
+                                  ? savedChallan && challanWasDispatched(savedChallan.id)
+                                    ? "Update status"
+                                    : "Set dispatch"
+                                  : "Open"}
+                              </Link>
+                            )
+                          ) : (
                             <span
                               className="inline-flex h-8 items-center px-2 text-xs font-medium text-muted-foreground"
                               title="Waiting for Accounts to submit invoice details in My Jobs"
@@ -757,7 +1194,25 @@ function PendingGrnQueueCard({
                               {invoiceBusyId === savedChallan.id ? "Creating…" : "Create invoice"}
                             </Button>
                           ) : null}
-                          {savedChallan ? (
+                          {isBilling && canOpen ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              disabled={billingPdfBusy}
+                              className={cn(
+                                procurementUi.actionBtn,
+                                "cursor-pointer text-[#0369A1] hover:text-[#0369A1]",
+                              )}
+                              title="Open the invoice document attached in My Jobs"
+                              aria-label={`Open billing PDF for ${displayInvoiceNumber}`}
+                              onClick={() => void onDownloadBillingPdf(row, invoiceMeta)}
+                            >
+                              <FileDown className="mr-1 size-3.5" />
+                              {billingPdfBusy ? "…" : "Billing PDF"}
+                            </Button>
+                          ) : null}
+                          {!isBilling && savedChallan ? (
                             <Button
                               type="button"
                               size="sm"
@@ -767,16 +1222,12 @@ function PendingGrnQueueCard({
                                 procurementUi.actionBtn,
                                 "cursor-pointer text-[#0369A1] hover:text-[#0369A1]",
                               )}
-                              title={isBilling ? "Download billing PDF" : "Download DC PDF"}
-                              aria-label={
-                                isBilling
-                                  ? `Download billing PDF for ${displayInvoiceNumber}`
-                                  : `Download DC PDF for ${row.docNumber || savedChallan.challanNumber}`
-                              }
+                              title="Download DC PDF"
+                              aria-label={`Download DC PDF for ${row.docNumber || savedChallan.challanNumber}`}
                               onClick={() => void onDownloadPdf(savedChallan)}
                             >
                               <FileDown className="mr-1 size-3.5" />
-                              {pdfBusy ? "…" : isBilling ? "Billing PDF" : "DC PDF"}
+                              {pdfBusy ? "…" : "DC PDF"}
                             </Button>
                           ) : null}
                         </div>
