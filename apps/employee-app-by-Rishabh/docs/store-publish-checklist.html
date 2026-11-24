@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Store Publish Checklist — Employee ESS</title>
+  <style>
+    :root {
+      --bg: #f4f6fb;
+      --card: #ffffff;
+      --ink: #0b1c30;
+      --muted: #5b6b7c;
+      --line: #d7deea;
+      --primary: #004ac6;
+      --ok: #047857;
+      --ok-bg: #ecfdf5;
+      --warn: #b45309;
+      --warn-bg: #fff7ed;
+      --shadow: 0 10px 30px rgba(11, 28, 48, 0.06);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.45;
+    }
+    .wrap { max-width: 920px; margin: 0 auto; padding: 28px 18px 64px; }
+    header {
+      background: linear-gradient(135deg, #0b1c30, #004ac6);
+      color: #fff;
+      border-radius: 20px;
+      padding: 28px 24px;
+      box-shadow: var(--shadow);
+    }
+    header h1 { margin: 0 0 8px; font-size: 1.55rem; letter-spacing: -0.02em; }
+    header p { margin: 0; opacity: 0.9; max-width: 62ch; }
+    .meta {
+      display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px;
+    }
+    .pill {
+      background: rgba(255,255,255,0.14);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 0.85rem;
+    }
+    .progress-card {
+      margin-top: 18px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px 18px;
+      box-shadow: var(--shadow);
+    }
+    .progress-top {
+      display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+      margin-bottom: 10px;
+    }
+    .progress-top strong { font-size: 1.2rem; }
+    .bar {
+      height: 10px; border-radius: 999px; background: #e8eef8; overflow: hidden;
+    }
+    .bar > span {
+      display: block; height: 100%; width: 0%;
+      background: linear-gradient(90deg, #2563eb, #004ac6);
+      transition: width 0.25s ease;
+    }
+    .hint {
+      margin-top: 14px;
+      background: var(--warn-bg);
+      border: 1px solid #fed7aa;
+      color: #9a3412;
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 0.92rem;
+    }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    button {
+      appearance: none; border: 1px solid var(--line); background: #fff;
+      color: var(--ink); border-radius: 10px; padding: 8px 12px;
+      font-weight: 600; cursor: pointer;
+    }
+    button.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+    button:hover { filter: brightness(0.98); }
+    section {
+      margin-top: 18px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    section h2 {
+      margin: 0;
+      padding: 14px 18px;
+      font-size: 1.02rem;
+      border-bottom: 1px solid var(--line);
+      background: #f8faff;
+      display: flex; justify-content: space-between; gap: 12px; align-items: center;
+    }
+    section h2 .count { color: var(--muted); font-size: 0.85rem; font-weight: 600; }
+    .item {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 10px;
+      padding: 12px 18px;
+      border-bottom: 1px solid #eef2f8;
+      align-items: start;
+    }
+    .item:last-child { border-bottom: 0; }
+    .item.done { background: var(--ok-bg); }
+    .item input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--primary); }
+    .item label { cursor: pointer; }
+    .item .title { font-weight: 650; }
+    .item .note { color: var(--muted); font-size: 0.88rem; margin-top: 2px; }
+    .badge {
+      display: inline-block; margin-left: 8px; font-size: 0.72rem; font-weight: 700;
+      padding: 2px 7px; border-radius: 999px; vertical-align: middle;
+    }
+    .badge.done-badge { background: #d1fae5; color: var(--ok); }
+    .badge.todo-badge { background: #e8eef8; color: #334155; }
+    .badge.block-badge { background: #fee2e2; color: #b91c1c; }
+    footer {
+      margin-top: 18px; color: var(--muted); font-size: 0.85rem; text-align: center;
+    }
+    code { background: #eef2f8; padding: 1px 5px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Store Publish Checklist</h1>
+      <p>
+        Employee ESS app (<code>apps/employee-app-by-Rishabh</code>) — path to
+        Google Play &amp; Apple App Store. Tick items here, or tell Cursor
+        “mark &lt;item&gt; done” and the agent will update this page.
+      </p>
+      <div class="meta">
+        <span class="pill" id="overallPill">Overall: calculating…</span>
+        <span class="pill">Domain: iconnectplus.in</span>
+        <span class="pill">Package: com.cache.employeeportal</span>
+        <span class="pill">Updated: <span id="updatedAt">—</span></span>
+      </div>
+    </header>
+
+    <div class="progress-card">
+      <div class="progress-top">
+        <div><strong id="pctLabel">0%</strong> complete</div>
+        <div id="fracLabel" style="color:var(--muted)">0 / 0</div>
+      </div>
+      <div class="bar"><span id="barFill"></span></div>
+      <div class="hint">
+        <strong>How to update with the agent:</strong>
+        say things like “privacy policy page is live — mark it done” or
+        “EAS Android production build done”. The agent edits the
+        <code>data-done</code> flags in this HTML file.
+      </div>
+      <div class="actions">
+        <button class="primary" type="button" id="exportBtn">Copy progress summary</button>
+        <button type="button" id="resetBtn">Reset local ticks</button>
+        <button type="button" id="openDocBtn">Open compliance notes</button>
+      </div>
+    </div>
+
+    <!--
+      Agent update protocol:
+      Set data-done="true" on a .item to mark complete in source.
+      Keep ids stable (pub-*).
+    -->
+
+    <section data-section="A">
+      <h2>A. Product <span class="count"></span></h2>
+      <div class="item" id="pub-a-screens" data-done="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Core ESS screens complete</div>
+          <div class="note">Home, attendance, leave, payslips, profile, approvals, workplace extras.</div>
+        </label>
+      </div>
+      <div class="item" id="pub-a-mock" data-done="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Demo / mock mode ready</div>
+          <div class="note">EXPO_PUBLIC_USE_MOCK=true with demo banner for reviewers.</div>
+        </label>
+      </div>
+      <div class="item" id="pub-a-demo-creds" data-done="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Demo credentials for employee / manager views</div>
+          <div class="note">Document exact logins for App Review notes.</div>
+        </label>
+      </div>
+      <div class="item" id="pub-a-permissions" data-done="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Permissions rationale + OS prompts</div>
+          <div class="note">/permissions screen; GPS, camera, photos picker, notifications.</div>
+        </label>
+      </div>
+      <div class="item" id="pub-a-privacy-ui" data-done="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">In-app Privacy / Terms / data-deletion entry points</div>
+          <div class="note">Login links + Profile links.</div>
+        </label>
+      </div>
+      <div class="item" id="pub-a-device-qa" data-done="false">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Smoke-test all role paths on a device build</div>
+          <div class="note">Not only Expo Go / web — use EAS or run:android / run:ios.</div>
+        </label>
+      </div>
+      <div class="item" id="pub-a-crash-pass" data-done="false">
+        <input type="checkbox" />
+        <label>
+          <div class="title">No crash / blank screens in a 10-minute reviewer path</div>
+          <div class="note">Login → home → leave → attendance → profile.</div>
+        </label>
+      </div>
+      <div class="item" id="pub-a-version" data-done="false">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Release version decided</div>
+          <div class="note">Set marketing version (e.g. 1.0.0) and build number.</div>
+        </label>
+      </div>
+    </section>
+
+    <section data-section="B">
+      <h2>B. Legal &amp; trust <span class="count"></span></h2>
+      <div class="item" id="pub-b-privacy" data-done="true" data-blocking="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Host real Privacy Policy page</div>
+          <div class="note">Live: https://iconnectplus.in/legal/privacy</div>
+        </label>
+      </div>
+      <div class="item" id="pub-b-terms" data-done="true" data-blocking="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Host real Terms of Use page</div>
+          <div class="note">Live: https://iconnectplus.in/legal/terms</div>
+        </label>
+      </div>
+      <div class="item" id="pub-b-deletion" data-done="true" data-blocking="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Host real Data deletion web form/page</div>
+          <div class="note">Live: https://iconnectplus.in/legal/data-deletion (mailto erp@iconnectplus.in)</div>
+        </label>
+      </div>
+      <div class="item" id="pub-b-env-urls" data-done="true" data-blocking="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Point app env to live legal URLs</div>
+          <div class="note">Defaults set to iconnectplus.in legal paths + erp@iconnectplus.in (confirm pages resolve before submit).</div>
+        </label>
+      </div>
+      <div class="item" id="pub-b-retention" data-done="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Retention wording agreed (HR / legal)</div>
+          <div class="note">Published on Privacy §5 + Data deletion: app login removable; employment/payroll/attendance/tax/KYC/audit may stay with employer.</div>
+        </label>
+      </div>
+    </section>
+
+    <section data-section="C">
+      <h2>C. Accounts &amp; tooling <span class="count"></span></h2>
+      <div class="item" id="pub-c-apple-dev" data-done="true" data-blocking="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Apple Developer Program enrolled</div>
+          <div class="note">Paid + verified — ready to upload.</div>
+        </label>
+      </div>
+      <div class="item" id="pub-c-asc" data-done="false" data-blocking="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">App Store Connect app created</div>
+          <div class="note">Create the app record with bundle id com.cache.employeeportal (account is ready).</div>
+        </label>
+      </div>
+      <div class="item" id="pub-c-play" data-done="false" data-blocking="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Google Play Console app created</div>
+          <div class="note">Create the app with package com.cache.employeeportal (account is ready).</div>
+        </label>
+      </div>
+      <div class="item" id="pub-c-eas" data-done="false" data-blocking="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Expo account + EAS project linked</div>
+          <div class="note">eas init / eas project:info for this app.</div>
+        </label>
+      </div>
+      <div class="item" id="pub-c-signing" data-done="false" data-blocking="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">iOS certs + Android signing configured</div>
+          <div class="note">EAS credentials or manual keystore/certs.</div>
+        </label>
+      </div>
+    </section>
+
+    <section data-section="D">
+      <h2>D. Build &amp; submit <span class="count"></span></h2>
+      <div class="item" id="pub-d-android-build" data-done="false" data-blocking="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Android production build (EAS)</div>
+          <div class="note">eas build --platform android --profile production</div>
+        </label>
+      </div>
+      <div class="item" id="pub-d-ios-build" data-done="false" data-blocking="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">iOS production build (EAS)</div>
+          <div class="note">eas build --platform ios --profile production</div>
+        </label>
+      </div>
+      <div class="item" id="pub-d-device-retest" data-done="false">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Install release builds on real phones &amp; re-test</div>
+          <div class="note">Login, punch, leave, notifications on release binary.</div>
+        </label>
+      </div>
+      <div class="item" id="pub-d-upload" data-done="false" data-blocking="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Upload builds to Play / App Store Connect</div>
+          <div class="note">eas submit or manual upload.</div>
+        </label>
+      </div>
+      <div class="item" id="pub-d-internal-test" data-done="false">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Internal / closed testing first</div>
+          <div class="note">Play internal testing + TestFlight before public review.</div>
+        </label>
+      </div>
+    </section>
+
+    <section data-section="E">
+      <h2>E. Store listing &amp; review materials <span class="count"></span></h2>
+      <div class="item" id="pub-e-copy" data-done="false" data-blocking="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">App name, subtitle, description written</div>
+          <div class="note">Disclose demo if not connected to live ERP yet.</div>
+        </label>
+      </div>
+      <div class="item" id="pub-e-screenshots" data-done="false" data-blocking="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Screenshots prepared</div>
+          <div class="note">Phone required; iPad if supportsTablet stays on.</div>
+        </label>
+      </div>
+      <div class="item" id="pub-e-feature-graphic" data-done="false">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Play feature graphic</div>
+          <div class="note">1024×500 promotional image.</div>
+        </label>
+      </div>
+      <div class="item" id="pub-e-support-urls" data-done="false" data-blocking="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Support URL + marketing URL set</div>
+          <div class="note">Use https://iconnectplus.in (marketing) and a support page or mailto:erp@iconnectplus.in — mark done once listing fields are filled.</div>
+        </label>
+      </div>
+      <div class="item" id="pub-e-review-notes" data-done="false" data-blocking="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Review notes with demo accounts</div>
+          <div class="note">Explain employer-provisioned accounts + HR deletion flow.</div>
+        </label>
+      </div>
+      <div class="item" id="pub-e-apple-privacy" data-done="false" data-blocking="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Apple Privacy Nutrition Labels filled</div>
+          <div class="note">Location, photos, contact info, identifiers as applicable.</div>
+        </label>
+      </div>
+      <div class="item" id="pub-e-play-data-safety" data-done="false" data-blocking="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Play Data safety + deletion URL filled</div>
+          <div class="note">Match actual collection; include data-deletion link.</div>
+        </label>
+      </div>
+      <div class="item" id="pub-e-ratings" data-done="false">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Content rating questionnaires done</div>
+          <div class="note">IARC / Apple age rating.</div>
+        </label>
+      </div>
+      <div class="item" id="pub-e-submit-review" data-done="false" data-blocking="true">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Submitted for store review</div>
+          <div class="note">Waiting on Apple / Google approval.</div>
+        </label>
+      </div>
+      <div class="item" id="pub-e-approved" data-done="false">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Approved / published on both stores</div>
+          <div class="note">Live on App Store and Play Store.</div>
+        </label>
+      </div>
+    </section>
+
+    <section data-section="F">
+      <h2>F. After approval (cutover) <span class="count"></span></h2>
+      <div class="item" id="pub-f-hostname" data-done="false">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Stable ESS API hostname ready</div>
+          <div class="note">Suggested: https://ess-api.iconnectplus.in (or api.iconnectplus.in) → demo now, live ESS edge later.</div>
+        </label>
+      </div>
+      <div class="item" id="pub-f-cutover" data-done="false">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Cut over to live API (DNS and/or EAS Update)</div>
+          <div class="note">Turn off mock; remove demo banner on production channel.</div>
+        </label>
+      </div>
+      <div class="item" id="pub-f-monitor" data-done="false">
+        <input type="checkbox" />
+        <label>
+          <div class="title">Monitor crashes &amp; login failures</div>
+          <div class="note">First week after live cutover.</div>
+        </label>
+      </div>
+    </section>
+
+    <footer>
+      File: <code>apps/employee-app-by-Rishabh/docs/store-publish-checklist.html</code>
+      · Also see <code>docs/STORE_COMPLIANCE.md</code>
+    </footer>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "ess-store-publish-checklist-v1";
+
+    function sourceDone(el) {
+      return el.getAttribute("data-done") === "true";
+    }
+
+    function loadLocal() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); }
+      catch { return {}; }
+    }
+
+    function saveLocal(map) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+    }
+
+    function isDone(el, local) {
+      const id = el.id;
+      if (Object.prototype.hasOwnProperty.call(local, id)) return !!local[id];
+      return sourceDone(el);
+    }
+
+    function refresh() {
+      const local = loadLocal();
+      const items = [...document.querySelectorAll(".item")];
+      let done = 0;
+      items.forEach((el) => {
+        const checked = isDone(el, local);
+        const input = el.querySelector("input");
+        input.checked = checked;
+        el.classList.toggle("done", checked);
+        if (checked) done += 1;
+
+        const label = el.querySelector("label .title");
+        let badge = label.querySelector(".badge");
+        if (!badge) {
+          badge = document.createElement("span");
+          badge.className = "badge";
+          label.appendChild(badge);
+        }
+        if (checked) {
+          badge.textContent = "Done";
+          badge.className = "badge done-badge";
+        } else if (el.dataset.blocking === "true") {
+          badge.textContent = "Blocking";
+          badge.className = "badge block-badge";
+        } else {
+          badge.textContent = "Todo";
+          badge.className = "badge todo-badge";
+        }
+      });
+
+      document.querySelectorAll("section").forEach((sec) => {
+        const secItems = [...sec.querySelectorAll(".item")];
+        const secDone = secItems.filter((el) => isDone(el, local)).length;
+        sec.querySelector(".count").textContent = `${secDone}/${secItems.length}`;
+      });
+
+      const total = items.length;
+      const pct = total ? Math.round((done / total) * 100) : 0;
+      document.getElementById("pctLabel").textContent = pct + "%";
+      document.getElementById("fracLabel").textContent = `${done} / ${total}`;
+      document.getElementById("barFill").style.width = pct + "%";
+
+      let overall = "Early";
+      if (pct >= 85) overall = "Near publish";
+      else if (pct >= 60) overall = "Listing / build phase";
+      else if (pct >= 35) overall = "Product ready — ops pending";
+      document.getElementById("overallPill").textContent = `Overall: ${overall} (${pct}%)`;
+      document.getElementById("updatedAt").textContent = new Date().toLocaleString();
+    }
+
+    document.querySelectorAll(".item input").forEach((input) => {
+      input.addEventListener("change", () => {
+        const el = input.closest(".item");
+        const local = loadLocal();
+        local[el.id] = input.checked;
+        saveLocal(local);
+        refresh();
+      });
+    });
+
+    document.getElementById("resetBtn").addEventListener("click", () => {
+      if (confirm("Clear local checkbox overrides and reload source defaults?")) {
+        localStorage.removeItem(STORAGE_KEY);
+        refresh();
+      }
+    });
+
+    document.getElementById("exportBtn").addEventListener("click", async () => {
+      const local = loadLocal();
+      const lines = [...document.querySelectorAll(".item")].map((el) => {
+        const title = el.querySelector(".title").childNodes[0].textContent.trim();
+        return `${isDone(el, local) ? "[x]" : "[ ]"} ${el.id} — ${title}`;
+      });
+      const text = `ESS store publish progress\n${lines.join("\n")}`;
+      try {
+        await navigator.clipboard.writeText(text);
+        alert("Progress summary copied to clipboard.");
+      } catch {
+        prompt("Copy this summary:", text);
+      }
+    });
+
+    document.getElementById("openDocBtn").addEventListener("click", () => {
+      window.open("./STORE_COMPLIANCE.md", "_blank");
+    });
+
+    refresh();
+  </script>
+</body>
+</html>
