@@ -280,7 +280,7 @@ export function TrainingManagementPage() {
           </div>
           {!dir?.notifications.length ? (
             <p className="text-xs text-muted-foreground">
-              No notifications yet. Enroll attendees when creating training.
+              No notifications yet. Enroll attendees when creating a training — they also get an email.
             </p>
           ) : !filteredNotifications.length ? (
             <p className="text-xs text-muted-foreground">No notifications match the filter.</p>
@@ -430,6 +430,8 @@ function TrainingFormDrawer({
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState("planned");
   const [selected, setSelected] = useState<string[]>([]);
+  const [attendeeQuery, setAttendeeQuery] = useState("");
+  const [departmentPick, setDepartmentPick] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -467,10 +469,84 @@ function TrainingFormDrawer({
       setStatus("planned");
       setSelected([]);
     }
+    setAttendeeQuery("");
+    setDepartmentPick("");
     setBusy(false);
   }, [open, directory, program]);
 
-  const host = directory?.options.employees.find((e) => e.id === hostId);
+  const employees = directory?.options.employees ?? [];
+  const departments = useMemo(() => {
+    const fromOptions = directory?.options.departments ?? [];
+    if (fromOptions.length) {
+      return [...fromOptions].sort((a, b) => a.label.localeCompare(b.label));
+    }
+    const map = new Map<string, { id: string; label: string; branchId: string }>();
+    for (const e of employees) {
+      if (!e.departmentId) continue;
+      if (!map.has(e.departmentId)) {
+        map.set(e.departmentId, {
+          id: e.departmentId,
+          label: e.departmentName || "Department",
+          branchId: e.branchId,
+        });
+      }
+    }
+    return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
+  }, [directory?.options.departments, employees]);
+
+  const attendeeQ = attendeeQuery.trim().toLowerCase();
+  const visibleEmployees = useMemo(() => {
+    return employees.filter((e) => {
+      if (!attendeeQ) return true;
+      return (
+        e.label.toLowerCase().includes(attendeeQ) ||
+        e.code.toLowerCase().includes(attendeeQ) ||
+        e.departmentName.toLowerCase().includes(attendeeQ)
+      );
+    });
+  }, [employees, attendeeQ]);
+
+  const allVisibleSelected =
+    visibleEmployees.length > 0 && visibleEmployees.every((e) => selected.includes(e.id));
+
+  function selectAllEmployees() {
+    setSelected(employees.map((e) => e.id));
+  }
+
+  function clearAttendees() {
+    setSelected([]);
+  }
+
+  function toggleVisibleAll() {
+    if (allVisibleSelected) {
+      const drop = new Set(visibleEmployees.map((e) => e.id));
+      setSelected((prev) => prev.filter((id) => !drop.has(id)));
+      return;
+    }
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const e of visibleEmployees) next.add(e.id);
+      return [...next];
+    });
+  }
+
+  function addDepartment(departmentId: string) {
+    if (!departmentId) return;
+    const ids = employees.filter((e) => e.departmentId === departmentId).map((e) => e.id);
+    if (!ids.length) {
+      toast("No employees in that department", "error");
+      return;
+    }
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) next.add(id);
+      return [...next];
+    });
+    const label = departments.find((d) => d.id === departmentId)?.label ?? "Department";
+    toast(`Added ${ids.length} from ${label}`);
+  }
+
+  const host = employees.find((e) => e.id === hostId);
 
   return (
     <SetupDrawer
@@ -520,7 +596,14 @@ function TrainingFormDrawer({
                 : createTrainingProgram(payload);
               void save
                 .then(() => {
-                  toast(program ? "Training updated" : "Training created — attendees will be notified on the day", "success");
+                  toast(
+                    program
+                      ? "Training updated"
+                      : selected.length
+                        ? `Training created — enrollment email sent to ${selected.length} attendee${selected.length === 1 ? "" : "s"}`
+                        : "Training created",
+                    "success",
+                  );
                   onSaved();
                   onClose();
                 })
@@ -620,24 +703,105 @@ function TrainingFormDrawer({
         </div>
         <div className="sm:col-span-2">
           <SetupField label="Attendees (notified on training day)">
-            <div className="max-h-40 space-y-1 overflow-auto rounded-lg border border-border/60 p-2">
-              {(directory?.options.employees ?? []).map((e) => {
-                const on = selected.includes(e.id);
-                return (
-                  <label key={e.id} className="flex cursor-pointer items-center gap-2 text-xs">
-                    <input
-                      type="checkbox"
-                      checked={on}
-                      onChange={() =>
-                        setSelected((prev) =>
-                          on ? prev.filter((id) => id !== e.id) : [...prev, e.id],
-                        )
-                      }
-                    />
-                    {e.label} · {e.code}
-                  </label>
-                );
-              })}
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 cursor-pointer px-2.5 text-xs transition-colors duration-200"
+                  onClick={selectAllEmployees}
+                  disabled={!employees.length}
+                >
+                  All employees
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 cursor-pointer px-2.5 text-xs transition-colors duration-200"
+                  onClick={clearAttendees}
+                  disabled={!selected.length}
+                >
+                  Clear
+                </Button>
+                <SetupSelect
+                  value={departmentPick}
+                  onChange={(e) => setDepartmentPick(e.target.value)}
+                  className="h-8 min-w-[10rem] flex-1 text-xs"
+                >
+                  <option value="">Select department…</option>
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.label}
+                    </option>
+                  ))}
+                </SetupSelect>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 cursor-pointer px-2.5 text-xs transition-colors duration-200"
+                  disabled={!departmentPick}
+                  onClick={() => {
+                    addDepartment(departmentPick);
+                    setDepartmentPick("");
+                  }}
+                >
+                  Add department
+                </Button>
+              </div>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={attendeeQuery}
+                  onChange={(e) => setAttendeeQuery(e.target.value)}
+                  placeholder="Search employee or department…"
+                  className="h-8 cursor-text pl-8 text-xs transition-colors duration-200"
+                />
+              </div>
+              <div className="max-h-40 space-y-1 overflow-auto rounded-lg border border-border/60 p-2">
+                {visibleEmployees.length ? (
+                  <>
+                    <label className="flex cursor-pointer items-center gap-2 border-b border-border/50 pb-1.5 text-xs font-medium text-foreground">
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={toggleVisibleAll}
+                        className="cursor-pointer"
+                      />
+                      {attendeeQ ? `Select filtered (${visibleEmployees.length})` : "Select all in list"}
+                    </label>
+                    {visibleEmployees.map((e) => {
+                      const on = selected.includes(e.id);
+                      return (
+                        <label key={e.id} className="flex cursor-pointer items-center gap-2 text-xs">
+                          <input
+                            type="checkbox"
+                            checked={on}
+                            className="cursor-pointer"
+                            onChange={() =>
+                              setSelected((prev) =>
+                                on ? prev.filter((id) => id !== e.id) : [...prev, e.id],
+                              )
+                            }
+                          />
+                          <span className="min-w-0 truncate">
+                            {e.label} · {e.code}
+                            {e.departmentName ? (
+                              <span className="text-muted-foreground"> · {e.departmentName}</span>
+                            ) : null}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </>
+                ) : (
+                  <p className="px-1 py-2 text-xs text-muted-foreground">
+                    {employees.length ? "No employees match your search." : "No employees available."}
+                  </p>
+                )}
+              </div>
+              <p className="text-[11px] text-muted-foreground">{selected.length} selected</p>
             </div>
           </SetupField>
         </div>

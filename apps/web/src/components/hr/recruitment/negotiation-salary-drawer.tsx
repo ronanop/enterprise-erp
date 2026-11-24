@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { IndianRupee } from "lucide-react";
 
 import {
@@ -9,6 +9,10 @@ import {
   SetupInput,
 } from "@/components/hr/setup/setup-drawer";
 import { Button } from "@/components/ui/button";
+import {
+  computeSplitFromAnnualCtc,
+  salaryBreakdownLines,
+} from "@/lib/salary-structure-excel";
 import {
   formatInrGrouping,
   parseInrInput,
@@ -49,12 +53,24 @@ export function NegotiationSalaryDrawer({
   }, [open, application, job]);
 
   const amount = parseInrInput(display);
-  const canSave = Boolean(application?.id) && amount > 0 && !saving;
+  const split = useMemo(
+    () => (amount > 0 ? computeSplitFromAnnualCtc(amount) : null),
+    [amount],
+  );
+  const breakdown = useMemo(
+    () => (split && split.valid ? salaryBreakdownLines(split) : []),
+    [split],
+  );
+  const canSave = Boolean(application?.id) && amount > 0 && !saving && (split?.valid ?? false);
 
   async function handleSave() {
     if (!application?.id) return;
     if (amount <= 0) {
       setError("Enter the salary / CTC discussed with the candidate.");
+      return;
+    }
+    if (split && !split.valid) {
+      setError("Special allowance would be negative — check the annual CTC.");
       return;
     }
     setSaving(true);
@@ -77,14 +93,14 @@ export function NegotiationSalaryDrawer({
       description={
         candidate
           ? `Negotiation Round · ${candidate.fullName}${job?.title ? ` · ${job.title}` : ""}`
-          : "Capture CTC agreed in Negotiation Round — it prefills the offer letter."
+          : "Capture CTC agreed in Negotiation Round — it prefills the offer letter and salary structure."
       }
       footer={
         <div className="flex justify-end gap-2">
           <Button
             type="button"
             variant="outline"
-            className="cursor-pointer"
+            className="cursor-pointer transition-colors duration-200"
             disabled={saving}
             onClick={onClose}
           >
@@ -92,7 +108,7 @@ export function NegotiationSalaryDrawer({
           </Button>
           <Button
             type="button"
-            className="cursor-pointer"
+            className="cursor-pointer transition-colors duration-200"
             disabled={!canSave}
             onClick={() => void handleSave()}
           >
@@ -111,7 +127,7 @@ export function NegotiationSalaryDrawer({
               ? `Job band max ₹${formatInrGrouping(job.salaryMax)}${
                   job.salaryMin ? ` · min ₹${formatInrGrouping(job.salaryMin)}` : ""
                 }`
-              : "This amount is used on the offer letter when you send offer + docs"
+              : "Used on the offer letter and auto-assigned to payroll on onboarding complete"
           }
         >
           <SetupInput
@@ -125,12 +141,43 @@ export function NegotiationSalaryDrawer({
             }}
           />
         </SetupField>
-        {amount > 0 ? (
-          <p className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-            Will prefill offer letter CTC as{" "}
-            <span className="font-medium text-foreground">₹{formatInrGrouping(amount)}</span>
-          </p>
+
+        {amount > 0 && split ? (
+          <div className="space-y-2 rounded-lg border border-border bg-muted/30 px-3 py-3">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Monthly structure preview (Excel 60/50)
+            </p>
+            {!split.valid ? (
+              <p className="text-xs text-destructive">
+                Special allowance would be negative for this CTC.
+              </p>
+            ) : (
+              <ul className="space-y-1.5 text-sm">
+                {breakdown.map((row) => (
+                  <li
+                    key={row.label}
+                    className="flex items-baseline justify-between gap-3 border-b border-border/60 py-1 last:border-0"
+                  >
+                    <span className="text-muted-foreground">
+                      {row.label}
+                      {row.hint ? (
+                        <span className="ml-1 text-[10px] opacity-80">({row.hint})</span>
+                      ) : null}
+                    </span>
+                    <span className="font-mono tabular-nums text-foreground">
+                      ₹{formatInrGrouping(row.amount)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="pt-1 text-[11px] text-muted-foreground">
+              Offer letter PDF will include this breakdown. On onboarding complete it becomes the
+              employee salary structure in Payroll.
+            </p>
+          </div>
         ) : null}
+
         {error ? <p className="text-xs text-destructive">{error}</p> : null}
       </div>
     </SetupDrawer>

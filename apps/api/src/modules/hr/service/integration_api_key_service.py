@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import select
@@ -60,6 +60,7 @@ class HrIntegrationApiKeyService:
         company_ids: list[UUID] | None = None,
         notes: str | None = None,
         expires_at: datetime | None = None,
+        ttl_days: int | None = None,
     ) -> HrIntegrationApiKeyCreated:
         label = (name or "").strip()
         if not label:
@@ -70,8 +71,17 @@ class HrIntegrationApiKeyService:
             raise AppException("Select at least one endpoint")
         if not flds:
             raise AppException("Select at least one data field")
-        if expires_at and expires_at <= datetime.now(timezone.utc):
-            raise AppException("Expiry must be in the future")
+
+        resolved_expiry = expires_at
+        if resolved_expiry is None and ttl_days is not None:
+            if ttl_days < 1 or ttl_days > 3650:
+                raise AppException("TTL must be between 1 and 3650 days")
+            resolved_expiry = datetime.now(timezone.utc) + timedelta(days=ttl_days)
+        if resolved_expiry is not None:
+            if resolved_expiry.tzinfo is None:
+                resolved_expiry = resolved_expiry.replace(tzinfo=timezone.utc)
+            if resolved_expiry <= datetime.now(timezone.utc):
+                raise AppException("Expiry must be in the future")
 
         plaintext = f"hrms_{secrets.token_urlsafe(32)}"
         prefix = plaintext[:12]
@@ -84,7 +94,7 @@ class HrIntegrationApiKeyService:
             fields=flds,
             company_ids=[str(x) for x in (company_ids or [])],
             notes=(notes or "").strip() or None,
-            expires_at=expires_at,
+            expires_at=resolved_expiry,
             actor_id=ctx.user_id,
         )
         self._db.commit()

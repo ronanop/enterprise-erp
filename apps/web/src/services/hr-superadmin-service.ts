@@ -234,16 +234,22 @@ export async function createIntegrationApiKey(input: {
   fields: string[];
   companyIds?: string[];
   notes?: string;
+  expiresAt?: string | null;
+  ttlDays?: number | null;
 }): Promise<HrIntegrationApiKeyRecord> {
+  const body: Record<string, unknown> = {
+    name: input.name,
+    endpoints: input.endpoints,
+    fields: input.fields,
+    company_ids: input.companyIds ?? [],
+    notes: input.notes || null,
+  };
+  if (input.expiresAt) body.expires_at = input.expiresAt;
+  else if (input.ttlDays != null && input.ttlDays > 0) body.ttl_days = input.ttlDays;
+
   const res = await apiClient<HrIntegrationApiKeyRecord>("/hr/superadmin/api-keys", {
     method: "POST",
-    body: {
-      name: input.name,
-      endpoints: input.endpoints,
-      fields: input.fields,
-      company_ids: input.companyIds ?? [],
-      notes: input.notes || null,
-    },
+    body,
   });
   if (!res.data) throw new Error(res.message || "Could not create API key");
   return {

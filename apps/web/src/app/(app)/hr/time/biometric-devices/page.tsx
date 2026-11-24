@@ -135,29 +135,33 @@ export default function BiometricDevicesPage() {
   const [createdApiKey, setCreatedApiKey] = useState<string | null>(null);
   const [feedDevice, setFeedDevice] = useState<Device | null>(null);
   const [feed, setFeed] = useState<LiveFeed | null>(null);
+  const [feedError, setFeedError] = useState<string | null>(null);
   const [feedLoading, setFeedLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const downloadingLock = useRef(false);
-  const autoFetchForFeed = useRef<string | null>(null);
 
   const loadFeed = useCallback(async (deviceId: string, opts?: { silent?: boolean }) => {
-    if (!opts?.silent) setFeedLoading(true);
+    if (!opts?.silent) {
+      setFeedLoading(true);
+      setFeedError(null);
+    }
     try {
       const res = await apiClient<LiveFeed>(`/hr/biometric-devices/${deviceId}/live-feed`, {
         method: "GET",
-        query: { days: 31 },
+        query: { days: 4 },
       });
       setFeed(res.data ?? null);
+      setFeedError(null);
     } catch (err) {
+      const message =
+        err instanceof ApiClientError
+          ? err.message
+          : "Failed to load device feed from database";
       if (!opts?.silent) {
-        toast(
-          err instanceof ApiClientError
-            ? err.message
-            : "Failed to load device feed from database",
-          "error",
-        );
+        toast(message, "error");
         setFeed(null);
+        setFeedError(message);
       }
     } finally {
       if (!opts?.silent) setFeedLoading(false);
@@ -168,15 +172,16 @@ export default function BiometricDevicesPage() {
     (device: Device) => {
       setFeedDevice(device);
       setFeed(null);
+      setFeedError(null);
       void loadFeed(device.id);
     },
     [loadFeed],
   );
 
   const closeDeviceFeed = useCallback(() => {
-    autoFetchForFeed.current = null;
     setFeedDevice(null);
     setFeed(null);
+    setFeedError(null);
   }, []);
 
   // Refresh punch log from DB every 1 minute while the live feed drawer is open.
@@ -248,7 +253,7 @@ export default function BiometricDevicesPage() {
         const skipped = data?.skipped ?? 0;
         if (!opts?.silent) {
           if (onDevice === 0 && relinked === 0) {
-            toast("Connected. No punch logs in the last 31 days.", "success");
+            toast("Connected. No punch logs in the last 4 days.", "success");
           } else if (read === 0 && already > 0 && saved === 0 && relinked === 0) {
             toast(
               `Up to date — ${already} punch(es) already in DB, 0 new.`,
@@ -287,16 +292,8 @@ export default function BiometricDevicesPage() {
     [feedDevice?.id, loadFeed],
   );
 
-  // Live feed reads the DB only. If empty on open, pull from the machine once.
-  useEffect(() => {
-    if (!feedDevice || feedLoading || !feed) return;
-    if (feed.punches?.length) return;
-    if (autoFetchForFeed.current === feedDevice.id) return;
-    if (feedDevice.status !== "active" || !feedDevice.ip_address || !feedDevice.port) return;
-    autoFetchForFeed.current = feedDevice.id;
-    toast("No punches in ERP yet — fetching from machine…", "success");
-    void fetchPunches(feedDevice);
-  }, [feedDevice, feed, feedLoading, fetchPunches]);
+  // Live feed is DB-only. Do not auto-pull from the machine on open —
+  // unreachable devices (e.g. wrong VLAN) hang the API and break the drawer.
 
   const fetchAllActive = useCallback(
     async (opts?: { silent?: boolean }) => {
@@ -501,7 +498,7 @@ export default function BiometricDevicesPage() {
       <SetupToastHost />
       <PageHeader
         title="Biometric devices"
-        description="Register a ZKTeco K40 Pro with IP, port, and Comm password. Click a device to view punches already saved in ERP (with Emp codes). Use Fetch punches only when you need new logs from the machine — attendance loads from the database, not the device."
+        description="Register a ZKTeco K40 Pro with IP, port, and Comm password. Background sync pulls the last 4 days of punches every 1 minute. Click a device to view punches saved in ERP; use Fetch punches for an on-demand pull."
         actions={
           <div className="flex gap-2">
             <Button
@@ -722,7 +719,7 @@ export default function BiometricDevicesPage() {
                 <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
                   {downloadingId === feedDevice?.id
                     ? "Fetching punches from the machine…"
-                    : "No punches stored for this device in the last 31 days. Click Fetch punches to pull logs from the machine."}
+                    : "No punches stored for this device in the last 4 days. Click Fetch punches to pull logs from the machine."}
                 </p>
               ) : (
                 <div className="overflow-x-auto rounded-lg border border-border">
@@ -751,7 +748,25 @@ export default function BiometricDevicesPage() {
             </div>
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">Could not load feed.</p>
+          <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-3 text-sm text-amber-950">
+            <p className="font-medium">Could not load feed</p>
+            <p className="text-xs opacity-90">
+              {feedError ||
+                "The API did not respond. If this device IP is on another VLAN, Fetch punches will fail until the host can reach it — Refresh feed still reads saved punches from ERP."}
+            </p>
+            {feedDevice ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="cursor-pointer transition-colors duration-200"
+                onClick={() => void loadFeed(feedDevice.id)}
+                disabled={feedLoading}
+              >
+                <RefreshCw className={cn("size-3.5", feedLoading && "animate-spin")} />
+                Retry feed
+              </Button>
+            ) : null}
+          </div>
         )}
       </SetupDrawer>
 

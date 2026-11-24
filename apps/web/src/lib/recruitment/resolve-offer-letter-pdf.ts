@@ -80,6 +80,7 @@ export async function resolveOfferLetterPdfDataUrl(
     return buildOfferLetterPdfDataUrl({
       offerCode: offer.offerCode,
       body,
+      annualCtc: offer.ctc || undefined,
     });
   }
   return fromDoc || null;

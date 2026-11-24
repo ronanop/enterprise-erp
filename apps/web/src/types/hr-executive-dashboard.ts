@@ -36,6 +36,21 @@ export type StackedAttendancePoint = {
   late: number;
 };
 
+/** Daily Present THIS month vs same day LAST month (Attendance Trend line chart). */
+export type AttendanceComparePoint = {
+  label: string;
+  /** Present headcount (present + late + half day) — current month day; drives the line. */
+  thisPresent: number;
+  /** Present headcount — previous month same day-of-month. */
+  lastPresent: number;
+  /** Full-day present (present + late) for tooltip. */
+  thisPresentFull: number;
+  /** Absent headcount — current month day. */
+  thisAbsent: number;
+  /** Half-day headcount — current month day. */
+  thisHalfDay: number;
+};
+
 export type LeaveTrendPoint = {
   label: string;
   casual: number;
@@ -74,6 +89,7 @@ export type HrDashboardCharts = {
   hiringFunnel: NamedCount[];
   attendanceTrend: NamedCount[];
   attendanceStacked: StackedAttendancePoint[];
+  attendanceCompare: AttendanceComparePoint[];
   leaveTrend: NamedCount[];
   leaveTrendByType: LeaveTrendPoint[];
   onboardingProgress: NamedCount[];

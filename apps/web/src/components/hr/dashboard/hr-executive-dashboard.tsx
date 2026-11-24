@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -29,10 +29,10 @@ import {
 import { HrAuthBanner } from "@/components/hr/hr-primitives";
 import {
   ChartHeightContext,
+  PremiumAttendanceCompareChart,
   PremiumBarChart,
   PremiumDonutChart,
   PremiumMultiLineChart,
-  PremiumStackedBarChart,
 } from "@/components/hr/dashboard/hr-analytics-charts";
 import {
   SetupDrawer,
@@ -56,7 +56,6 @@ import type {
   HrExecutiveDashboard,
   LeaveTrendPoint,
   NamedCount,
-  StackedAttendancePoint,
 } from "@/types/hr-executive-dashboard";
 import { DASHBOARD_ROLE_LABELS } from "@/types/hr-executive-dashboard";
 
@@ -81,14 +80,6 @@ const EVENT_PILLS: Record<string, { label: string; className: string }> = {
 type AnalyticsPeriod = "this_month" | "last_3" | "last_6";
 
 function sliceNamed(rows: NamedCount[], period: AnalyticsPeriod): NamedCount[] {
-  const n = period === "this_month" ? 1 : period === "last_3" ? 3 : 6;
-  return rows.slice(-n);
-}
-
-function sliceStacked(
-  rows: StackedAttendancePoint[],
-  period: AnalyticsPeriod,
-): StackedAttendancePoint[] {
   const n = period === "this_month" ? 1 : period === "last_3" ? 3 : 6;
   return rows.slice(-n);
 }
@@ -179,28 +170,40 @@ export function HrExecutiveDashboardPage() {
     count: number;
   } | null>(null);
   const [listSearch, setListSearch] = useState("");
+  const dataRef = useRef(data);
+  dataRef.current = data;
 
   const load = useCallback(
     async (opts?: { silent?: boolean; force?: boolean }) => {
-      const silent = Boolean(opts?.silent) || (!opts?.force && Boolean(readDashboardCache(cacheScope)));
+      const cached = readDashboardCache(cacheScope);
+      const hasCached = Boolean(cached) || Boolean(dataRef.current);
+      // Keep last API snapshot on screen while refreshing — never blank the dashboard.
+      const silent = Boolean(opts?.silent) || hasCached;
       if (!silent) {
         setLoading(true);
         setChartsLoading(true);
       } else {
         setRefreshing(true);
+        if (cached && !dataRef.current) setData(cached);
       }
       try {
         setRole("hr");
-        const core = await loadHrExecutiveDashboard("hr", "core");
-        setData(core);
-        writeDashboardCache(cacheScope, core);
-        setLoading(false);
-        setChartsLoading(false);
+        // Cold start only: paint a lightweight core snapshot. Never write it to cache
+        // or replace an existing (better) full payload mid-refresh.
+        if (!hasCached) {
+          const core = await loadHrExecutiveDashboard("hr", "core");
+          setData(core);
+          setLoading(false);
+          setChartsLoading(false);
+        }
         const full = await loadHrExecutiveDashboard("hr", "full");
         setData(full);
         writeDashboardCache(cacheScope, full);
       } catch {
         if (!silent) toast("Failed to load HR dashboard", "error");
+        // On failure keep whatever was already on screen / in cache.
+        const fallback = readDashboardCache(cacheScope);
+        if (fallback) setData(fallback);
       } finally {
         setLoading(false);
         setChartsLoading(false);
@@ -290,7 +293,8 @@ export function HrExecutiveDashboardPage() {
   const departmentWise = charts?.departmentWise ?? [];
   const locationWise = charts?.locationWise ?? [];
   const employeeGrowth = sliceNamed(charts?.employeeGrowth ?? [], period);
-  const attendanceStacked = sliceStacked(charts?.attendanceStacked ?? [], period);
+  // Attendance trend is always current-month daily (1 → today) vs last month; period filter does not apply.
+  const attendanceCompare = charts?.attendanceCompare ?? [];
   const leaveTrendByType = sliceLeave(charts?.leaveTrendByType ?? [], period);
   const attritionByMonth = sliceNamed(charts?.attritionByMonth ?? [], period);
   const attritionByDepartment = charts?.attritionByDepartment ?? [];
@@ -368,7 +372,7 @@ export function HrExecutiveDashboardPage() {
               variant="outline"
               className="h-10 cursor-pointer rounded-xl px-4"
               disabled={loading || chartsLoading || refreshing}
-              onClick={() => void load({ force: true, silent: Boolean(data) })}
+              onClick={() => void load({ silent: Boolean(dataRef.current || readDashboardCache(cacheScope)) })}
             >
               <RefreshCw
                 className={cn(
@@ -595,20 +599,10 @@ export function HrExecutiveDashboardPage() {
                   />
                 </ChartFrame>
                 <ChartFrame href="/hr/time?tab=list" hrefLabel="Open attendance">
-                  <PremiumStackedBarChart
+                  <PremiumAttendanceCompareChart
                     title="Attendance Trend"
-                    data={attendanceStacked}
-                    clickHint="Click a segment to filter today's attendance"
-                    onSegmentClick={(segment) => {
-                      const map: Record<string, string> = {
-                        present: "/hr/time?tab=list&stats=present",
-                        absent: "/hr/time?tab=list&stats=absent",
-                        late: "/hr/time?tab=list&stats=late",
-                        halfDay: "/hr/time?tab=list&status=half_day",
-                        leave: "/hr/leave?view=on-leave-today",
-                      };
-                      router.push(map[segment] ?? "/hr/time?tab=list");
-                    }}
+                    subtitle={`Present (incl. late / half day) · day 1–${new Date().getDate()} · This month vs last month`}
+                    data={attendanceCompare}
                   />
                 </ChartFrame>
                 <ChartFrame href="/hr/leave" hrefLabel="Open leave">

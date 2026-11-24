@@ -1988,6 +1988,7 @@ class HrIntegrationApiKeyCreateRequest(BaseModel):
     company_ids: list[UUID] = []
     notes: str | None = None
     expires_at: datetime | None = None
+    ttl_days: int | None = None
 
 
 class HrIntegrationApiKeyRecord(BaseModel):

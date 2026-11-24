@@ -43,6 +43,8 @@ class PayrollPolicyService:
 
     def get_active(self, ctx: TenantContext, company_id: UUID | None = None) -> PayPayrollPolicy | None:
         cid = self._scope.resolve_company_id(ctx, company_id)
+        if cid is None:
+            return None
         return self._repo.get_active(ctx, cid)
 
     def get_active_or_defaults(self, ctx: TenantContext, company_id: UUID | None = None) -> dict:

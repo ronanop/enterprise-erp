@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { isAuthenticated } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { getShareableApiBase } from "@/utils/env";
 import { loadEmployeeDirectory } from "@/services/employee-management-service";
 import {
   ALL_HR_NAV_KEYS,
@@ -56,6 +57,16 @@ const TABS: HrTabItem[] = [
 
 const NAV_ACCESS_GROUPS = hrNavAccessGroups();
 
+const API_KEY_TTL_OPTIONS: { value: string; label: string; days: number | null }[] = [
+  { value: "never", label: "Never expires", days: null },
+  { value: "1", label: "1 day", days: 1 },
+  { value: "7", label: "7 days", days: 7 },
+  { value: "30", label: "30 days", days: 30 },
+  { value: "90", label: "90 days", days: 90 },
+  { value: "365", label: "1 year", days: 365 },
+  { value: "custom", label: "Custom date…", days: null },
+];
+
 function effectiveNavKeys(admin: HrAdminRecord): Set<string> {
   if (admin.nav_unrestricted) return new Set(ALL_HR_NAV_KEYS);
   return new Set(admin.nav_keys);
@@ -65,6 +76,14 @@ function formatWhen(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString();
+}
+
+function buildIntegrationSnippets(apiKey: string, path: string): { curl: string; powershell: string; url: string } {
+  const base = getShareableApiBase().replace(/\/+$/, "");
+  const url = `${base}${path.startsWith("/") ? path : `/${path}`}?page=1&page_size=100`;
+  const curl = `curl -s -H "X-HRMS-Api-Key: ${apiKey}" "${url}"`;
+  const powershell = `Invoke-RestMethod -Uri "${url}" -Headers @{ "X-HRMS-Api-Key" = "${apiKey}" }`;
+  return { curl, powershell, url };
 }
 
 function ToggleSwitch({
@@ -191,6 +210,10 @@ export function HrSuperadminPage() {
   const [selectedApiCompanies, setSelectedApiCompanies] = useState<string[]>([]);
   const [creatingKey, setCreatingKey] = useState(false);
   const [createdPlainKey, setCreatedPlainKey] = useState<string | null>(null);
+  const [createdKeyExpiresAt, setCreatedKeyExpiresAt] = useState<string | null>(null);
+  const [createdKeyPath, setCreatedKeyPath] = useState("/hr/integration/employees");
+  const [apiKeyTtl, setApiKeyTtl] = useState("30");
+  const [apiKeyCustomExpiry, setApiKeyCustomExpiry] = useState("");
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -450,6 +473,36 @@ export function HrSuperadminPage() {
       toast("Select at least one data field", "error");
       return;
     }
+
+    let ttlDays: number | null = null;
+    let expiresAt: string | null = null;
+    if (apiKeyTtl === "custom") {
+      if (!apiKeyCustomExpiry.trim()) {
+        toast("Pick a custom expiry date", "error");
+        return;
+      }
+      const custom = new Date(apiKeyCustomExpiry);
+      if (Number.isNaN(custom.getTime()) || custom.getTime() <= Date.now()) {
+        toast("Expiry must be in the future", "error");
+        return;
+      }
+      expiresAt = custom.toISOString();
+    } else if (apiKeyTtl !== "never") {
+      const days = Number(apiKeyTtl);
+      if (!Number.isFinite(days) || days < 1) {
+        toast("Invalid TTL", "error");
+        return;
+      }
+      ttlDays = days;
+    }
+
+    const primaryEp =
+      apiCatalog.endpoints.find((ep) => selectedEndpoints.includes(ep.id)) ??
+      apiCatalog.endpoints[0];
+    const path =
+      primaryEp?.path?.replace(/^\/api\/v1/, "") ||
+      `/hr/integration/${selectedEndpoints[0] || "employees"}`;
+
     setCreatingKey(true);
     try {
       const created = await createIntegrationApiKey({
@@ -458,11 +511,15 @@ export function HrSuperadminPage() {
         fields: selectedFields,
         companyIds: selectedApiCompanies,
         notes: apiKeyNotes.trim() || undefined,
+        expiresAt,
+        ttlDays,
       });
       setCreatedPlainKey(created.api_key ?? null);
+      setCreatedKeyExpiresAt(created.expires_at ?? expiresAt);
+      setCreatedKeyPath(path.startsWith("/") ? path : `/${path}`);
       setApiKeyName("");
       setApiKeyNotes("");
-      toast("API key created — copy it now");
+      toast("API key created — copy the snippet now");
       await reloadApiKeys();
     } catch (err) {
       toast(err instanceof ApiClientError ? err.message : "Could not create API key", "error");
@@ -476,7 +533,10 @@ export function HrSuperadminPage() {
     try {
       await revokeIntegrationApiKey(keyId);
       toast("API key revoked");
-      if (createdPlainKey) setCreatedPlainKey(null);
+      if (createdPlainKey) {
+        setCreatedPlainKey(null);
+        setCreatedKeyExpiresAt(null);
+      }
       await reloadApiKeys();
     } catch (err) {
       toast(err instanceof ApiClientError ? err.message : "Could not revoke API key", "error");
@@ -484,6 +544,11 @@ export function HrSuperadminPage() {
       setBusyId(null);
     }
   }
+
+  const createdSnippets = useMemo(() => {
+    if (!createdPlainKey) return null;
+    return buildIntegrationSnippets(createdPlainKey, createdKeyPath);
+  }, [createdPlainKey, createdKeyPath]);
 
   if (!isAuthenticated()) return <HrAuthBanner />;
   if (permLoading) return <HrLoadingBlock label="Checking access…" />;
@@ -781,12 +846,21 @@ export function HrSuperadminPage() {
                 </Button>
               </PanelHeader>
 
-              {createdPlainKey ? (
-                <div className="mb-4 rounded-xl border border-primary/30 bg-primary/5 p-3">
-                  <p className="text-xs font-medium text-foreground">
-                    Copy this key now — it will not be shown again.
-                  </p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
+              {createdPlainKey && createdSnippets ? (
+                <div className="mb-4 space-y-3 rounded-xl border border-primary/30 bg-primary/5 p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <p className="text-xs font-medium text-foreground">
+                      Copy this key and call snippet now — the secret will not be shown again.
+                    </p>
+                    {createdKeyExpiresAt ? (
+                      <p className="text-[11px] text-muted-foreground">
+                        Expires {formatWhen(createdKeyExpiresAt)}
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground">No expiry</p>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
                     <Input readOnly value={createdPlainKey} className="h-9 flex-1 font-mono text-xs" />
                     <Button
                       type="button"
@@ -798,13 +872,67 @@ export function HrSuperadminPage() {
                       }}
                     >
                       <Copy className="size-3.5" />
-                      Copy
+                      Copy key
                     </Button>
                   </div>
-                  <p className="mt-2 text-[11px] text-muted-foreground">
-                    Example: GET /api/v1/hr/integration/employees with header{" "}
-                    <span className="font-mono">X-HRMS-Api-Key: {createdPlainKey.slice(0, 12)}…</span>
-                  </p>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[11px] font-medium text-foreground">Endpoint URL</p>
+                      <button
+                        type="button"
+                        className="cursor-pointer text-[11px] font-medium text-primary transition-opacity duration-200 hover:opacity-80"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(createdSnippets.url);
+                          toast("URL copied");
+                        }}
+                      >
+                        Copy URL
+                      </button>
+                    </div>
+                    <pre className="overflow-x-auto rounded-lg border border-border/60 bg-background px-2.5 py-2 font-mono text-[11px] leading-relaxed text-foreground">
+                      {createdSnippets.url}
+                    </pre>
+                    <p className="text-[11px] text-muted-foreground">
+                      Header:{" "}
+                      <span className="font-mono text-foreground">X-HRMS-Api-Key: {createdPlainKey}</span>
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[11px] font-medium text-foreground">curl</p>
+                      <button
+                        type="button"
+                        className="cursor-pointer text-[11px] font-medium text-primary transition-opacity duration-200 hover:opacity-80"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(createdSnippets.curl);
+                          toast("curl snippet copied");
+                        }}
+                      >
+                        Copy curl
+                      </button>
+                    </div>
+                    <pre className="overflow-x-auto rounded-lg border border-border/60 bg-background px-2.5 py-2 font-mono text-[11px] leading-relaxed text-foreground">
+                      {createdSnippets.curl}
+                    </pre>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[11px] font-medium text-foreground">PowerShell</p>
+                      <button
+                        type="button"
+                        className="cursor-pointer text-[11px] font-medium text-primary transition-opacity duration-200 hover:opacity-80"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(createdSnippets.powershell);
+                          toast("PowerShell snippet copied");
+                        }}
+                      >
+                        Copy PowerShell
+                      </button>
+                    </div>
+                    <pre className="overflow-x-auto rounded-lg border border-border/60 bg-background px-2.5 py-2 font-mono text-[11px] leading-relaxed text-foreground">
+                      {createdSnippets.powershell}
+                    </pre>
+                  </div>
                 </div>
               ) : null}
 
@@ -831,6 +959,40 @@ export function HrSuperadminPage() {
                       className="h-9"
                     />
                   </label>
+                  <label className="space-y-1 text-xs">
+                    <span className="font-medium text-foreground">TTL / expiry</span>
+                    <select
+                      value={apiKeyTtl}
+                      onChange={(e) => setApiKeyTtl(e.target.value)}
+                      className="flex h-9 w-full cursor-pointer rounded-md border border-input bg-background px-3 text-xs transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {API_KEY_TTL_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {apiKeyTtl === "custom" ? (
+                    <label className="space-y-1 text-xs">
+                      <span className="font-medium text-foreground">Expires at</span>
+                      <Input
+                        type="datetime-local"
+                        value={apiKeyCustomExpiry}
+                        onChange={(e) => setApiKeyCustomExpiry(e.target.value)}
+                        className="h-9"
+                      />
+                    </label>
+                  ) : (
+                    <label className="space-y-1 text-xs">
+                      <span className="font-medium text-foreground">Notes reminder</span>
+                      <p className="flex h-9 items-center text-[11px] text-muted-foreground">
+                        {apiKeyTtl === "never"
+                          ? "Key stays valid until you revoke it."
+                          : `Key auto-expires after ${apiKeyTtl} day${apiKeyTtl === "1" ? "" : "s"}.`}
+                      </p>
+                    </label>
+                  )}
                 </div>
 
                 <div>
@@ -991,12 +1153,16 @@ export function HrSuperadminPage() {
                         <th className="px-3 py-2.5 font-medium">Prefix</th>
                         <th className="px-3 py-2.5 font-medium">Endpoint</th>
                         <th className="px-3 py-2.5 font-medium">Fields</th>
+                        <th className="px-3 py-2.5 font-medium">Expires</th>
                         <th className="px-3 py-2.5 font-medium">Created</th>
                         <th className="px-3 py-2.5 font-medium text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {apiKeys.map((row) => (
+                      {apiKeys.map((row) => {
+                        const expired =
+                          !!row.expires_at && new Date(row.expires_at).getTime() <= Date.now();
+                        return (
                         <tr key={row.id} className="border-b border-border/50 last:border-b-0">
                           <td className="px-3 py-2.5 align-middle">
                             <p className="font-medium">{row.name}</p>
@@ -1016,6 +1182,18 @@ export function HrSuperadminPage() {
                           >
                             {row.fields.join(", ") || "—"}
                           </td>
+                          <td
+                            className={cn(
+                              "whitespace-nowrap px-3 py-2.5 align-middle",
+                              expired ? "font-medium text-destructive" : "text-muted-foreground",
+                            )}
+                          >
+                            {row.expires_at
+                              ? expired
+                                ? `Expired ${formatWhen(row.expires_at)}`
+                                : formatWhen(row.expires_at)
+                              : "Never"}
+                          </td>
                           <td className="whitespace-nowrap px-3 py-2.5 align-middle text-muted-foreground">
                             {row.created_at ? formatWhen(row.created_at) : "—"}
                           </td>
@@ -1032,7 +1210,8 @@ export function HrSuperadminPage() {
                             </Button>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

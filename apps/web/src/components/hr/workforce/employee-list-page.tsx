@@ -39,6 +39,7 @@ import {
   excelEntityCell,
   excelOrganisationCell,
   renderEmployeeCell,
+  WorkforceTagBadge,
 } from "@/lib/employee-table-columns";
 import {
   ALL_EMPLOYEE_TABLE_COLUMN_KEYS,
@@ -55,6 +56,8 @@ import { FilterSelect } from "@/components/ui/filter-select";
 const COLUMN_CELL_CLASS: Partial<Record<EmployeeTableColumnKey, string>> = {
   employeeCode: "min-w-[7.5rem] max-w-[9rem]",
   name: "min-w-[11rem] max-w-[14rem]",
+  tag: "min-w-[5rem] max-w-[6.5rem]",
+  deployedAt: "min-w-[8rem] max-w-[12rem]",
   entity: "min-w-[8rem] max-w-[11rem]",
   organisation: "min-w-[7rem] max-w-[10rem]",
   location: "min-w-[7rem] max-w-[10rem]",
@@ -104,6 +107,7 @@ const EMPTY_FILTERS: EmployeeListFilters = {
 };
 
 const HEADER_FILTER_COLUMNS = new Set<EmployeeTableColumnKey>([
+  "tag",
   "entity",
   "organisation",
   "location",
@@ -330,6 +334,8 @@ export function EmployeeManagementPage() {
 
   function headerFilterValue(key: EmployeeTableColumnKey): string {
     switch (key) {
+      case "tag":
+        return filters.workforceScope;
       case "entity":
         return filters.entityId;
       case "organisation":
@@ -358,6 +364,11 @@ export function EmployeeManagementPage() {
   function onHeaderFilterChange(key: EmployeeTableColumnKey, value: string) {
     setFilters((f) => {
       switch (key) {
+        case "tag":
+          return {
+            ...f,
+            workforceScope: value === "office" || value === "client" ? value : "",
+          };
         case "entity":
           return { ...f, entityId: value };
         case "organisation":
@@ -386,6 +397,11 @@ export function EmployeeManagementPage() {
 
   function headerFilterChoices(key: EmployeeTableColumnKey): { value: string; label: string }[] {
     switch (key) {
+      case "tag":
+        return [
+          { value: "office", label: "Office" },
+          { value: "client", label: "Client" },
+        ];
       case "entity":
         return entityOptions.map((e) => ({ value: e.id, label: e.label }));
       case "organisation":
@@ -833,7 +849,8 @@ export function EmployeeManagementPage() {
                                       photoUrl={row.profilePhotoDataUrl}
                                       size="sm"
                                     />
-                                    <span className="truncate font-medium">{row.displayName}</span>
+                                    <span className="min-w-0 truncate font-medium">{row.displayName}</span>
+                                    {!visibleColumns.has("tag") ? <WorkforceTagBadge row={row} /> : null}
                                   </Link>
                                 ) : (
                                   <span className="block truncate">

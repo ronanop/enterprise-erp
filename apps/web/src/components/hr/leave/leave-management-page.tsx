@@ -72,14 +72,22 @@ export function LeaveManagementPage() {
   const statusBucket = searchParams.get("status");
   const onLeaveTodayView = searchParams.get("view") === "on-leave-today";
   const tabParam = searchParams.get("tab");
-  const tab: LeavePageTab = tabParam === "balances" ? "balances" : "requests";
+  // Balances is the primary page (sidebar "Balances"). Requests stay available for
+  // deep links (?tab=requests / status / on-leave-today); approvals live under Employee Requests.
+  const tab: LeavePageTab =
+    tabParam === "requests" || Boolean(statusBucket) || onLeaveTodayView ? "requests" : "balances";
 
   function setTab(next: LeavePageTab) {
     const params = new URLSearchParams(searchParams.toString());
-    if (next === "requests") params.delete("tab");
-    else params.set("tab", next);
+    if (next === "balances") {
+      params.set("tab", "balances");
+      params.delete("status");
+      params.delete("view");
+    } else {
+      params.set("tab", "requests");
+    }
     const qs = params.toString();
-    router.replace(qs ? `/hr/leave?${qs}` : "/hr/leave");
+    router.replace(qs ? `/hr/leave?${qs}` : "/hr/leave?tab=balances");
   }
 
   const load = useCallback(async () => {
@@ -128,7 +136,7 @@ export function LeaveManagementPage() {
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3">
       <SetupToastHost />
       <PageHeader
-        title="Leave Management"
+        title={tab === "balances" ? "Balances" : "Leave requests"}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {tab === "balances" ? (
@@ -136,13 +144,23 @@ export function LeaveManagementPage() {
                 type="button"
                 size="sm"
                 variant="outline"
-                className="cursor-pointer"
+                className="cursor-pointer transition-colors duration-200"
                 onClick={() => setImportOpen(true)}
               >
                 <Upload className="size-3.5" />
                 Upload balances
               </Button>
-            ) : null}
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="cursor-pointer transition-colors duration-200"
+                onClick={() => setTab("balances")}
+              >
+                Back to balances
+              </Button>
+            )}
             <HrToolbar onRefresh={() => void load()} loading={loading} />
           </div>
         }
@@ -150,29 +168,6 @@ export function LeaveManagementPage() {
 
       {authBlocked ? <HrAuthBanner /> : null}
       {loading && !dir ? <EmsSkeleton /> : null}
-
-      <div className="flex shrink-0 gap-1 border-b border-border/70">
-        {(
-          [
-            { id: "requests" as const, label: "Requests" },
-            { id: "balances" as const, label: "Balances" },
-          ] as const
-        ).map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            className={cn(
-              "cursor-pointer border-b-2 px-3 py-2 text-xs font-medium transition-colors duration-200",
-              tab === t.id
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
 
       {tab === "balances" && dir ? (
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto">
@@ -230,7 +225,7 @@ export function LeaveManagementPage() {
                 ? `${statusBucket.charAt(0).toUpperCase()}${statusBucket.slice(1)}`
                 : ""}
           </span>
-          <Link href="/hr/leave" className="cursor-pointer text-primary hover:underline">
+          <Link href="/hr/leave?tab=balances" className="cursor-pointer text-primary hover:underline">
             Clear
           </Link>
         </div>

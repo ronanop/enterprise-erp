@@ -160,6 +160,18 @@ function deployedAtFromSkillsJson(skills: unknown): string {
   return String((skills as Record<string, unknown>).deployed_at ?? "").trim();
 }
 
+function personalEmailFromSkillsJson(skills: unknown): string {
+  if (!skills || typeof skills !== "object" || Array.isArray(skills)) return "";
+  const raw = String((skills as Record<string, unknown>).personal_email ?? "").trim();
+  if (!raw || !raw.includes("@")) return "";
+  return raw;
+}
+
+function reportingManagerNameFromSkillsJson(skills: unknown): string {
+  if (!skills || typeof skills !== "object" || Array.isArray(skills)) return "";
+  return String((skills as Record<string, unknown>).reporting_manager_name ?? "").trim();
+}
+
 function mergeSkillsJsonWithTags(
   previousEmployment: Array<Record<string, unknown> | PreviousEmploymentEntry>,
   tags: string[],
@@ -272,7 +284,12 @@ function hydratePersonalFromMasterProfile(
       nationality: pickStr(p.nationality, profile?.nationality, "Indian"),
       mobile: pickStr(p.mobile, master.mobile, profile?.mobile),
       officialEmail: pickStr(p.officialEmail, master.email, profile?.email),
-      personalEmail: pickStr(p.personalEmail, profile?.personal_email, profile?.alternate_email),
+      personalEmail: pickStr(
+        p.personalEmail,
+        profile?.personal_email,
+        profile?.alternate_email,
+        personalEmailFromSkillsJson(profile?.skills_json),
+      ),
       currentAddress: p.currentAddress.line1.trim()
         ? p.currentAddress
         : currentFromProfile ?? p.currentAddress,
@@ -427,14 +444,24 @@ function mergeRow(
   );
   const managerFromMap = managerId ? managerMap.get(managerId) : undefined;
   const managerFromExt = (hydrated.employment.reportingManagerName || "").trim();
+  const managerFromSkills = reportingManagerNameFromSkillsJson(profile?.skills_json);
   const reportingManagerName =
     managerFromMap ||
     (managerFromExt && managerFromExt !== "-" ? managerFromExt : "") ||
+    (managerFromSkills && managerFromSkills !== "-" ? managerFromSkills : "") ||
     "-";
 
   const profileTags = tagsFromSkillsJson(profile?.skills_json);
   const deployedAt =
     deployedAtFromSkillsJson(profile?.skills_json) || hydrated.employment.deployedAt || "";
+  // Prefer org department from master.department_id; local extension often still says "General"
+  // after import forced SHARED_IMPORT_DEPARTMENT.
+  const fromMapDept = departmentId ? String(deptMap.get(departmentId) ?? "").trim() : "";
+  const fromExtDept = String(hydrated.employment.departmentName ?? "").trim();
+  const departmentName =
+    (fromMapDept && fromMapDept !== "-" ? fromMapDept : "") ||
+    (fromExtDept && fromExtDept !== "-" ? fromExtDept : "") ||
+    "General";
   const nextExt: EmployeeExtension = {
     ...hydrated,
     employment: {
@@ -444,6 +471,8 @@ function mergeRow(
       location: locationName || hydrated.employment.location,
       locationId: locationId || hydrated.employment.locationId,
       deployedAt,
+      departmentId: departmentId || hydrated.employment.departmentId,
+      departmentName,
       reportingManagerId: managerId || hydrated.employment.reportingManagerId,
       reportingManagerName:
         reportingManagerName !== "-"
@@ -469,15 +498,7 @@ function mergeRow(
     officialEmail: hydrated.personal.officialEmail,
     mobile: hydrated.personal.mobile,
     departmentId,
-    departmentName: (() => {
-      const fromExt = String(hydrated.employment.departmentName ?? "").trim();
-      const fromMap = departmentId ? String(deptMap.get(departmentId) ?? "").trim() : "";
-      const pick =
-        (fromExt && fromExt !== "-" ? fromExt : "") ||
-        (fromMap && fromMap !== "-" ? fromMap : "") ||
-        "";
-      return pick || "General";
-    })(),
+    departmentName,
     designationName:
       nextExt.employment.designationName ||
       String(master.designation ?? profile?.designation ?? "-"),

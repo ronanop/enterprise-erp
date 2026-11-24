@@ -178,3 +178,31 @@ export function getShareableOrigin(): string {
   if (isLoopbackHost(window.location.hostname) && env.lanOrigin) return env.lanOrigin;
   return window.location.origin;
 }
+
+/**
+ * Absolute API base for copied curl / PowerShell snippets (LAN-reachable when possible).
+ */
+export function getShareableApiBase(): string {
+  const raw = getApiUrl() || FALLBACK_API_URL;
+  let absolute = raw;
+  if (raw.startsWith("/")) {
+    absolute =
+      typeof window !== "undefined"
+        ? `${window.location.origin}${raw.replace(/\/+$/, "")}`
+        : normalizeApiBase(FALLBACK_API_URL);
+  }
+  try {
+    const u = new URL(absolute);
+    if (isLoopbackHost(u.hostname)) {
+      if (env.lanOrigin) {
+        const lan = new URL(env.lanOrigin);
+        u.hostname = lan.hostname;
+      } else if (typeof window !== "undefined" && !isLoopbackHost(window.location.hostname)) {
+        u.hostname = window.location.hostname;
+      }
+    }
+    return u.toString().replace(/\/+$/, "");
+  } catch {
+    return normalizeApiBase(absolute);
+  }
+}

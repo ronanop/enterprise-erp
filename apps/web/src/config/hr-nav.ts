@@ -124,10 +124,10 @@ export const hrNavGroups: HrNavGroup[] = [
             navKey: "training",
           },
           {
-            title: "Leave",
-            href: "/hr/leave",
+            title: "Balances",
+            href: "/hr/leave?tab=balances",
             icon: CalendarDays,
-            description: "Requests, balances & Excel upload",
+            description: "Leave balances & Excel upload",
             navKey: "leave",
           },
         ],

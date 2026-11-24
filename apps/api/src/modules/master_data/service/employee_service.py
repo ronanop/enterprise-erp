@@ -240,6 +240,8 @@ class EmployeeService:
         employee = self.get_employee(ctx, employee_id)
         if "branch_id" in fields and fields["branch_id"] is not None:
             self._scope.validate_branch_access(ctx, fields["branch_id"])
+        # Import / RM re-import passes skip_department_validation=True so name/code/manager
+        # updates never fail when Excel Department is unmapped.
         if (
             not skip_department_validation
             and "department_id" in fields

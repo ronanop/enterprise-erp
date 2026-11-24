@@ -53,7 +53,15 @@ export type TrainingDirectory = {
   attendance: HrRow[];
   options: {
     branches: { id: string; label: string }[];
-    employees: { id: string; label: string; code: string; branchId: string }[];
+    departments: { id: string; label: string; branchId: string }[];
+    employees: {
+      id: string;
+      label: string;
+      code: string;
+      branchId: string;
+      departmentId: string;
+      departmentName: string;
+    }[];
   };
   notifications: TrainingNotification[];
 };
@@ -94,7 +102,13 @@ export async function loadTrainingDirectory(): Promise<TrainingDirectory> {
     listAll("/branches"),
     loadEmployeeDirectory().catch(() => ({
       records: [],
-      options: { branches: [], departments: [], designations: [], managers: [], shifts: [] },
+      options: {
+        branches: [],
+        departments: [] as { id: string; label: string; branchId: string; headEmployeeId: string }[],
+        designations: [],
+        managers: [],
+        shifts: [],
+      },
       errors: [],
     })),
   ]);
@@ -200,11 +214,18 @@ export async function loadTrainingDirectory(): Promise<TrainingDirectory> {
         id: String(b.id),
         label: String(b.branch_name ?? b.name ?? b.branch_code ?? b.id),
       })),
+      departments: (empDir.options.departments ?? []).map((d) => ({
+        id: d.id,
+        label: d.label,
+        branchId: d.branchId,
+      })),
       employees: empDir.records.map((e) => ({
         id: e.id,
         label: e.displayName,
         code: e.employeeCode,
         branchId: e.branchId,
+        departmentId: e.departmentId || "",
+        departmentName: e.departmentName || "",
       })),
     },
     notifications: listTrainingNotifications(),

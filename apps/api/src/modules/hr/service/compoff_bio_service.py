@@ -6,6 +6,7 @@ import hmac
 import re
 import secrets
 import socket
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
@@ -211,7 +212,15 @@ class CompoffRequestService:
 
 
 _DEVICE_LOCAL_TZ = timezone(timedelta(hours=5, minutes=30))
-_LOG_LOOKBACK_DAYS = 31
+# Only ingest the last few days from the machine (ZK still returns full history;
+# we discard older stamps locally). Keeps the 1-minute sync fast.
+_LOG_LOOKBACK_DAYS = 4
+# Re-scan a small overlap behind the watermark so missed / same-second punches
+# are not permanently skipped after a partial sync.
+_WATERMARK_OVERLAP = timedelta(minutes=5)
+# K40 devices can store 50k–80k+ punches; full get_attendance may take ~2 minutes.
+_ZK_PULL_TIMEOUT_SEC = 180
+
 
 _IPV4 = re.compile(
     r"^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$"
@@ -259,13 +268,26 @@ class BiometricDeviceService:
 
     @staticmethod
     def _probe_device(ip: str | None, port: int | None) -> tuple[bool, str]:
+        """Fast TCP reachability check. Never block the API worker on black-holed hosts."""
         if not ip or not port:
             return False, "Configure IP and port to connect to the device."
+        host = str(ip).strip()
+        port_i = int(port)
+
+        def _connect() -> None:
+            with socket.create_connection((host, port_i), timeout=1.5):
+                return None
+
         try:
-            with socket.create_connection((str(ip).strip(), int(port)), timeout=3):
-                return True, f"Device reachable at {ip}:{port}"
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                pool.submit(_connect).result(timeout=2.5)
+            return True, f"Device reachable at {host}:{port_i}"
+        except FuturesTimeout:
+            return False, f"Cannot reach {host}:{port_i} — connection timed out"
         except OSError as exc:
-            return False, f"Cannot reach {ip}:{port} - {exc}"
+            return False, f"Cannot reach {host}:{port_i} - {exc}"
+        except Exception as exc:  # noqa: BLE001 - probe must never fail the feed
+            return False, f"Cannot reach {host}:{port_i} - {exc}"
 
     def get(self, ctx: TenantContext, row_id: UUID):
         row = self._repo.get(ctx, row_id)
@@ -275,47 +297,69 @@ class BiometricDeviceService:
 
     def live_feed(self, ctx: TenantContext, row_id: UUID, *, days: int = 14) -> BiometricDeviceFeedResponse:
         """Punch list from DB; short TCP probe only for reachability banner (no ZK protocol)."""
+        from sqlalchemy import func, select
+
+        from modules.hr.models.biometric_punch import HrBiometricPunch
+        from modules.master_data.models.employee import MasterEmployee
+
         device = self.get(ctx, row_id)
         cid = device.company_id
         today = date.today()
-        cutoff = today - timedelta(days=max(1, min(days, 90)))
+        window_days = max(1, min(days, 90))
+        cutoff = today - timedelta(days=window_days)
 
+        # Cap the drawer payload — large windows used to take 20s+ and kill the Next proxy.
         punch_rows = self._punches.list_for_device(
             ctx,
             device_id=device.id,
             date_from=cutoff,
             date_to=today,
-            limit=500,
+            limit=100,
         )
-        device_meta = self._device_meta_map(ctx, cid)
-        emp_cache: dict[UUID, object | None] = {}
+        today_punch_count = int(
+            self._db.scalar(
+                select(func.count())
+                .select_from(HrBiometricPunch)
+                .where(
+                    HrBiometricPunch.device_id == device.id,
+                    HrBiometricPunch.is_deleted.is_(False),
+                    HrBiometricPunch.attendance_date == today,
+                )
+            )
+            or 0
+        )
+
+        emp_ids = {p.employee_id for p in punch_rows if p.employee_id}
+        emp_by_id: dict[UUID, MasterEmployee] = {}
+        if emp_ids:
+            for row in self._db.scalars(
+                select(MasterEmployee).where(
+                    MasterEmployee.id.in_(emp_ids),
+                    MasterEmployee.is_deleted.is_(False),
+                )
+            ).all():
+                emp_by_id[row.id] = row
+
+        device_meta = {
+            str(device.device_code): (
+                str(device.device_name or "").strip() or None,
+                str(device.location_text or "").strip() or None,
+            ),
+            str(device.id): (
+                str(device.device_name or "").strip() or None,
+                str(device.location_text or "").strip() or None,
+            ),
+        }
         punches: list[BiometricPunchResponse] = []
-        today_punch_count = 0
-        touched_emp_dates: set[tuple[UUID, date]] = set()
-
-        def _emp(emp_id: UUID):
-            if emp_id not in emp_cache:
-                try:
-                    emp_cache[emp_id] = self._master.get_employee(ctx, emp_id)
-                except Exception:
-                    emp_cache[emp_id] = None
-            return emp_cache[emp_id]
-
         for p in punch_rows:
             emp_name: str | None = None
             emp_code: str | None = p.employee_code_raw
-            if p.employee_id:
-                touched_emp_dates.add((p.employee_id, p.attendance_date))
-                emp = _emp(p.employee_id)
-                if emp is not None:
-                    emp_name = " ".join(
-                        x
-                        for x in (getattr(emp, "first_name", None), getattr(emp, "last_name", None))
-                        if x
-                    ).strip() or None
-                    emp_code = str(getattr(emp, "employee_code", None) or p.employee_code_raw) or None
-            if p.attendance_date == today:
-                today_punch_count += 1
+            if p.employee_id and p.employee_id in emp_by_id:
+                emp = emp_by_id[p.employee_id]
+                emp_name = " ".join(
+                    x for x in (emp.first_name, emp.last_name) if x
+                ).strip() or None
+                emp_code = str(emp.employee_code or p.employee_code_raw) or None
             punches.append(
                 self._punch_to_response(
                     p,
@@ -325,50 +369,7 @@ class BiometricDeviceService:
                 )
             )
 
-        ingested: list[BiometricDeviceLiveLogItem] = []
-        for emp_id, att_date in touched_emp_dates:
-            row = self._attendance.get_for_employee_date(
-                ctx,
-                company_id=cid,
-                employee_id=emp_id,
-                attendance_date=att_date,
-            )
-            if row is None:
-                continue
-            emp = _emp(row.employee_id)
-            emp_name = None
-            emp_code = None
-            if emp is not None:
-                emp_name = " ".join(
-                    x
-                    for x in (getattr(emp, "first_name", None), getattr(emp, "last_name", None))
-                    if x
-                ).strip() or None
-                emp_code = str(getattr(emp, "employee_code", None) or "") or None
-            ingested.append(
-                BiometricDeviceLiveLogItem(
-                    id=row.id,
-                    employee_id=row.employee_id,
-                    employee_code=emp_code,
-                    employee_name=emp_name,
-                    attendance_date=row.attendance_date,
-                    check_in_at=row.check_in_at,
-                    check_out_at=row.check_out_at,
-                    attendance_status=row.attendance_status,
-                    notes=row.notes,
-                    updated_at=getattr(row, "updated_at", None),
-                )
-            )
-        ingested.sort(
-            key=lambda r: (
-                r.attendance_date,
-                r.check_in_at or datetime.min.replace(tzinfo=timezone.utc),
-            ),
-            reverse=True,
-        )
-
         punch_total = len(punch_rows)
-        window_days = max(1, min(days, 90))
         reachable, probe_msg = self._probe_device(device.ip_address, device.port)
         if punch_total == 0:
             reachability_message = (
@@ -377,17 +378,17 @@ class BiometricDeviceService:
             )
         else:
             reachability_message = (
-                f"{probe_msg} Showing {punch_total} punch(es) already saved in ERP "
+                f"{probe_msg} Showing latest {punch_total} punch(es) already saved in ERP "
                 f"(last {window_days} days). Use Fetch punches only to pull new machine logs."
             )
         return BiometricDeviceFeedResponse(
             device=BiometricDeviceResponse.model_validate(device),
             reachable=reachable,
             reachability_message=reachability_message,
-            today_ingested_count=len([r for r in ingested if r.attendance_date == today]),
+            today_ingested_count=0,
             today_punch_count=today_punch_count,
             punches=punches,
-            ingested_records=ingested[:100],
+            ingested_records=[],
         )
 
     def _device_meta_map(self, ctx: TenantContext, company_id: UUID | None) -> dict[str, tuple[str | None, str | None]]:
@@ -715,58 +716,94 @@ class BiometricDeviceService:
         if not device.ip_address or not device.port:
             raise AppException("Set the device IP address and port before fetching punches.")
         password = int(str(device.comm_password or "0").strip() or "0")
-        terminal = ZK(
-            str(device.ip_address).strip(),
-            port=int(device.port),
-            timeout=8,
-            password=password,
-            force_udp=False,
-            ommit_ping=True,
-        )
-        conn = None
-        try:
-            conn = terminal.connect()
-            raw_logs = conn.get_attendance() or []
-        except (OSError, ZKNetworkError, ZKErrorResponse) as exc:
-            raise AppException(
-                f"Cannot fetch punches from {device.ip_address}:{device.port}. {exc}"
-            ) from exc
-        finally:
-            if conn is not None:
-                try:
-                    conn.disconnect()
-                except (OSError, ZKNetworkError, ZKErrorResponse):
-                    pass
+        host = str(device.ip_address).strip()
+        port_i = int(device.port)
+        # In-process pull (Windows multiprocessing Queue was hanging on large logs).
+        # Filter to lookback_days immediately so we never keep the full 50k–80k history.
+        now_local = datetime.now(_DEVICE_LOCAL_TZ)
+        cutoff = now_local - timedelta(days=_LOG_LOOKBACK_DAYS)
 
-        cutoff = datetime.now(_DEVICE_LOCAL_TZ) - timedelta(days=_LOG_LOOKBACK_DAYS)
-        # Incremental: only ingest punches newer than what this device already has in DB.
+        def _pull_filtered() -> list[dict]:
+            last_err: Exception | None = None
+            for force_udp in (False, True):
+                conn = None
+                try:
+                    terminal = ZK(
+                        host,
+                        port=port_i,
+                        timeout=30,
+                        password=password,
+                        force_udp=force_udp,
+                        ommit_ping=True,
+                    )
+                    conn = terminal.connect()
+                    raw = conn.get_attendance() or []
+                    logs: list[dict] = []
+                    for log in raw:
+                        user_id = str(getattr(log, "user_id", "") or "").strip()
+                        stamped = getattr(log, "timestamp", None)
+                        if not user_id or stamped is None:
+                            continue
+                        if not isinstance(stamped, datetime):
+                            continue
+                        if stamped.tzinfo is None:
+                            stamped = stamped.replace(tzinfo=_DEVICE_LOCAL_TZ)
+                        if stamped < cutoff:
+                            continue
+                        logs.append({"user_id": user_id, "timestamp": stamped})
+                    return logs
+                except (OSError, ZKNetworkError, ZKErrorResponse, Exception) as exc:  # noqa: BLE001
+                    last_err = exc
+                finally:
+                    if conn is not None:
+                        try:
+                            conn.disconnect()
+                        except (OSError, ZKNetworkError, ZKErrorResponse):
+                            pass
+            raise AppException(
+                f"Cannot fetch punches from {host}:{port_i}. {last_err}"
+            )
+
+        try:
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                raw_rows = pool.submit(_pull_filtered).result(timeout=_ZK_PULL_TIMEOUT_SEC)
+        except FuturesTimeout as exc:
+            raise AppException(
+                f"Timed out fetching punches from {host}:{port_i} "
+                f"({_ZK_PULL_TIMEOUT_SEC}s). Device log is very large — "
+                f"only last {_LOG_LOOKBACK_DAYS} days are ingested after download."
+            ) from exc
+
+        # Incremental watermark with overlap so partial syncs can catch up.
         last_saved = self._punches.max_punched_at_for_device(device.id)
         if last_saved is not None and last_saved.tzinfo is None:
             last_saved = last_saved.replace(tzinfo=_DEVICE_LOCAL_TZ)
+        watermark = cutoff
+        if last_saved is not None:
+            candidate = last_saved - _WATERMARK_OVERLAP
+            if candidate > cutoff:
+                watermark = candidate
 
         punch_payloads: list[dict] = []
         logs_on_device = 0
         logs_already_saved = 0
         logs_new = 0
-        for log in raw_logs:
-            user_id = str(getattr(log, "user_id", "") or "").strip()
-            stamped = getattr(log, "timestamp", None)
-            if not user_id or stamped is None:
+        for log in raw_rows:
+            user_id = str(log.get("user_id") or "").strip()
+            stamped = log.get("timestamp")
+            if not user_id or stamped is None or not isinstance(stamped, datetime):
                 continue
             if stamped.tzinfo is None:
                 stamped = stamped.replace(tzinfo=_DEVICE_LOCAL_TZ)
-            if stamped < cutoff:
-                continue
             logs_on_device += 1
-            # Strict < keeps same-second punches at the watermark so a partial sync can finish.
-            if last_saved is not None and stamped < last_saved:
+            if stamped < watermark:
                 logs_already_saved += 1
                 continue
             logs_new += 1
             punch_payloads.append(
                 {
                     "employee_code": user_id.strip().upper(),
-                    "attendance_date": stamped.date(),
+                    "attendance_date": stamped.astimezone(_DEVICE_LOCAL_TZ).date(),
                     "check_in_at": stamped,
                     "check_out_at": None,
                     "punch_events": [stamped],
@@ -792,8 +829,10 @@ class BiometricDeviceService:
                 "punch_existing": 0,
                 "total": 0,
             }
-        # Relink older unmatched punches (e.g. CDPL* saved before digit rematch existed).
-        relinked = self._relink_unmatched_punches(ctx, device)
+        # Relink unmatched punches only inside the same lookback window.
+        relinked = self._relink_unmatched_punches(
+            ctx, device, since=cutoff.date()
+        )
         result["created"] = int(result.get("created") or 0) + int(relinked.get("created") or 0)
         result["updated"] = int(result.get("updated") or 0) + int(relinked.get("updated") or 0)
         result["relinked"] = int(relinked.get("relinked") or 0)
@@ -802,7 +841,8 @@ class BiometricDeviceService:
         result["logs_on_device"] = logs_on_device
         result["logs_already_saved"] = logs_already_saved
         result["logs_new"] = logs_new
-        result["since"] = last_saved.isoformat() if last_saved is not None else None
+        result["lookback_days"] = _LOG_LOOKBACK_DAYS
+        result["since"] = watermark.isoformat()
         return result
 
     @classmethod
@@ -1048,11 +1088,24 @@ class BiometricDeviceService:
             "total": len(punches),
         }
 
-    def _relink_unmatched_punches(self, ctx: TenantContext, device) -> dict:
+    def _relink_unmatched_punches(
+        self,
+        ctx: TenantContext,
+        device,
+        *,
+        since: date | None = None,
+    ) -> dict:
         """Attach HR employees to stored punches that have no employee_id yet, then rebuild days."""
         from modules.hr.repository.base import utcnow
 
         unmatched = self._punches.list_unmatched_for_device(ctx, device_id=device.id)
+        if since is not None:
+            unmatched = [
+                p
+                for p in unmatched
+                if (p.attendance_date or (p.punched_at.date() if p.punched_at else None))
+                and (p.attendance_date or p.punched_at.date()) >= since
+            ]
         if not unmatched:
             return {"relinked": 0, "created": 0, "updated": 0}
 

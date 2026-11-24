@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -18,11 +19,15 @@ from modules.hr.repository.training_request_repository import TrainingRequestRep
 from modules.hr.repository.training_room_repository import TrainingRoomRepository
 from modules.hr.service.document_number_service import DocumentNumberService
 from modules.hr.service.engines import TrainingAttendanceEngine, TrainingEngine
+from modules.hr.service.hr_notify import notify_training_enrollment
 from modules.hr.service.hr_scope_validator import HrScopeValidator
+
+logger = logging.getLogger(__name__)
 
 
 class TrainingService:
     def __init__(self, db: Session) -> None:
+        self._db = db
         self._repo = TrainingRepository(db)
         self._attendance = TrainingAttendanceRepository(db)
         self._scope = HrScopeValidator(db)
@@ -49,6 +54,7 @@ class TrainingService:
         employee_ids = fields.pop("employee_ids", None) or []
         row = self._repo.create(ctx, company_id=cid, training_code=code, **fields)
         branch_id = fields.get("branch_id") or row.branch_id
+        enrolled: list[UUID] = []
         for emp_id in employee_ids:
             if not branch_id:
                 continue
@@ -60,6 +66,7 @@ class TrainingService:
                 training_id=row.id,
                 employee_id=emp_id,
             )
+            enrolled.append(UUID(str(emp_id)))
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name="hr_training",
@@ -68,6 +75,7 @@ class TrainingService:
             performed_by=ctx.user_id,
             new_value={"training_code": row.training_code, "training_name": row.training_name},
         )
+        self._notify_enrollment(ctx, row, enrolled)
         return row
 
     def update(self, ctx: TenantContext, row_id: UUID, **fields):
@@ -100,6 +108,7 @@ class TrainingService:
         existing = self._attendance.list_for_training(ctx, row.id, include_deleted=True)
         by_emp = {rec.employee_id: rec for rec in existing}
         branch_id = row.branch_id
+        newly_enrolled: list[UUID] = []
         for emp_id in wanted:
             rec = by_emp.get(emp_id)
             if rec is None:
@@ -113,11 +122,90 @@ class TrainingService:
                     training_id=row.id,
                     employee_id=emp_id,
                 )
+                newly_enrolled.append(emp_id)
             elif rec.is_deleted:
                 self._attendance.restore(ctx, rec.id)
+                newly_enrolled.append(emp_id)
         for emp_id, rec in by_emp.items():
             if emp_id not in wanted and not rec.is_deleted:
                 self._attendance.soft_delete(ctx, rec.id)
+        if newly_enrolled:
+            self._notify_enrollment(ctx, row, newly_enrolled)
+
+    def _room_name(self, room_id: UUID | None) -> str:
+        if room_id is None:
+            return ""
+        room = self._db.get(HrTrainingRoom, room_id)
+        if room is None or getattr(room, "is_deleted", False):
+            return ""
+        return str(room.room_name or room.room_code or "").strip()
+
+    def _notify_enrollment(
+        self,
+        ctx: TenantContext,
+        row: HrTraining,
+        employee_ids: list[UUID],
+    ) -> None:
+        if not employee_ids:
+            return
+        self.send_enrollment_notifications(
+            ctx.tenant_id,
+            row,
+            employee_ids,
+            created_by=ctx.user_id,
+        )
+
+    def send_enrollment_notifications(
+        self,
+        tenant_id: UUID,
+        row: HrTraining,
+        employee_ids: list[UUID],
+        *,
+        created_by: UUID | None = None,
+    ) -> dict[str, int]:
+        """In-app + SMTP enrollment notices (safe to call from Celery)."""
+        start_date = row.start_date.isoformat() if row.start_date else ""
+        start_time = row.start_time.strftime("%H:%M") if row.start_time else ""
+        end_time = row.end_time.strftime("%H:%M") if row.end_time else ""
+        room_name = self._room_name(row.room_id)
+        host_name = str(row.trainer_name or "").strip()
+        emailed = 0
+        in_app = 0
+        for emp_id in employee_ids:
+            try:
+                result = notify_training_enrollment(
+                    self._db,
+                    tenant_id=tenant_id,
+                    employee_id=emp_id,
+                    training_id=row.id,
+                    training_name=row.training_name,
+                    training_code=row.training_code or "",
+                    start_date=start_date,
+                    start_time=start_time,
+                    end_time=end_time,
+                    host_name=host_name,
+                    room_name=room_name,
+                    created_by=created_by,
+                )
+                if result.get("email"):
+                    emailed += 1
+                if result.get("in_app"):
+                    in_app += 1
+            except Exception as exc:  # noqa: BLE001 - never block training create
+                logger.warning(
+                    "Training enrollment notify failed training=%s employee=%s: %s",
+                    row.id,
+                    emp_id,
+                    exc,
+                )
+        logger.info(
+            "Training %s enrollment notices in_app=%s emailed=%s of %s",
+            row.training_code,
+            in_app,
+            emailed,
+            len(employee_ids),
+        )
+        return {"in_app": in_app, "emailed": emailed, "total": len(employee_ids)}
 
     def assign(
         self,

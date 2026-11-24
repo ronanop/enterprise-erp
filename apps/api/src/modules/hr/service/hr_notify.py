@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import logging
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from core.config import settings
 from modules.foundation.models.security import SecUser
 from modules.foundation.service.notification_href import sanitize_inbox_href
 from modules.master_data.published import EmployeeRead
 from modules.platform.compat.notify_facade import PlatformNotifyFacade
 from security.rbac import RBACEngine
+from shared.text_safety import escape_html_text
+
+logger = logging.getLogger(__name__)
 
 
 def _send_in_app(
@@ -102,6 +107,140 @@ def notify_employee(
                 extra=manager_extra,
             )
     return sent
+
+
+def email_employee(
+    db: Session,
+    *,
+    tenant_id: UUID,
+    employee_id: UUID,
+    subject: str,
+    body_html: str,
+    event_type: str,
+    created_by: UUID | None = None,
+    payload_json: dict | None = None,
+) -> bool:
+    """Send SMTP mail to an employee's official email via the Notification Engine."""
+    from modules.foundation.service.notification_service import NotificationService
+
+    if not settings.smtp_configured:
+        return False
+    emp = db.get(EmployeeRead, employee_id)
+    if emp is None or emp.is_deleted:
+        return False
+    to_addr = str(emp.email or "").strip()
+    if not to_addr or "@" not in to_addr:
+        return False
+    try:
+        NotificationService(db).send_email(
+            tenant_id=tenant_id,
+            to_address=to_addr,
+            subject=subject,
+            body_html=body_html,
+            event_type=event_type,
+            created_by=created_by,
+            payload_json=payload_json,
+        )
+        return True
+    except Exception as exc:  # noqa: BLE001 - enrollment must not fail create
+        logger.warning("HR email to employee %s failed: %s", employee_id, exc)
+        return False
+
+
+def notify_training_enrollment(
+    db: Session,
+    *,
+    tenant_id: UUID,
+    employee_id: UUID,
+    training_id: UUID,
+    training_name: str,
+    training_code: str,
+    start_date: str,
+    start_time: str,
+    end_time: str,
+    host_name: str,
+    room_name: str,
+    created_by: UUID | None = None,
+) -> dict[str, bool]:
+    """In-app + SMTP enrollment notice for one training attendee."""
+    name_safe = escape_html_text(training_name)
+    date_safe = escape_html_text(start_date) or "TBD"
+    time_bits = " – ".join(p for p in (start_time, end_time) if p)
+    time_safe = escape_html_text(time_bits) if time_bits else ""
+    host_safe = escape_html_text(host_name)
+    room_safe = escape_html_text(room_name)
+    code_safe = escape_html_text(training_code)
+
+    title = f"Enrolled: {training_name}"
+    plain_body = (
+        f'You are enrolled in "{training_name}"'
+        f"{f' ({training_code})' if training_code else ''}"
+        f" on {start_date or 'TBD'}"
+        f"{f' at {time_bits}' if time_bits else ''}."
+    )
+    if host_name:
+        plain_body += f" Host: {host_name}."
+    if room_name:
+        plain_body += f" Room: {room_name}."
+
+    in_app = notify_employee(
+        db,
+        tenant_id=tenant_id,
+        employee_id=employee_id,
+        template_code="HR_TRAINING_ENROLLMENT",
+        template_name="Training enrollment",
+        event_type="hr.training.enrollment",
+        title=title,
+        body=plain_body,
+        kind="training",
+        extra={
+            "href": "/hr/training",
+            "training_id": str(training_id),
+            "training_name": training_name,
+        },
+        cc_reporting_manager=False,
+    )
+
+    rows = [
+        f"<li><strong>Date:</strong> {date_safe}</li>",
+    ]
+    if time_safe:
+        rows.append(f"<li><strong>Time:</strong> {time_safe}</li>")
+    if host_safe:
+        rows.append(f"<li><strong>Host:</strong> {host_safe}</li>")
+    if room_safe:
+        rows.append(f"<li><strong>Room:</strong> {room_safe}</li>")
+    if code_safe:
+        rows.append(f"<li><strong>Code:</strong> {code_safe}</li>")
+
+    emp = db.get(EmployeeRead, employee_id)
+    greet = escape_html_text(
+        f"{getattr(emp, 'first_name', '') or ''} {getattr(emp, 'last_name', '') or ''}".strip()
+        or "there"
+    )
+    body_html = (
+        f"<p>Hello {greet},</p>"
+        f"<p>You have been enrolled in the following training:</p>"
+        f"<p><strong>{name_safe}</strong></p>"
+        f"<ul>{''.join(rows)}</ul>"
+        "<p>Please attend as scheduled. If you have questions, contact HR.</p>"
+        "<p>— HR Team</p>"
+    )
+    emailed = email_employee(
+        db,
+        tenant_id=tenant_id,
+        employee_id=employee_id,
+        subject=f"Training enrollment: {training_name}",
+        body_html=body_html,
+        event_type="hr.training.enrollment",
+        created_by=created_by,
+        payload_json={
+            "training_id": str(training_id),
+            "training_name": training_name,
+            "employee_id": str(employee_id),
+        },
+    )
+    return {"in_app": in_app, "email": emailed}
 
 
 def notify_users_with_permission(

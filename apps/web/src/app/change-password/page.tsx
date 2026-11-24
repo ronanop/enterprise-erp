@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { KeyRound } from "lucide-react";
+import { Eye, EyeOff, KeyRound } from "lucide-react";
 
 import { AuthCardShell, AuthFormError } from "@/components/auth/auth-card-shell";
 import { NewPasswordFields, passwordMeetsPolicy } from "@/components/auth/new-password-fields";
@@ -24,6 +24,7 @@ function ChangePasswordForm() {
   const next = safeReturnPath(useSearchParams().get("next"));
   const [userName, setUserName] = useState("there");
   const [current, setCurrent] = useState("");
+  const [showCurrent, setShowCurrent] = useState(false);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -71,17 +72,27 @@ function ChangePasswordForm() {
         <AuthFormError message={error} />
         <div>
           <Label htmlFor="current-password">Current (temporary) password</Label>
-          <Input
-            id="current-password"
-            type="password"
-            autoComplete="current-password"
-            autoFocus
-            required
-            value={current}
-            disabled={submitting}
-            onChange={(e) => setCurrent(e.target.value)}
-            className="h-10"
-          />
+          <div className="relative">
+            <Input
+              id="current-password"
+              type={showCurrent ? "text" : "password"}
+              autoComplete="current-password"
+              autoFocus
+              required
+              value={current}
+              disabled={submitting}
+              onChange={(e) => setCurrent(e.target.value)}
+              className="h-10 pr-11 transition-colors duration-200"
+            />
+            <button
+              type="button"
+              onClick={() => setShowCurrent((v) => !v)}
+              aria-label={showCurrent ? "Hide password" : "Show password"}
+              className="absolute inset-y-0 right-0 flex w-11 cursor-pointer items-center justify-center rounded-r-lg text-muted-foreground transition-colors duration-200 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {showCurrent ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            </button>
+          </div>
         </div>
         <NewPasswordFields
           password={password}

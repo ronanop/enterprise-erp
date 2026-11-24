@@ -21,7 +21,12 @@ import {
 } from "recharts";
 
 import { cn } from "@/lib/utils";
-import type { LeaveTrendPoint, NamedCount, StackedAttendancePoint } from "@/types/hr-executive-dashboard";
+import type {
+  AttendanceComparePoint,
+  LeaveTrendPoint,
+  NamedCount,
+  StackedAttendancePoint,
+} from "@/types/hr-executive-dashboard";
 
 /** HR chart palette on the enterprise series colors. */
 export const HR_CHART_COLORS = [
@@ -695,13 +700,23 @@ export function PremiumStackedBarChart({
     >
       <div className="h-full w-full min-h-0">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={rows} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+          <BarChart
+            data={rows}
+            margin={{
+              top: 8,
+              right: 8,
+              left: -12,
+              bottom: rows.length > 14 ? 12 : 0,
+            }}
+          >
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
             <XAxis
               dataKey="name"
-              tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+              tick={{ fontSize: rows.length > 20 ? 9 : 11, fill: "var(--muted-foreground)" }}
               axisLine={false}
               tickLine={false}
+              interval={rows.length > 20 ? 1 : 0}
+              minTickGap={rows.length > 16 ? 2 : 4}
             />
             <YAxis
               tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
@@ -723,7 +738,7 @@ export function PremiumStackedBarChart({
                 name={s.label}
                 stackId="att"
                 fill={s.color}
-                maxBarSize={36}
+                maxBarSize={rows.length > 20 ? 14 : rows.length > 12 ? 22 : 36}
                 radius={s.key === "late" ? [4, 4, 0, 0] : 0}
                 isAnimationActive={false}
                 className={interactive ? "cursor-pointer" : undefined}
@@ -735,6 +750,190 @@ export function PremiumStackedBarChart({
               />
             ))}
           </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </ChartShell>
+  );
+}
+
+const ATTENDANCE_THIS = "#155DFD";
+const ATTENDANCE_LAST = "#94A3B8";
+const ATTENDANCE_ABSENT = "#FF5C8A";
+const ATTENDANCE_HALF = "#FFB020";
+
+function AttendanceDayTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload?: AttendanceComparePoint & { name?: string } }>;
+  label?: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0]?.payload;
+  if (!row) return null;
+  const present = Number(row.thisPresentFull ?? 0);
+  const absent = Number(row.thisAbsent ?? 0);
+  const halfDay = Number(row.thisHalfDay ?? 0);
+  const lastPresent = Number(row.lastPresent ?? 0);
+  const lines = [
+    { label: "Present", value: present, color: ATTENDANCE_THIS },
+    { label: "Absent", value: absent, color: ATTENDANCE_ABSENT },
+    { label: "Half day", value: halfDay, color: ATTENDANCE_HALF },
+    { label: "Last month present", value: lastPresent, color: ATTENDANCE_LAST },
+  ];
+  return (
+    <div className="rounded-lg border border-border/80 bg-card/95 px-3 py-2 text-xs shadow-lg backdrop-blur-sm">
+      <p className="mb-1.5 font-medium text-foreground">Day {label ?? row.name ?? row.label}</p>
+      <ul className="space-y-1">
+        {lines.map((line) => (
+          <li key={line.label} className="flex items-center gap-2 text-muted-foreground">
+            <span className="size-2 shrink-0 rounded-full" style={{ background: line.color }} />
+            <span>{line.label}</span>
+            <span className="ml-auto font-medium tabular-nums text-foreground">
+              {line.value.toLocaleString("en-IN")}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** THIS vs LAST present-headcount line chart (current month day 1→today). */
+export function PremiumAttendanceCompareChart({
+  title,
+  subtitle,
+  data,
+}: {
+  title: string;
+  subtitle?: string;
+  data: AttendanceComparePoint[];
+}) {
+  const chartH = useChartHeight(268);
+  const gradId = useId().replace(/:/g, "");
+  const rows = useMemo(
+    () =>
+      data.map((d) => ({
+        name: d.label,
+        label: d.label,
+        thisPresent: d.thisPresent,
+        lastPresent: d.lastPresent,
+        thisPresentFull: d.thisPresentFull ?? Math.max(0, d.thisPresent - (d.thisHalfDay ?? 0)),
+        thisAbsent: d.thisAbsent ?? 0,
+        thisHalfDay: d.thisHalfDay ?? 0,
+      })),
+    [data],
+  );
+  const hasValues = rows.some((r) => r.thisPresent > 0 || r.lastPresent > 0);
+  const lastIndex = rows.length - 1;
+
+  if (!rows.length || !hasValues) {
+    return (
+      <ChartShell title={title} subtitle={subtitle}>
+        <EmptyChart height={chartH} />
+      </ChartShell>
+    );
+  }
+
+  return (
+    <ChartShell title={title} subtitle={subtitle}>
+      <div className="h-full w-full min-h-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart
+            data={rows}
+            margin={{
+              top: 10,
+              right: 8,
+              left: -12,
+              bottom: rows.length > 14 ? 8 : 0,
+            }}
+          >
+            <defs>
+              <linearGradient id={`att-this-${gradId}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={ATTENDANCE_THIS} stopOpacity={0.28} />
+                <stop offset="100%" stopColor={ATTENDANCE_THIS} stopOpacity={0.02} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+            <XAxis
+              dataKey="name"
+              tick={{ fontSize: rows.length > 20 ? 9 : 11, fill: "var(--muted-foreground)" }}
+              axisLine={false}
+              tickLine={false}
+              interval={rows.length > 20 ? 1 : 0}
+              minTickGap={rows.length > 16 ? 2 : 4}
+            />
+            <YAxis
+              tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+              axisLine={false}
+              tickLine={false}
+              width={36}
+              allowDecimals={false}
+            />
+            <Tooltip content={<AttendanceDayTooltip />} />
+            <Area
+              type="monotone"
+              dataKey="lastPresent"
+              name="Last month"
+              stroke={ATTENDANCE_LAST}
+              strokeWidth={2}
+              strokeDasharray="5 4"
+              fill="transparent"
+              dot={false}
+              activeDot={{ r: 4, strokeWidth: 0, fill: ATTENDANCE_LAST }}
+              isAnimationActive={false}
+            />
+            <Area
+              type="monotone"
+              dataKey="thisPresent"
+              name="This month"
+              stroke={ATTENDANCE_THIS}
+              strokeWidth={2.75}
+              fill={`url(#att-this-${gradId})`}
+              activeDot={{ r: 6, strokeWidth: 2, stroke: "#fff", fill: ATTENDANCE_THIS }}
+              isAnimationActive={false}
+              dot={(props) => {
+                const { cx, cy, index } = props as {
+                  cx?: number;
+                  cy?: number;
+                  index?: number;
+                };
+                if (cx == null || cy == null || index == null) return null;
+                const isEnd = index === lastIndex;
+                if (!isEnd) {
+                  return (
+                    <circle
+                      key={`dot-${index}`}
+                      cx={cx}
+                      cy={cy}
+                      r={3.5}
+                      fill="#fff"
+                      stroke={ATTENDANCE_THIS}
+                      strokeWidth={2}
+                    />
+                  );
+                }
+                return (
+                  <g key={`dot-end-${index}`}>
+                    <circle
+                      cx={cx}
+                      cy={cy}
+                      r={5}
+                      fill={ATTENDANCE_THIS}
+                      stroke="#fff"
+                      strokeWidth={2}
+                    />
+                    <path
+                      d={`M ${cx + 7} ${cy - 5} L ${cx + 14} ${cy} L ${cx + 7} ${cy + 5} Z`}
+                      fill={ATTENDANCE_THIS}
+                    />
+                  </g>
+                );
+              }}
+            />
+          </AreaChart>
         </ResponsiveContainer>
       </div>
     </ChartShell>

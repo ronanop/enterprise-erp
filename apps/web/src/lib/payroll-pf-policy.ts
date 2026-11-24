@@ -1,6 +1,12 @@
 import { payrollTargetCompanyIds } from "@/lib/payroll-company";
 import { resourceService } from "@/services/api-client";
 import { isPfDeductionLabel } from "@/lib/payroll-cycle";
+import {
+  DEFAULT_SANDWICH_POLICY,
+  type SandwichOffBecomes,
+  type SandwichPolicy,
+  type SandwichTrigger,
+} from "@/lib/hr/sandwich-rules";
 
 export type PayrollPfPolicy = {
   pf_mode: string;
@@ -11,6 +17,9 @@ export type PayrollPfPolicy = {
   pf_wage_ceiling: number;
   pf_on_lop: string;
   net_pay_formula: string;
+  sandwich_enabled: boolean;
+  sandwich_triggers: SandwichTrigger;
+  sandwich_off_becomes: SandwichOffBecomes;
 };
 
 export const DEFAULT_PAYROLL_PF_POLICY: PayrollPfPolicy = {
@@ -22,6 +31,9 @@ export const DEFAULT_PAYROLL_PF_POLICY: PayrollPfPolicy = {
   pf_wage_ceiling: 25000,
   pf_on_lop: "fixed",
   net_pay_formula: "gross_minus_employee_pf_only",
+  sandwich_enabled: DEFAULT_SANDWICH_POLICY.enabled,
+  sandwich_triggers: DEFAULT_SANDWICH_POLICY.triggers,
+  sandwich_off_becomes: DEFAULT_SANDWICH_POLICY.offBecomes,
 };
 
 const STORAGE_KEY = "erp.payroll.resolvedPolicy";
@@ -38,6 +50,23 @@ function asRate(value: unknown, fallback: number): number {
   return n > 1 ? n / 100 : n;
 }
 
+function asBool(value: unknown, fallback: boolean): boolean {
+  if (value === true || value === "true" || value === 1 || value === "1") return true;
+  if (value === false || value === "false" || value === 0 || value === "0") return false;
+  return fallback;
+}
+
+function asSandwichTrigger(value: unknown): SandwichTrigger {
+  const v = String(value ?? DEFAULT_SANDWICH_POLICY.triggers);
+  if (v === "approved_leave" || v === "unauthorized_absence" || v === "both") return v;
+  return DEFAULT_SANDWICH_POLICY.triggers;
+}
+
+function asSandwichOutcome(value: unknown): SandwichOffBecomes {
+  const v = String(value ?? DEFAULT_SANDWICH_POLICY.offBecomes);
+  return v === "leave" ? "leave" : "lop";
+}
+
 export function parsePayrollPfPolicy(row: Record<string, unknown> | null | undefined): PayrollPfPolicy {
   if (!row) return { ...DEFAULT_PAYROLL_PF_POLICY };
   return {
@@ -49,6 +78,17 @@ export function parsePayrollPfPolicy(row: Record<string, unknown> | null | undef
     pf_wage_ceiling: asNum(row.pf_wage_ceiling, DEFAULT_PAYROLL_PF_POLICY.pf_wage_ceiling),
     pf_on_lop: String(row.pf_on_lop ?? DEFAULT_PAYROLL_PF_POLICY.pf_on_lop),
     net_pay_formula: String(row.net_pay_formula ?? DEFAULT_PAYROLL_PF_POLICY.net_pay_formula),
+    sandwich_enabled: asBool(row.sandwich_enabled, DEFAULT_PAYROLL_PF_POLICY.sandwich_enabled),
+    sandwich_triggers: asSandwichTrigger(row.sandwich_triggers),
+    sandwich_off_becomes: asSandwichOutcome(row.sandwich_off_becomes),
+  };
+}
+
+export function sandwichPolicyFromPayroll(policy: PayrollPfPolicy): SandwichPolicy {
+  return {
+    enabled: policy.sandwich_enabled,
+    triggers: policy.sandwich_triggers,
+    offBecomes: policy.sandwich_off_becomes,
   };
 }
 

@@ -47,6 +47,7 @@ import {
   loadResolvedPayrollPfPolicy,
   pfDeductionRows,
   replacePfDeductions,
+  sandwichPolicyFromPayroll,
   type PayrollPfPolicy,
 } from "@/lib/payroll-pf-policy";
 import { loadHrMasterDirectory, type HrMasterOption } from "@/services/hr-master-connector";
@@ -213,6 +214,7 @@ function mapApiEmployeeSalary(
   return {
     id: String(e.id ?? crypto.randomUUID()),
     employeeId,
+    employeeCode: code || undefined,
     employeeName: employeeName || code || employeeId,
     structureId: String(e.salary_structure_id ?? structures[0]?.id ?? ""),
     structureName: String(e.structure_name ?? structures[0]?.name ?? "Default"),
@@ -237,6 +239,7 @@ function enrichSalaryWithHr(row: EmployeeSalary, hr: HrMasterOption[]): Employee
   return {
     ...row,
     employeeId: emp.id,
+    employeeCode: emp.code || row.employeeCode,
     employeeName: hrDisplayName(emp) || row.employeeName,
     department: emp.department || row.department,
     bankAccount: emp.bankAccount || row.bankAccount,
@@ -277,7 +280,28 @@ async function resolveEmployeeSalaries(hr?: HrMasterOption[]): Promise<EmployeeS
   const structures = load<SalaryStructure>(K.structures);
   let api: EmployeeSalary[] = [];
   try {
-    const rows = await listAllPayrollRows("/payroll/employee-salaries");
+    // Session company scope can hide other entities' assignments. Fan out by allowed company.
+    const companies = await payrollTargetCompanyIds().catch(() => [] as string[]);
+    const rowSets =
+      companies.length > 1
+        ? await Promise.all(
+            companies.map((companyId) =>
+              listAllPayrollRows("/payroll/employee-salaries", { company_id: companyId }).catch(
+                () => [] as Awaited<ReturnType<typeof listAllPayrollRows>>,
+              ),
+            ),
+          )
+        : [await listAllPayrollRows("/payroll/employee-salaries")];
+    const seen = new Set<string>();
+    const rows: Awaited<ReturnType<typeof listAllPayrollRows>> = [];
+    for (const set of rowSets) {
+      for (const row of set) {
+        const id = String((row as Record<string, unknown>).id ?? "");
+        if (id && seen.has(id)) continue;
+        if (id) seen.add(id);
+        rows.push(row);
+      }
+    }
     api = rows
       .map((e) => mapApiEmployeeSalary(e, structures))
       .filter((row): row is EmployeeSalary => Boolean(row));
@@ -491,7 +515,7 @@ function buildEmployeePayLine(
   return {
     employeeId: sal.employeeId,
     employeeName: sal.employeeName,
-    employeeCode: att?.employeeCode,
+    employeeCode: att?.employeeCode || sal.employeeCode,
     department: sal.department,
     bankAccount: sal.bankAccount || "",
     bankName: sal.bankName,
@@ -540,7 +564,7 @@ function mapApiRunLineToEmployeeLine(
   return withPolicyPf({
     employeeId: String(line.employee_id ?? sal?.employeeId ?? ""),
     employeeName: sal?.employeeName ?? String(line.employee_id ?? ""),
-    employeeCode: sal?.employeeId,
+    employeeCode: sal?.employeeCode || undefined,
     department: sal?.department ?? "—",
     bankAccount: sal?.bankAccount || "",
     bankName: sal?.bankName,
@@ -1045,9 +1069,12 @@ async function buildAttendanceLinesForCycle(
 
   const leaveDir = await loadLeaveDirectory().catch(() => null);
   const leaveRequests = leaveDir?.requests ?? [];
-  const calendar = await loadPayrollAttendanceCalendar().catch(() => ({
-    weeklyOffRules: ["saturday", "sunday"] as WeeklyOffRuleCode[],
-  }));
+  const [calendar, policy] = await Promise.all([
+    loadPayrollAttendanceCalendar().catch(() => ({
+      weeklyOffRules: ["saturday", "sunday"] as WeeklyOffRuleCode[],
+    })),
+    loadResolvedPayrollPfPolicy().catch(() => getCachedPayrollPfPolicy()),
+  ]);
 
   const refs = people.map((p) => ({
     employeeId: p.id,
@@ -1057,7 +1084,10 @@ async function buildAttendanceLinesForCycle(
     hrEmployeeId: p.id,
   }));
 
-  return summarizePayrollAttendance(cycle, refs, records, leaveRequests, calendar);
+  return summarizePayrollAttendance(cycle, refs, records, leaveRequests, {
+    ...calendar,
+    sandwich: sandwichPolicyFromPayroll(policy),
+  });
 }
 
 export async function previewPayrollAttendanceForCycle(
@@ -1201,13 +1231,10 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
     structures = normalizeStructures([...fromApi, ...localOnly]);
     save(K.structures, structures);
 
-    const salaryRows = await listAllPayrollRows("/payroll/employee-salaries").catch(() => overview.employeeSalaries);
     const hr = await loadHrMasterDirectory()
       .then((d) => d.employees ?? [])
       .catch(() => [] as HrMasterOption[]);
-    const fromSalaryApi = salaryRows
-      .map((e) => mapApiEmployeeSalary(e as Record<string, unknown>, structures))
-      .filter((row): row is EmployeeSalary => Boolean(row));
+    const fromSalaryApi = await resolveEmployeeSalaries(hr);
     salaries = purgeExcludedAssignSalaries(mergeSalaryLists(salaries, fromSalaryApi, hr));
     save(K.salaries, salaries);
 
@@ -1381,14 +1408,17 @@ export function computePayrollStats(dir: PayrollDirectory) {
 }
 
 export async function createStructure(
-  input: Omit<SalaryStructure, "id" | "createdAt">,
+  input: Omit<SalaryStructure, "id" | "createdAt"> & { companyId?: string },
 ): Promise<SalaryStructure> {
   const prepared = withExcelAmounts(input);
   const stored = getStoredOrgContext();
   const companies = await payrollTargetCompanyIds();
-  // Prefer the company selected in the header so list (scoped by session company) sees it.
+  // Prefer explicit employee company (bulk assign), else header company, else first allowed.
   const companyId =
-    (stored && !stored.allCompanies && stored.companyId) || companies[0] || "";
+    (input.companyId && UUID_RE.test(input.companyId) ? input.companyId : "") ||
+    (stored && !stored.allCompanies && stored.companyId) ||
+    companies[0] ||
+    "";
   if (!companyId) {
     throw new Error("Select a company in the header before creating a salary structure.");
   }
@@ -1760,6 +1790,7 @@ export async function assignEmployeeSalary(
       row.employeeId = employeeUuid;
     } else {
       const res = await resourceService.create<Record<string, unknown>>("/payroll/employee-salaries", {
+        company_id: companyId && UUID_RE.test(companyId) ? companyId : undefined,
         branch_id: branchId,
         employee_id: employeeUuid,
         employment_id: employmentId,
@@ -1929,7 +1960,7 @@ export async function bulkAssignSalariesFromImport(
       continue;
     }
 
-    const payload: Omit<SalaryStructure, "id" | "createdAt"> = {
+    const payload: Omit<SalaryStructure, "id" | "createdAt"> & { companyId?: string } = {
       ...amountsFromSplit(split),
       // Force Excel employer column through createStructure (do not let pf overwrite it)
       employerContribution,
@@ -1945,6 +1976,8 @@ export async function bulkAssignSalariesFromImport(
       edliAdminAmount: EXCEL_DEFAULTS.edliAdminAmount,
       esiPercent: EXCEL_DEFAULTS.esiPercent,
       esiMonthlyCeiling: EXCEL_DEFAULTS.esiMonthlyCeiling,
+      // Structure must live on the employee's legal entity (not header company).
+      companyId: emp.companyId,
     };
 
     let structure: SalaryStructure;

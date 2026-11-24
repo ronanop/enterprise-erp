@@ -63,6 +63,8 @@ describe("summarizePayrollAttendance", () => {
         weeklyOffRules: ["sunday"],
         holidayDates: ["2026-06-24"],
         asOfDate: "2026-06-26",
+        // Isolate base LOP math; sandwich covered in its own case below.
+        sandwich: { enabled: false, triggers: "both", offBecomes: "lop" },
       },
     );
     expect(row.presentDays).toBe(1);
@@ -90,5 +92,57 @@ describe("summarizePayrollAttendance", () => {
     expect(row.weeklyOff).toBe(1);
     expect(row.lopDays).toBe(1);
     expect(row.payableDays).toBe(29);
+  });
+
+  it("applies sandwich: continuous absence converts weekly offs to LOP", () => {
+    // Sat 20 – Fri 26 with Sat+Sun offs; all working days absent → Sat/Sun sandwiched.
+    const longCycle: PayrollCycle = {
+      ...cycle,
+      start: "2026-06-20",
+      end: "2026-06-26",
+    };
+    const [row] = summarizePayrollAttendance(
+      longCycle,
+      [emp],
+      [],
+      [],
+      {
+        weeklyOffRules: ["saturday", "sunday"],
+        asOfDate: "2026-06-26",
+        sandwich: { enabled: true, triggers: "both", offBecomes: "lop" },
+      },
+    );
+    expect(row.presentDays).toBe(0);
+    expect(row.weeklyOff).toBe(2); // calendar offs still shown
+    // 5 working days absent + 2 sandwiched offs = 7 LOP
+    expect(row.absentDays).toBe(5);
+    expect(row.lopDays).toBe(7);
+    expect(row.payableDays).toBe(23);
+  });
+
+  it("caps sandwich LOP at 30 so payable never goes negative on a 31-day cycle", () => {
+    const fullCycle: PayrollCycle = {
+      anchorMonth: "2026-11",
+      start: "2026-10-21",
+      end: "2026-11-20",
+      cutoverDay: 20,
+      label: "21 Oct 2026 – 20 Nov 2026",
+      workingDays: 30,
+    };
+    const [row] = summarizePayrollAttendance(
+      fullCycle,
+      [emp],
+      [],
+      [],
+      {
+        weeklyOffRules: ["saturday", "sunday"],
+        asOfDate: "2026-11-20",
+        sandwich: { enabled: true, triggers: "both", offBecomes: "lop" },
+      },
+    );
+    expect(row.presentDays).toBe(0);
+    expect(row.lopDays).toBe(30);
+    expect(row.payableDays).toBe(0);
+    expect(row.periodDays).toBe(30);
   });
 });

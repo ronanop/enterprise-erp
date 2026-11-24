@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  CalendarDays,
   Clock3,
   Fingerprint,
   Pencil,
@@ -90,6 +91,9 @@ export function AttendancePolicyPanel({ tab }: { tab: HrSetupTab }) {
   const [missPunchWindow, setMissPunchWindow] = useState("48");
   const [overtimeAllowed, setOvertimeAllowed] = useState(true);
   const [geofenceRequired, setGeofenceRequired] = useState(false);
+  const [compoffHalfHours, setCompoffHalfHours] = useState("4");
+  const [compoffFullHours, setCompoffFullHours] = useState("8");
+  const [compoffAutoCredit, setCompoffAutoCredit] = useState(true);
 
   const [punchMode, setPunchMode] = useState<PunchMode>("first_in_last_out");
   const [arrivalEnabled, setArrivalEnabled] = useState(false);
@@ -170,6 +174,9 @@ export function AttendancePolicyPanel({ tab }: { tab: HrSetupTab }) {
       setMissPunchWindow(String(next.miss_punch_window_hours ?? 48));
       setOvertimeAllowed(Boolean(next.overtime_allowed ?? true));
       setGeofenceRequired(Boolean(next.geofence_required));
+      setCompoffHalfHours(String(next.compoff_half_day_hours ?? 4));
+      setCompoffFullHours(String(next.compoff_full_day_hours ?? 8));
+      setCompoffAutoCredit(Boolean(next.compoff_auto_credit ?? true));
       setPunchMode(
         (String(next.punch_mode ?? "first_in_last_out") as PunchMode) || "first_in_last_out",
       );
@@ -202,6 +209,9 @@ export function AttendancePolicyPanel({ tab }: { tab: HrSetupTab }) {
     setMissPunchWindow("48");
     setOvertimeAllowed(true);
     setGeofenceRequired(false);
+    setCompoffHalfHours("4");
+    setCompoffFullHours("8");
+    setCompoffAutoCredit(true);
     setPunchMode("first_in_last_out");
     setArrivalEnabled(false);
     setAppliesToAll(true);
@@ -235,6 +245,9 @@ export function AttendancePolicyPanel({ tab }: { tab: HrSetupTab }) {
       miss_punch_window_hours: Number(missPunchWindow || 48),
       overtime_allowed: overtimeAllowed,
       geofence_required: geofenceRequired,
+      compoff_half_day_hours: Number(compoffHalfHours || 4),
+      compoff_full_day_hours: Number(compoffFullHours || 8),
+      compoff_auto_credit: compoffAutoCredit,
       punch_mode: punchMode,
       arrival_policy_enabled: arrivalEnabled,
       applies_to_all_shifts: appliesToAll,
@@ -356,6 +369,7 @@ export function AttendancePolicyPanel({ tab }: { tab: HrSetupTab }) {
               <th className="px-3 py-2 font-medium">Arrival window</th>
               <th className="px-3 py-2 font-medium">Biometric</th>
               <th className="px-3 py-2 font-medium">Hours</th>
+              <th className="px-3 py-2 font-medium">Comp Off</th>
               <th className="px-3 py-2 font-medium">Status</th>
               <th className="px-3 py-2 font-medium" />
             </tr>
@@ -363,14 +377,14 @@ export function AttendancePolicyPanel({ tab }: { tab: HrSetupTab }) {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
                   Loading…
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
-                  No attendance policies yet. Create one to define arrival windows and punch rules.
+                <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
+                  No attendance policies yet. Create one to define arrival windows, punch rules, and Comp Off.
                 </td>
               </tr>
             ) : (
@@ -393,6 +407,11 @@ export function AttendancePolicyPanel({ tab }: { tab: HrSetupTab }) {
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">
                     {String(row.half_day_hours ?? 4)}h / {String(row.full_day_hours ?? 8)}h
+                  </td>
+                  <td className="px-3 py-2 text-muted-foreground">
+                    {row.compoff_auto_credit === false
+                      ? "Manual only"
+                      : `Auto · ${String(row.compoff_half_day_hours ?? 4)}h / ${String(row.compoff_full_day_hours ?? 8)}h`}
                   </td>
                   <td className="px-3 py-2">
                     <HrStatusBadge status={String(row.status ?? "active")} />
@@ -522,6 +541,48 @@ export function AttendancePolicyPanel({ tab }: { tab: HrSetupTab }) {
                 onChange={(e) => setGeofenceRequired(e.target.checked)}
               />
               Require GPS on punch
+            </label>
+          </section>
+
+          <section className="space-y-3 rounded-lg border border-border/70 p-3">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <CalendarDays className="size-4 text-primary" />
+              Comp Off
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              On ESS checkout, OT / weekly-off / holiday work can auto-credit Comp Off when enabled.
+              Example: ≥ half hours → 0.5 day, ≥ full hours → 1 day. Holiday work credits 1 day.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <SetupField label="Comp Off half-day hours" hint="OT / total hours for 0.5 Comp Off">
+                <SetupInput
+                  type="number"
+                  min={0}
+                  step="0.5"
+                  value={compoffHalfHours}
+                  onChange={(e) => setCompoffHalfHours(e.target.value)}
+                  disabled={!compoffAutoCredit}
+                />
+              </SetupField>
+              <SetupField label="Comp Off full-day hours" hint="OT / total hours for 1 Comp Off">
+                <SetupInput
+                  type="number"
+                  min={0}
+                  step="0.5"
+                  value={compoffFullHours}
+                  onChange={(e) => setCompoffFullHours(e.target.value)}
+                  disabled={!compoffAutoCredit}
+                />
+              </SetupField>
+            </div>
+            <label className="flex cursor-pointer items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                className="cursor-pointer"
+                checked={compoffAutoCredit}
+                onChange={(e) => setCompoffAutoCredit(e.target.checked)}
+              />
+              Auto-credit Comp Off from OT / weekly-off / holiday work
             </label>
           </section>
 

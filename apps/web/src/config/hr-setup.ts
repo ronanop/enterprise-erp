@@ -210,7 +210,7 @@ export const hrSetupSections: HrSetupSection[] = [
       {
         id: "attendance-rules",
         title: "Attendance Policy",
-        description: "Arrival windows, half-day rules, biometric punch mode",
+        description: "Arrival windows, Comp Off auto-credit, biometric punch mode",
         source: "api",
         apiPath: "/hrms/attendance-rules",
         codePrefix: "AR",

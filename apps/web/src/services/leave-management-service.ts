@@ -2,6 +2,7 @@ import { apiClient, resourceService } from "@/services/api-client";
 import { loadEmployeeDirectory } from "@/services/employee-management-service";
 import type { HrRow } from "@/services/hr-service";
 import type { NormalizedLeaveBalanceImportRow } from "@/lib/leave-balance-import-map";
+import { payrollTargetCompanyIds } from "@/lib/payroll-company";
 import type {
   ApplyLeavePayload,
   CarryForwardRecord,
@@ -18,6 +19,7 @@ import type {
 import {
   DEFAULT_LEAVE_COLORS,
   defaultRequestExtension,
+  isCompOffLeaveType,
   isVisibleLeaveType,
   leaveStatusDisplay,
 } from "@/types/leave-management";
@@ -319,7 +321,62 @@ export type LeaveDirectory = {
   };
 };
 
+/** Ensure leave type CO exists for each company that does not already have one. */
+async function ensureCompOffLeaveType(): Promise<void> {
+  const types = await listAllRows("/hr/leave-types").catch(() => [] as HrRow[]);
+  const companiesWithCo = new Set(
+    types
+      .filter((r) =>
+        isCompOffLeaveType(String(r.leave_type_code ?? ""), String(r.leave_type_name ?? "")),
+      )
+      .map((r) => String(r.company_id ?? ""))
+      .filter(Boolean),
+  );
+
+  const companies = await payrollTargetCompanyIds().catch(() => [] as string[]);
+  const missing = companies.filter((id) => !companiesWithCo.has(id));
+  // If no company scope / already have any CO, do not create more duplicates.
+  if (!missing.length) {
+    if (companiesWithCo.size > 0 || types.some((r) =>
+      isCompOffLeaveType(String(r.leave_type_code ?? ""), String(r.leave_type_name ?? "")),
+    )) {
+      return;
+    }
+    await resourceService
+      .create("/hr/leave-types", {
+        leave_type_code: "CO",
+        leave_type_name: "Comp Off",
+        is_paid: true,
+        max_days_per_year: 0,
+        monthly_credit_days: 0,
+        carry_forward_allowed: false,
+        status: "active",
+      })
+      .catch(() => null);
+    return;
+  }
+
+  await Promise.all(
+    missing.map((companyId) =>
+      resourceService
+        .create("/hr/leave-types", {
+          leave_type_code: "CO",
+          leave_type_name: "Comp Off",
+          is_paid: true,
+          max_days_per_year: 0,
+          monthly_credit_days: 0,
+          carry_forward_allowed: false,
+          status: "active",
+          company_id: companyId,
+        })
+        .catch(() => null),
+    ),
+  );
+}
+
 export async function loadLeaveDirectory(): Promise<LeaveDirectory> {
+  await ensureCompOffLeaveType().catch(() => null);
+
   const [reqRows, balRows, typeRows, holidayRows, empDir, branchRows, deptRows] = await Promise.all([
     listAllRows("/hr/leave-requests"),
     listAllRows("/hr/leave-balances"),

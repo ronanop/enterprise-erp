@@ -477,13 +477,18 @@ class EmployeeImportService:
                     if existing is None and previous_code and previous_code != emp_code:
                         existing = self._find_by_code_any(ctx, previous_code)
 
-                    # Single shared department per legal entity branch — ignore Excel Department.
-                    dept_id = self._ensure_department(
+                    # Excel Department is optional (UI often skips it). Always resolve a
+                    # department that belongs to this company+branch — never fail import.
+                    department_raw = str(raw.get("department") or "").strip()
+                    department_skipped = not department_raw
+                    dept_id = self._resolve_import_department(
                         ctx,
-                        company.id,
-                        branch_id,
-                        SHARED_IMPORT_DEPARTMENT,
-                        dept_cache,
+                        company_id=company.id,
+                        branch_id=branch_id,
+                        department_raw=department_raw,
+                        department_skipped=department_skipped,
+                        existing=existing,
+                        dept_cache=dept_cache,
                     )
                     if existing:
                         next_email = email
@@ -519,8 +524,6 @@ class EmployeeImportService:
                             )
 
                         update_fields: dict = {
-                            "branch_id": branch_id,
-                            "department_id": dept_id,
                             "first_name": first_name,
                             "last_name": last_name,
                             "mobile": mobile if mobile != "0000000000" else existing.mobile,
@@ -528,6 +531,40 @@ class EmployeeImportService:
                             "date_of_joining": joining,
                             "status": "active",
                         }
+                        # Department column skipped (typical RM/name/code re-import):
+                        # never touch branch or department — existing placement stays.
+                        # Only remount branch/dept when company moves or Excel maps Department.
+                        work_branch_id = existing.branch_id or branch_id
+                        if moved_company:
+                            # Prefer Excel Department when mapped; else resolved dept / General.
+                            move_dept = dept_id
+                            if department_skipped or not self._department_belongs_to_branch(
+                                ctx, move_dept, branch_id, company_id=company.id
+                            ):
+                                move_dept = self._ensure_department(
+                                    ctx,
+                                    company.id,
+                                    branch_id,
+                                    department_raw or SHARED_IMPORT_DEPARTMENT,
+                                    dept_cache,
+                                )
+                            update_fields["branch_id"] = branch_id
+                            update_fields["department_id"] = move_dept
+                            work_branch_id = branch_id
+                        elif not department_skipped:
+                            if existing.branch_id != branch_id:
+                                update_fields["branch_id"] = branch_id
+                                update_fields["department_id"] = dept_id
+                                work_branch_id = branch_id
+                            elif existing.department_id != dept_id:
+                                update_fields["department_id"] = dept_id
+                            elif not self._department_belongs_to_branch(
+                                ctx,
+                                existing.department_id,
+                                existing.branch_id or branch_id,
+                                company_id=existing.company_id or company.id,
+                            ):
+                                update_fields["department_id"] = dept_id
                         # Rename CDPL… → CT… / CCPL… / VPL… when Excel has New E codes.
                         existing_code = str(existing.employee_code or "").strip().upper()
                         if emp_code and emp_code != existing_code:
@@ -576,14 +613,9 @@ class EmployeeImportService:
                                     **update_fields,
                                 )
                             elif "department" in msg.lower():
-                                safe_dept = self._ensure_department(
-                                    ctx,
-                                    company.id,
-                                    branch_id,
-                                    SHARED_IMPORT_DEPARTMENT,
-                                    dept_cache,
-                                )
-                                update_fields["department_id"] = safe_dept
+                                # Drop placement fields and retry identity-only update.
+                                update_fields.pop("department_id", None)
+                                update_fields.pop("branch_id", None)
                                 self._employees.update_employee(
                                     ctx,
                                     existing.id,
@@ -591,8 +623,8 @@ class EmployeeImportService:
                                     **update_fields,
                                 )
                                 warnings.append(
-                                    f"Row {idx} ({emp_code}): department remapped to "
-                                    f"{SHARED_IMPORT_DEPARTMENT} under {company.company_name}"
+                                    f"Row {idx} ({emp_code}): kept existing department/branch "
+                                    f"({exc})"
                                 )
                             else:
                                 raise
@@ -600,7 +632,7 @@ class EmployeeImportService:
                         self._upsert_employment(
                             ctx,
                             company_id=company.id,
-                            branch_id=branch_id,
+                            branch_id=work_branch_id,
                             employee_id=emp_id,
                             joining=joining,
                             work_location=work_location,
@@ -608,7 +640,7 @@ class EmployeeImportService:
                         self._upsert_profile(
                             ctx,
                             company_id=company.id,
-                            branch_id=branch_id,
+                            branch_id=work_branch_id,
                             employee_id=emp_id,
                             gender=gender,
                             date_of_birth=dob,
@@ -662,10 +694,17 @@ class EmployeeImportService:
                         created += 1
                         action = "created"
 
+                    assign_branch = branch_id
+                    if (
+                        existing is not None
+                        and department_skipped
+                        and existing.company_id == company.id
+                    ):
+                        assign_branch = existing.branch_id or branch_id
                     self._ensure_designation_assignment(
                         ctx,
                         company_id=company.id,
-                        branch_id=branch_id,
+                        branch_id=assign_branch,
                         employee_id=emp_id,
                         designation_id=designation_id,
                         joining=joining,
@@ -688,6 +727,60 @@ class EmployeeImportService:
                         }
                     )
             except Exception as exc:  # noqa: BLE001 - collect row errors
+                msg = str(exc)
+                # Department/branch mismatches must not block name/code/RM imports.
+                if "department" in msg.lower() and "branch" in msg.lower():
+                    warnings.append(
+                        f"Row {idx}: {exc} — retried without department/branch change"
+                    )
+                    dept_cache.clear()
+                    try:
+                        with self._db.begin_nested():
+                            emp_code_retry = str(raw.get("employee_code") or "").strip().upper()
+                            name_retry = str(raw.get("name") or "").strip()
+                            if emp_code_retry and name_retry:
+                                existing_retry = self._find_by_code_any(ctx, emp_code_retry)
+                                prev_retry = str(
+                                    raw.get("previous_employee_code")
+                                    or raw.get("old_employee_code")
+                                    or ""
+                                ).strip().upper()
+                                if existing_retry is None and prev_retry:
+                                    existing_retry = self._find_by_code_any(ctx, prev_retry)
+                                if existing_retry is not None:
+                                    fn, ln = _split_name(name_retry)
+                                    self._employees.update_employee(
+                                        ctx,
+                                        existing_retry.id,
+                                        skip_department_validation=True,
+                                        first_name=fn,
+                                        last_name=ln,
+                                        designation=str(raw.get("designation") or "Staff").strip()
+                                        or "Staff",
+                                        status="active",
+                                    )
+                                    code_to_id[emp_code_retry] = existing_retry.id
+                                    mgr = str(raw.get("reporting_manager") or "").strip()
+                                    if mgr:
+                                        pending_managers.append(
+                                            (existing_retry.id, emp_code_retry, mgr)
+                                        )
+                                    updated += 1
+                                    results.append(
+                                        {
+                                            "row": idx,
+                                            "employee_code": emp_code_retry,
+                                            "action": "updated",
+                                            "employee_id": str(existing_retry.id),
+                                            "company": "",
+                                            "entity": None,
+                                            "base_location": "",
+                                            "designation": str(raw.get("designation") or ""),
+                                        }
+                                    )
+                                    continue
+                    except Exception as retry_exc:  # noqa: BLE001
+                        warnings.append(f"Row {idx}: department retry failed — {retry_exc}")
                 # Nested rollback undoes master inserts; drop caches so IDs are not reused.
                 dept_cache.clear()
                 desig_cache.clear()
@@ -1026,14 +1119,26 @@ class EmployeeImportService:
         """Pick a department that always belongs to ``company_id`` + ``branch_id``."""
         if department_skipped and existing is not None:
             current_id = getattr(existing, "department_id", None)
+            # Keep current dept when it already matches the employee branch (common on RM-only reimport).
+            emp_branch = getattr(existing, "branch_id", None) or branch_id
+            emp_company = getattr(existing, "company_id", None) or company_id
             if current_id and self._department_belongs_to_branch(
-                ctx, current_id, branch_id, company_id=company_id
+                ctx, current_id, emp_branch, company_id=emp_company
             ):
                 return current_id
-            return self._ensure_department(ctx, company_id, branch_id, "General", dept_cache)
+            return self._ensure_department(
+                ctx, company_id, branch_id, SHARED_IMPORT_DEPARTMENT, dept_cache
+            )
 
-        name = department_raw.strip() or "General"
-        return self._ensure_department(ctx, company_id, branch_id, name, dept_cache)
+        name = department_raw.strip() or SHARED_IMPORT_DEPARTMENT
+        dept_id = self._ensure_department(ctx, company_id, branch_id, name, dept_cache)
+        if not self._department_belongs_to_branch(
+            ctx, dept_id, branch_id, company_id=company_id
+        ):
+            return self._ensure_department(
+                ctx, company_id, branch_id, SHARED_IMPORT_DEPARTMENT, dept_cache
+            )
+        return dept_id
 
     def _department_belongs_to_branch(
         self,
@@ -1121,37 +1226,59 @@ class EmployeeImportService:
                     department_code=code,
                     department_name=clean,
                 )
-            cache[key] = created.id
-            return created.id
-        except (IntegrityError, ConflictException):
-            # Unique (branch_id, department_code) — reuse whatever is already there.
+            if self._department_belongs_to_branch(
+                ctx, created.id, branch_id, company_id=company_id
+            ):
+                cache[key] = created.id
+                return created.id
+        except (IntegrityError, ConflictException, Exception):
+            pass
+
+        # Unique (branch_id, department_code) or service-scope failure — reuse or force-create.
+        existing = self._db.scalar(
+            select(OrgDepartment).where(
+                OrgDepartment.tenant_id == ctx.tenant_id,
+                OrgDepartment.branch_id == branch_id,
+                OrgDepartment.department_code == code,
+            )
+        )
+        if existing is None:
             existing = self._db.scalar(
                 select(OrgDepartment).where(
                     OrgDepartment.tenant_id == ctx.tenant_id,
+                    OrgDepartment.company_id == company_id,
                     OrgDepartment.branch_id == branch_id,
-                    OrgDepartment.department_code == code,
+                    OrgDepartment.department_name.ilike(clean),
                 )
             )
-            if existing is None:
-                existing = self._db.scalar(
-                    select(OrgDepartment).where(
-                        OrgDepartment.tenant_id == ctx.tenant_id,
-                        OrgDepartment.company_id == company_id,
-                        OrgDepartment.branch_id == branch_id,
-                        OrgDepartment.department_name.ilike(clean),
-                    )
-                )
-            if existing is None:
-                raise
+        if existing is not None:
             existing.is_deleted = False
             existing.deleted_at = None
             existing.deleted_by = None
             existing.company_id = company_id
+            existing.branch_id = branch_id
             existing.status = "active"
             existing.updated_by = ctx.user_id
             self._db.flush()
             cache[key] = existing.id
             return existing.id
+
+        # Last resort: insert General/dept directly so import never dies on org scope.
+        forced = OrgDepartment(
+            id=uuid4(),
+            tenant_id=ctx.tenant_id,
+            company_id=company_id,
+            branch_id=branch_id,
+            department_code=code,
+            department_name=clean,
+            status="active",
+            created_by=ctx.user_id,
+            updated_by=ctx.user_id,
+        )
+        self._db.add(forced)
+        self._db.flush()
+        cache[key] = forced.id
+        return forced.id
 
     def _ensure_designation(
         self,

@@ -61,6 +61,7 @@ def create_integration_api_key(
         company_ids=body.company_ids,
         notes=body.notes,
         expires_at=body.expires_at,
+        ttl_days=body.ttl_days,
     )
     return APIResponse(message="API key created — copy it now; it will not be shown again", data=data)
 

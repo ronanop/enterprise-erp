@@ -1,6 +1,7 @@
 "use client";
 
-import { Check, Circle } from "lucide-react";
+import { useState } from "react";
+import { Check, Circle, Eye, EyeOff } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +16,50 @@ const POLICY_RULES: { label: string; test: (value: string) => boolean }[] = [
 /** Mirrors the API password policy (security/password.py). */
 export function passwordMeetsPolicy(value: string): boolean {
   return POLICY_RULES.every((rule) => rule.test(value));
+}
+
+function PasswordRevealInput({
+  id,
+  autoComplete,
+  value,
+  disabled,
+  onChange,
+  describedBy,
+  invalid,
+}: {
+  id: string;
+  autoComplete: string;
+  value: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+  describedBy?: string;
+  invalid?: boolean;
+}) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative">
+      <Input
+        id={id}
+        type={show ? "text" : "password"}
+        autoComplete={autoComplete}
+        required
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-10 pr-11 transition-colors duration-200"
+        aria-describedby={describedBy}
+        aria-invalid={invalid}
+      />
+      <button
+        type="button"
+        onClick={() => setShow((v) => !v)}
+        aria-label={show ? "Hide password" : "Show password"}
+        className="absolute inset-y-0 right-0 flex w-11 cursor-pointer items-center justify-center rounded-r-lg text-muted-foreground transition-colors duration-200 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+      </button>
+    </div>
+  );
 }
 
 export function NewPasswordFields({
@@ -35,16 +80,13 @@ export function NewPasswordFields({
     <>
       <div>
         <Label htmlFor="new-password">New password</Label>
-        <Input
+        <PasswordRevealInput
           id="new-password"
-          type="password"
           autoComplete="new-password"
-          required
           value={password}
           disabled={disabled}
-          onChange={(e) => onPasswordChange(e.target.value)}
-          className="h-10"
-          aria-describedby="new-password-rules"
+          onChange={onPasswordChange}
+          describedBy="new-password-rules"
         />
         <ul id="new-password-rules" className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
           {POLICY_RULES.map((rule) => {
@@ -67,16 +109,13 @@ export function NewPasswordFields({
       </div>
       <div>
         <Label htmlFor="confirm-password">Confirm new password</Label>
-        <Input
+        <PasswordRevealInput
           id="confirm-password"
-          type="password"
           autoComplete="new-password"
-          required
           value={confirm}
           disabled={disabled}
-          onChange={(e) => onConfirmChange(e.target.value)}
-          className="h-10"
-          aria-invalid={mismatch}
+          onChange={onConfirmChange}
+          invalid={mismatch}
         />
         {mismatch ? (
           <p className="mt-1 text-xs text-destructive">Passwords do not match.</p>

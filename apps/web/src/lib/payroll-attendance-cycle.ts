@@ -4,6 +4,12 @@ import type { PayrollEmployeeAttendance } from "@/types/payroll-management";
 import type { PayrollCycle } from "@/lib/payroll-cycle";
 import { SALARY_DAY_BASIS } from "@/lib/payroll-cycle";
 import { isWeeklyOffDay, type WeeklyOffRuleCode } from "@/lib/hr/weekly-off-rules";
+import {
+  DEFAULT_SANDWICH_POLICY,
+  padDateRange,
+  sandwichOffDates,
+  type SandwichPolicy,
+} from "@/lib/hr/sandwich-rules";
 
 export function splitPresentAndHalf(presentDays: number, halfDays = 0): { present: number; half: number } {
   let half = halfDays;
@@ -31,6 +37,8 @@ export type PayrollAttendanceCalendar = {
   holidayDates?: string[] | Set<string>;
   /** Unmarked working days after this date are not treated as loss of pay. */
   asOfDate?: string;
+  /** Company sandwich policy (defaults ON / both / lop). */
+  sandwich?: SandwichPolicy;
 };
 
 function todayIso(d = new Date()): string {
@@ -38,10 +46,6 @@ function todayIso(d = new Date()): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
-}
-
-function inCycle(date: string, cycle: PayrollCycle): boolean {
-  return date >= cycle.start && date <= cycle.end;
 }
 
 function eachDay(from: string, to: string): string[] {
@@ -59,12 +63,16 @@ function eachDay(from: string, to: string): string[] {
   return days;
 }
 
-function leaveDatesInCycle(req: LeaveRequestRecord, cycle: PayrollCycle): string[] {
+function leaveDatesInRange(req: LeaveRequestRecord, start: string, end: string): string[] {
   if (!["approved", "manager_approved", "hr_approved"].includes(req.status)) return [];
-  const overlapStart = req.fromDate > cycle.start ? req.fromDate : cycle.start;
-  const overlapEnd = req.toDate < cycle.end ? req.toDate : cycle.end;
+  const overlapStart = req.fromDate > start ? req.fromDate : start;
+  const overlapEnd = req.toDate < end ? req.toDate : end;
   if (overlapStart > overlapEnd) return [];
   return eachDay(overlapStart, overlapEnd);
+}
+
+function leaveDatesInCycle(req: LeaveRequestRecord, cycle: PayrollCycle): string[] {
+  return leaveDatesInRange(req, cycle.start, cycle.end);
 }
 
 function leaveDaysInCycle(req: LeaveRequestRecord, cycle: PayrollCycle): number {
@@ -99,6 +107,18 @@ function pushAtt(map: Map<string, AttendanceRecord[]>, key: string | undefined, 
   map.set(k, list);
 }
 
+function matchesEmployee(
+  req: LeaveRequestRecord,
+  hrId: string,
+  emp: PayrollAttendanceEmployeeRef,
+): boolean {
+  return (
+    req.employeeId === hrId ||
+    req.employeeId === emp.employeeId ||
+    req.employeeId === emp.employeeCode
+  );
+}
+
 export function summarizePayrollAttendance(
   cycle: PayrollCycle,
   employees: PayrollAttendanceEmployeeRef[],
@@ -106,9 +126,13 @@ export function summarizePayrollAttendance(
   leaveRequests: LeaveRequestRecord[],
   calendar: PayrollAttendanceCalendar = {},
 ): PayrollEmployeeAttendance[] {
+  const sandwich = calendar.sandwich ?? DEFAULT_SANDWICH_POLICY;
+  const pad = padDateRange(cycle.start, cycle.end, 10);
+
   const attByEmployee = new Map<string, AttendanceRecord[]>();
   for (const r of attendance) {
-    if (!inCycle(r.attendanceDate, cycle)) continue;
+    const day = String(r.attendanceDate || "").slice(0, 10);
+    if (!day || day < pad.start || day > pad.end) continue;
     pushAtt(attByEmployee, r.employeeId, r);
     pushAtt(attByEmployee, r.extension?.employeeCode, r);
   }
@@ -126,6 +150,9 @@ export function summarizePayrollAttendance(
   const asOf = (calendar.asOfDate || todayIso()).slice(0, 10);
   const woOpts = { alternateSaturdayStart: calendar.alternateSaturdayStart ?? null };
 
+  const isNonWorking = (day: string) =>
+    holidaySet.has(day) || isWeeklyOffDay(day, calendar.weeklyOffRules, woOpts);
+
   return employees.map((emp) => {
     const hrId = resolveHrId(emp);
     const rows =
@@ -134,6 +161,38 @@ export function summarizePayrollAttendance(
       attByEmployee.get((emp.employeeCode || "").toLowerCase()) ??
       [];
 
+    const statusByDate = new Map<string, string>();
+    for (const r of rows) {
+      const day = String(r.attendanceDate || "").slice(0, 10);
+      if (!day) continue;
+      statusByDate.set(day, String(r.status || "").toLowerCase());
+    }
+
+    const leaveDates = new Set<string>();
+    const leaveDatesPadded = new Set<string>();
+    for (const req of leaveRequests) {
+      if (!matchesEmployee(req, hrId, emp)) continue;
+      for (const day of leaveDatesInCycle(req, cycle)) leaveDates.add(day);
+      for (const day of leaveDatesInRange(req, pad.start, pad.end)) leaveDatesPadded.add(day);
+    }
+
+    // Infer unmarked working days as absent (within cycle / as-of), and mark offs.
+    for (const day of eachDay(pad.start, pad.end)) {
+      if (statusByDate.has(day) || leaveDatesPadded.has(day)) continue;
+      if (isNonWorking(day)) {
+        statusByDate.set(day, holidaySet.has(day) ? "holiday" : "week_off");
+        continue;
+      }
+      if (day >= cycle.start && day <= cycle.end && day <= asOf) {
+        statusByDate.set(day, "absent");
+      }
+    }
+    for (const day of leaveDatesPadded) {
+      if (!statusByDate.has(day) || statusByDate.get(day) === "absent") {
+        statusByDate.set(day, "leave");
+      }
+    }
+
     let presentDays = 0;
     let halfDays = 0;
     let absentDays = 0;
@@ -141,41 +200,41 @@ export function summarizePayrollAttendance(
     let holidays = 0;
     let weeklyOff = 0;
 
-    for (const r of rows) {
-      const w = presentWeight(r.status);
+    for (const day of eachDay(cycle.start, cycle.end)) {
+      const st = statusByDate.get(day) || "";
+      const w = presentWeight(st);
       if (w >= 1) presentDays += 1;
       else if (w > 0) halfDays += 1;
-      else if (r.status === "absent") absentDays += 1;
-      else if (r.status === "leave") leaveFromAtt += 1;
-      else if (r.status === "holiday") holidays += 1;
-      else if (r.status === "weekend" || r.status === "week_off") weeklyOff += 1;
+      else if (st === "absent") absentDays += 1;
+      else if (st === "leave") leaveFromAtt += 1;
+      else if (st === "holiday") holidays += 1;
+      else if (st === "weekend" || st === "week_off") weeklyOff += 1;
     }
 
-    const leaveDates = new Set<string>();
-    for (const req of leaveRequests) {
-      if (
-        req.employeeId !== hrId &&
-        req.employeeId !== emp.employeeId &&
-        req.employeeId !== emp.employeeCode
-      ) {
-        continue;
+    let sandwichLop = 0;
+    if (sandwich.enabled) {
+      const sandwiched = sandwichOffDates({
+        start: pad.start,
+        end: pad.end,
+        isNonWorking,
+        attendanceStatusByDate: statusByDate,
+        approvedLeaveDates: leaveDatesPadded,
+        asOf,
+        trigger: sandwich.triggers,
+      });
+      for (const day of sandwiched) {
+        if (day < cycle.start || day > cycle.end) continue;
+        sandwichLop += 1;
+        // Convert display: off → LOP bucket (still show original weeklyOff calendar count).
+        const st = statusByDate.get(day);
+        if (st === "week_off" || st === "weekend" || st === "holiday") {
+          statusByDate.set(day, "absent");
+        }
       }
-      for (const day of leaveDatesInCycle(req, cycle)) leaveDates.add(day);
-    }
-
-    const covered = new Set(rows.map((r) => r.attendanceDate));
-    for (const day of eachDay(cycle.start, cycle.end)) {
-      if (covered.has(day) || leaveDates.has(day)) continue;
-      if (holidaySet.has(day)) {
-        holidays += 1;
-        continue;
+      if (sandwich.offBecomes === "leave") {
+        leaveFromAtt += sandwichLop;
+        sandwichLop = 0;
       }
-      if (isWeeklyOffDay(day, calendar.weeklyOffRules, woOpts)) {
-        weeklyOff += 1;
-        continue;
-      }
-      if (day > asOf) continue;
-      absentDays += 1;
     }
 
     const leaveFromRequests =
@@ -184,8 +243,11 @@ export function summarizePayrollAttendance(
       leaveByEmployee.get(emp.employeeCode) ??
       0;
     const leaveDays = Math.max(leaveFromAtt, leaveFromRequests);
-    const lopDays = Math.round((absentDays + halfDays * 0.5) * 10) / 10;
     const periodDays = SALARY_DAY_BASIS;
+    // Cycle can be 28–31 calendar days; salary basis is always 30. Cap LOP so
+    // Payable = 30 − LOP never goes negative from a long sandwich month.
+    const rawLop = Math.round((absentDays + halfDays * 0.5 + sandwichLop) * 10) / 10;
+    const lopDays = Math.min(periodDays, rawLop);
     const payableDays = Math.max(0, Math.round((periodDays - lopDays) * 10) / 10);
     const attendanceFactor =
       periodDays > 0 ? Math.min(1, Math.max(0, payableDays / periodDays)) : 1;

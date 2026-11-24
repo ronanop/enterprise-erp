@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS hr.hr_integration_api_key (
     version INTEGER NOT NULL DEFAULT 1,
     CONSTRAINT uk_hr_integration_api_key_prefix UNIQUE (tenant_id, key_prefix)
 );
+ALTER TABLE hr.hr_integration_api_key
+    ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NULL;
 CREATE INDEX IF NOT EXISTS ix_hr_integration_api_key_tenant
     ON hr.hr_integration_api_key (tenant_id);
 CREATE INDEX IF NOT EXISTS ix_hr_integration_api_key_prefix

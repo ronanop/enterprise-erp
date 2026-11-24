@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { SetupField, SetupInput, SetupSelect } from "@/components/hr/setup/setup-drawer";
 import { toast } from "@/components/hr/setup/setup-toast";
-import { resourceService } from "@/services/api-client";
+import { formatApiError, resourceService } from "@/services/api-client";
 import { payrollTargetCompanyIds } from "@/lib/payroll-company";
 import { getStoredOrgContext } from "@/lib/org-context-storage";
 import { loadResolvedPayrollPfPolicy } from "@/lib/payroll-pf-policy";
@@ -39,13 +39,13 @@ const EMPTY: PolicyForm = {
   pf_employer_amount: "1900",
   pf_employee_percent: "12",
   pf_employer_percent: "12",
-  pf_wage_ceiling: "15000",
+  pf_wage_ceiling: "25000",
   pf_on_lop: "fixed",
   net_pay_formula: "gross_minus_employee_pf_only",
 };
 
 function asBool(value: unknown): boolean {
-  return value === true || value === "true" || value === 1;
+  return value === true || value === "true" || value === 1 || value === "1";
 }
 
 function pctToApi(value: string): number {
@@ -60,6 +60,41 @@ function pctFromApi(value: unknown): string {
   return String(n > 1 ? n : n * 100);
 }
 
+function formFromRow(row: Record<string, unknown>, activeRow?: Record<string, unknown> | null): PolicyForm {
+  return {
+    id: String(activeRow?.id ?? row.id ?? ""),
+    version: Number(activeRow?.version ?? row.version ?? 1),
+    period_day_denominator: String(row.period_day_denominator ?? "fixed_30"),
+    salary_proration_mode: String(row.salary_proration_mode ?? "fixed_30_day_factor"),
+    sandwich_enabled: asBool(row.sandwich_enabled ?? true),
+    sandwich_triggers: String(row.sandwich_triggers ?? "both"),
+    sandwich_off_becomes: String(row.sandwich_off_becomes ?? "lop"),
+    pf_mode: String(row.pf_mode ?? "fixed_split"),
+    pf_employee_amount: String(row.pf_employee_amount ?? 1800),
+    pf_employer_amount: String(row.pf_employer_amount ?? 1900),
+    pf_employee_percent: pctFromApi(row.pf_employee_percent ?? 0.12),
+    pf_employer_percent: pctFromApi(row.pf_employer_percent ?? 0.12),
+    pf_wage_ceiling: String(row.pf_wage_ceiling ?? 15000),
+    pf_on_lop: String(row.pf_on_lop ?? "fixed"),
+    net_pay_formula: String(row.net_pay_formula ?? "gross_minus_employee_pf_only"),
+  };
+}
+
+async function ensurePolicyId(companyId: string): Promise<string> {
+  const ensured = await resourceService.create<Record<string, unknown>>(
+    "/payroll/policies/ensure-default",
+    { company_id: companyId },
+  );
+  const id = String((ensured.data as Record<string, unknown> | null)?.id ?? "");
+  if (id) return id;
+  const active = await resourceService.list<Record<string, unknown>>("/payroll/policies/active", {
+    company_id: companyId,
+  });
+  const activeId = String((active.data as Record<string, unknown> | null)?.id ?? "");
+  if (activeId) return activeId;
+  throw new Error("Salary configuration could not be created for this company.");
+}
+
 export function PayrollPolicyPanel() {
   const [form, setForm] = useState<PolicyForm>(EMPTY);
   const [loading, setLoading] = useState(true);
@@ -70,43 +105,37 @@ export function PayrollPolicyPanel() {
     setLoading(true);
     try {
       const companies = await payrollTargetCompanyIds();
-      const companyId = companies[0];
-      const query = companyId ? { company_id: companyId } : undefined;
-      if (companyId) {
-        await resourceService
-          .create("/payroll/policies/ensure-default", { company_id: companyId })
-          .catch(() => null);
+      if (!companies.length) {
+        setForm(EMPTY);
+        toast("Select a company in the header to load salary configuration", "error");
+        return;
       }
-      const res = await resourceService.list<Record<string, unknown>>("/payroll/policies/resolved", query);
-      const row = (res.data ?? {}) as Record<string, unknown>;
-      const active = await resourceService.list<Record<string, unknown>>("/payroll/policies/active", query);
+      // Ensure at least the active company has a DEFAULT row so Save / Generate can read it.
+      for (const companyId of companies.slice(0, appliesToEveryCompany ? companies.length : 1)) {
+        await ensurePolicyId(companyId).catch(() => null);
+      }
+      const companyId = companies[0]!;
+      const query = { company_id: companyId };
+      const [resolved, active] = await Promise.all([
+        resourceService.list<Record<string, unknown>>("/payroll/policies/resolved", query),
+        resourceService.list<Record<string, unknown>>("/payroll/policies/active", query),
+      ]);
+      const row = (resolved.data ?? {}) as Record<string, unknown>;
       const activeRow = (active.data ?? null) as Record<string, unknown> | null;
-      setForm({
-        id: String(activeRow?.id ?? row.id ?? ""),
-        version: Number(activeRow?.version ?? row.version ?? 1),
-        period_day_denominator: String(row.period_day_denominator ?? "fixed_30"),
-        salary_proration_mode: String(row.salary_proration_mode ?? "fixed_30_day_factor"),
-        sandwich_enabled: asBool(row.sandwich_enabled ?? true),
-        sandwich_triggers: String(row.sandwich_triggers ?? "both"),
-        sandwich_off_becomes: String(row.sandwich_off_becomes ?? "lop"),
-        pf_mode: String(row.pf_mode ?? "fixed_split"),
-        pf_employee_amount: String(row.pf_employee_amount ?? 1800),
-        pf_employer_amount: String(row.pf_employer_amount ?? 1900),
-        pf_employee_percent: pctFromApi(row.pf_employee_percent ?? 0.12),
-        pf_employer_percent: pctFromApi(row.pf_employer_percent ?? 0.12),
-        pf_wage_ceiling: String(row.pf_wage_ceiling ?? 15000),
-        pf_on_lop: String(row.pf_on_lop ?? "fixed"),
-        net_pay_formula: String(row.net_pay_formula ?? "gross_minus_employee_pf_only"),
-      });
+      setForm(formFromRow(row, activeRow));
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Could not load payroll policy", "error");
+      toast(formatApiError(err, "Could not load payroll policy"), "error");
+      setForm(EMPTY);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [appliesToEveryCompany]);
 
   useEffect(() => {
     setAppliesToEveryCompany(Boolean(getStoredOrgContext()?.allCompanies));
+  }, []);
+
+  useEffect(() => {
     void load();
   }, [load]);
 
@@ -133,12 +162,7 @@ export function PayrollPolicyPanel() {
         throw new Error("Select a company in the header before saving salary configuration.");
       }
       for (const companyId of companies) {
-        const ensured = await resourceService.create<Record<string, unknown>>(
-          "/payroll/policies/ensure-default",
-          { company_id: companyId },
-        );
-        const id = String((ensured.data as Record<string, unknown> | null)?.id ?? "");
-        if (!id) throw new Error("Salary configuration could not be saved for this company.");
+        const id = await ensurePolicyId(companyId);
         await resourceService.update("/payroll/policies", id, body);
       }
       toast(
@@ -149,7 +173,7 @@ export function PayrollPolicyPanel() {
       await loadResolvedPayrollPfPolicy().catch(() => null);
       await load();
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Save failed", "error");
+      toast(formatApiError(err, "Save failed"), "error");
     } finally {
       setSaving(false);
     }
@@ -176,7 +200,8 @@ export function PayrollPolicyPanel() {
         <h3 className="text-sm font-semibold">Sandwich policy</h3>
         <p className="mt-1 text-xs text-muted-foreground">
           Leave Friday and leave Monday converts Sat/Sun to LOP. Unauthorized absence on both sides
-          does the same. Trigger default is Both. Off becomes LOP.
+          does the same. Continuous absence applies sandwich across the whole month so weekly offs
+          become LOP and payable / net drop to zero.
         </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
           <SetupField label="Sandwich">

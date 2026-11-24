@@ -273,6 +273,8 @@ export const CACHE_DIGITECH_STRUCTURES: SalaryStructureTemplate[] = [
 export type EmployeeSalary = {
   id: string;
   employeeId: string;
+  /** Emp code (CT…) when known — prefer over UUID in Generate preview. */
+  employeeCode?: string;
   employeeName: string;
   structureId: string;
   structureName: string;

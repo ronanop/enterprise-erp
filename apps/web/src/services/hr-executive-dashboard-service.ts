@@ -208,6 +208,39 @@ function todayIso(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/** Calendar day keys from the 1st of the current month through today (inclusive). */
+function currentMonthDayKeysToDate(): string[] {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const last = now.getDate();
+  const out: string[] = [];
+  for (let day = 1; day <= last; day += 1) {
+    out.push(
+      `${y}-${String(m + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+    );
+  }
+  return out;
+}
+
+/** Short axis label: day-of-month number (e.g. "1", "23"). */
+function dayOfMonthLabel(ymd: string): string {
+  const d = parseLocalYmd(ymd);
+  if (!d) return ymd.slice(-2).replace(/^0/, "") || ymd;
+  return String(d.getDate());
+}
+
+/** Same day-of-month in the previous calendar month (clamped to month length). */
+function previousMonthSameDay(ymd: string): string | null {
+  const d = parseLocalYmd(ymd);
+  if (!d) return null;
+  const day = d.getDate();
+  const target = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  const useDay = Math.min(day, lastDay);
+  return `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(useDay).padStart(2, "0")}`;
+}
+
 function monthKeyOfValue(value: unknown): string | null {
   const ymd = isoDate(value);
   if (ymd) return ymd.slice(0, 7);
@@ -573,30 +606,56 @@ function buildCharts(
     { label: "Hired", value: apps.filter((a) => stageRank(a) >= 5).length },
   ];
 
-  const attendanceStacked = months.map((key) => {
-    const rows = overview.attendance.filter((r) => monthKeyOfValue(r.attendance_date) === key);
+  // Daily stacked trend for the current month (1 → today): Present / Absent / Leave / Half Day / Late.
+  const monthDayKeys = currentMonthDayKeysToDate();
+  const attendanceByDay = new Map<string, HrRow[]>();
+  for (const r of overview.attendance) {
+    const day = isoDate(r.attendance_date);
+    if (!day) continue;
+    const bucket = attendanceByDay.get(day);
+    if (bucket) bucket.push(r);
+    else attendanceByDay.set(day, [r]);
+  }
+  const approvedLeaveSpans = overview.leaveRequests
+    .filter((r) => asStatus(r.status) === "approved")
+    .map((r) => {
+      const start = isoDate(r.start_date);
+      const end = isoDate(r.end_date) ?? start;
+      return start && end ? { start, end, employeeId: String(r.employee_id ?? "") } : null;
+    })
+    .filter((x): x is { start: string; end: string; employeeId: string } => Boolean(x));
+
+  const attendanceStacked = monthDayKeys.map((day) => {
+    const rows = attendanceByDay.get(day) ?? [];
     let present = 0;
     let absent = 0;
     let halfDay = 0;
     let late = 0;
     let leaveFromAtt = 0;
+    const leaveEmpIds = new Set<string>();
     for (const r of rows) {
       const b = attendanceBucket(r);
       if (b === "present") present += 1;
       else if (b === "absent") absent += 1;
       else if (b === "halfDay") halfDay += 1;
       else if (b === "late") late += 1;
-      else if (b === "leave") leaveFromAtt += 1;
+      else if (b === "leave") {
+        leaveFromAtt += 1;
+        const id = String(r.employee_id ?? "");
+        if (id) leaveEmpIds.add(id);
+      }
     }
-    const leaveFromRequests = overview.leaveRequests.filter((r) => {
-      if (asStatus(r.status) !== "approved") return false;
-      return monthKeyOfValue(r.start_date) === key;
-    }).length;
+    for (const span of approvedLeaveSpans) {
+      if (span.start <= day && day <= span.end && span.employeeId) {
+        leaveEmpIds.add(span.employeeId);
+      }
+    }
+    const leave = rows.length > 0 ? Math.max(leaveFromAtt, leaveEmpIds.size) : leaveEmpIds.size;
     return {
-      label: monthLabel(key),
+      label: dayOfMonthLabel(day),
       present,
       absent,
-      leave: rows.length > 0 ? leaveFromAtt : leaveFromRequests,
+      leave,
       halfDay,
       late,
     };
@@ -606,6 +665,42 @@ function buildCharts(
     label: row.label,
     value: row.present,
   }));
+
+  const countDayBuckets = (day: string) => {
+    const rows = attendanceByDay.get(day) ?? [];
+    let present = 0;
+    let late = 0;
+    let halfDay = 0;
+    let absent = 0;
+    for (const r of rows) {
+      const b = attendanceBucket(r);
+      if (b === "present") present += 1;
+      else if (b === "late") late += 1;
+      else if (b === "halfDay") halfDay += 1;
+      else if (b === "absent") absent += 1;
+    }
+    const presentFull = present + late;
+    return {
+      thisPresent: presentFull + halfDay,
+      thisPresentFull: presentFull,
+      thisAbsent: absent,
+      thisHalfDay: halfDay,
+    };
+  };
+
+  const attendanceCompare = monthDayKeys.map((day) => {
+    const prev = previousMonthSameDay(day);
+    const cur = countDayBuckets(day);
+    const last = prev ? countDayBuckets(prev) : null;
+    return {
+      label: dayOfMonthLabel(day),
+      thisPresent: cur.thisPresent,
+      lastPresent: last?.thisPresent ?? 0,
+      thisPresentFull: cur.thisPresentFull,
+      thisAbsent: cur.thisAbsent,
+      thisHalfDay: cur.thisHalfDay,
+    };
+  });
 
   const leaveTypeById = new Map(
     overview.leaveTypes.map((t) => [
@@ -773,6 +868,7 @@ function buildCharts(
     hiringFunnel,
     attendanceTrend,
     attendanceStacked,
+    attendanceCompare,
     leaveTrend,
     leaveTrendByType,
     onboardingProgress,
@@ -1440,7 +1536,13 @@ export function downloadBlob(filename: string, content: string, type = "text/csv
   URL.revokeObjectURL(url);
 }
 
-const DASHBOARD_CACHE_PREFIX = "erp.hr.executiveDashboard.v1";
+const DASHBOARD_CACHE_PREFIX = "erp.hr.executiveDashboard.v4";
+/** Older keys — read as fallback so a version bump does not flash empty / Unassigned. */
+const DASHBOARD_CACHE_LEGACY_PREFIXES = [
+  "erp.hr.executiveDashboard.v3",
+  "erp.hr.executiveDashboard.v2",
+  "erp.hr.executiveDashboard.v1",
+] as const;
 
 type DashboardCacheEnvelope = {
   savedAt: number;
@@ -1456,18 +1558,37 @@ export function dashboardCacheScopeKey(userId?: string | null): string {
   return `${userId?.trim() || "anon"}:${entity}`;
 }
 
-function dashboardCacheStorageKey(scopeKey: string): string {
-  return `${DASHBOARD_CACHE_PREFIX}:${scopeKey}`;
+function dashboardCacheStorageKey(scopeKey: string, prefix = DASHBOARD_CACHE_PREFIX): string {
+  return `${prefix}:${scopeKey}`;
+}
+
+function parseCacheEnvelope(raw: string | null, scopeKey: string): HrExecutiveDashboard | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as DashboardCacheEnvelope;
+    if (!parsed?.payload || parsed.scopeKey !== scopeKey) return null;
+    return parsed.payload;
+  } catch {
+    return null;
+  }
 }
 
 export function readDashboardCache(scopeKey: string): HrExecutiveDashboard | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = localStorage.getItem(dashboardCacheStorageKey(scopeKey));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as DashboardCacheEnvelope;
-    if (!parsed?.payload || parsed.scopeKey !== scopeKey) return null;
-    return parsed.payload;
+    const current = parseCacheEnvelope(
+      localStorage.getItem(dashboardCacheStorageKey(scopeKey)),
+      scopeKey,
+    );
+    if (current) return current;
+    for (const prefix of DASHBOARD_CACHE_LEGACY_PREFIXES) {
+      const legacy = parseCacheEnvelope(
+        localStorage.getItem(dashboardCacheStorageKey(scopeKey, prefix)),
+        scopeKey,
+      );
+      if (legacy) return legacy;
+    }
+    return null;
   } catch {
     return null;
   }

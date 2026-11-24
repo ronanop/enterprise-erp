@@ -60,6 +60,17 @@ function monthOptions(count = 12) {
   });
 }
 
+const UUID_LIKE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function displayEmpCode(...candidates: Array<string | undefined | null>): string {
+  for (const raw of candidates) {
+    const v = String(raw ?? "").trim();
+    if (v && !UUID_LIKE.test(v)) return v;
+  }
+  return "—";
+}
+
 type GenerateEmployeeRow = {
   employeeId: string;
   name: string;
@@ -67,6 +78,7 @@ type GenerateEmployeeRow = {
   department: string;
   monthlyCtc: number;
   presentDays?: number;
+  halfDays?: number;
   leaveDays?: number;
   weeklyOff?: number;
   lopDays?: number;
@@ -100,11 +112,16 @@ function employeesWithAssignedSalary(
   const rows: GenerateEmployeeRow[] = [];
   for (const s of salaries) {
     if (s.salaryStatus !== "active" || !(s.monthlyCtc > 0)) continue;
-    const emp = employees.find((e) => e.id === s.employeeId || e.code === s.employeeId);
+    const emp = employees.find(
+      (e) =>
+        e.id === s.employeeId ||
+        e.code === s.employeeId ||
+        (s.employeeCode && e.code === s.employeeCode),
+    );
     rows.push({
       employeeId: emp?.id || s.employeeId,
       name: emp?.label.split(" · ")[0] || s.employeeName,
-      code: emp?.code || s.employeeId,
+      code: displayEmpCode(emp?.code, s.employeeCode, s.employeeId),
       department: emp?.department || s.department || "—",
       monthlyCtc: s.monthlyCtc,
     });
@@ -115,7 +132,7 @@ function employeesWithAssignedSalary(
     rows.push({
       employeeId: emp.id,
       name: emp.label.split(" · ")[0] || emp.code || emp.id,
-      code: emp.code || emp.id,
+      code: displayEmpCode(emp.code, emp.id),
       department: emp.department || "—",
       monthlyCtc: ctc,
     });
@@ -297,25 +314,54 @@ export function PayrollRunWorkspace({
     void previewPayrollRunEmployees(month, day)
       .then((p) => {
         if (cancelled) return;
-        const withPay = p.lines.filter((l) => l.monthlyCtc > 0);
-        const merged = dedupeGenerateRows(
-          (withPay.length ? withPay : p.lines).map((l) => ({
+        // Keep every assigned-salary employee from base; overlay attendance/net from preview.
+        const byKey = new Map<string, (typeof p.lines)[number]>();
+        for (const l of p.lines) {
+          for (const k of rowIdentityKeys({
             employeeId: l.employeeId,
-            name: employeeName(l, staff),
-            code: l.employeeCode || l.employeeId,
+            code: displayEmpCode(l.employeeCode, l.employeeId),
+            name: l.employeeName,
             department: l.department || "—",
             monthlyCtc: l.monthlyCtc,
-            presentDays: l.presentDays,
-            leaveDays: l.leaveDays,
-            weeklyOff: l.weeklyOff ?? 0,
-            lopDays: l.lopDays ?? l.absentDays,
-            payableDays: l.payableDays,
-            periodDays: l.periodDays || l.workingDaysInCycle || 30,
-            net: l.net,
-          })),
+          })) {
+            byKey.set(k, l);
+          }
+        }
+        const source = base.length
+          ? base
+          : p.lines
+              .filter((l) => l.monthlyCtc > 0)
+              .map((l) => ({
+                employeeId: l.employeeId,
+                name: employeeName(l, staff),
+                code: displayEmpCode(l.employeeCode, l.employeeId),
+                department: l.department || "—",
+                monthlyCtc: l.monthlyCtc,
+              }));
+        const merged = dedupeGenerateRows(
+          source.map((row) => {
+            const hit =
+              rowIdentityKeys(row)
+                .map((k) => byKey.get(k))
+                .find(Boolean) ?? null;
+            if (!hit) return row;
+            return {
+              ...row,
+              code: displayEmpCode(hit.employeeCode, row.code, hit.employeeId),
+              monthlyCtc: hit.monthlyCtc > 0 ? hit.monthlyCtc : row.monthlyCtc,
+              presentDays: hit.presentDays,
+              halfDays: hit.halfDays,
+              leaveDays: hit.leaveDays,
+              weeklyOff: hit.weeklyOff ?? 0,
+              lopDays: hit.lopDays ?? hit.absentDays,
+              payableDays: hit.payableDays,
+              periodDays: hit.periodDays || hit.workingDaysInCycle || 30,
+              net: hit.net,
+            };
+          }),
         );
         const paid = merged.filter((r) => r.monthlyCtc > 0);
-        setPreviewRows(paid.length ? paid : base);
+        setPreviewRows(paid.length ? paid : merged);
       })
       .catch(() => {
         if (!cancelled) setPreviewRows(base);
@@ -795,13 +841,17 @@ export function PayrollRunWorkspace({
                 <tbody>
                   {previewRows.map((row) => {
                     const daysReady = row.payableDays != null;
-                    const present = splitPresentAndHalf(row.presentDays ?? 0, 0).present;
+                    const att = splitPresentAndHalf(row.presentDays ?? 0, row.halfDays ?? 0);
+                    const presentLabel =
+                      att.half > 0
+                        ? `${att.present + att.half * 0.5}`
+                        : String(att.present);
                     return (
                     <tr key={`${row.employeeId}:${row.code}`} className="border-t border-border/50">
                       <td className="px-3 py-2 font-medium">{row.name}</td>
                       <td className="px-3 py-2 tabular-nums text-muted-foreground">{row.code}</td>
                       <td className="px-3 py-2 text-right tabular-nums">
-                        {daysReady ? present : "—"}
+                        {daysReady ? presentLabel : "—"}
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums">
                         {daysReady ? (row.leaveDays ?? 0) : "—"}

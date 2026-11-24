@@ -474,7 +474,7 @@ function mapApiPunches(rows: HrRow[]): Map<string, AttendancePunch[]> {
 
 async function loadPunchesForRange(dateFrom: string, dateTo: string): Promise<Map<string, AttendancePunch[]>> {
   try {
-    const res = await resourceService.list("/hr/biometric-punches", {
+    const res = await resourceService.list("/hr/attendance/biometric-punches", {
       date_from: dateFrom,
       date_to: dateTo,
       page_size: 5000,

@@ -418,22 +418,32 @@ export function SalaryStructureFormPage({
                 />
               </div>
             </div>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-              <ComputedRow label="Payable basic" hint="R" value={preview.payableBasic} />
-              <ComputedRow label="Payable HRA" hint="S" value={preview.payableHra} />
-              <ComputedRow label="Payable special" hint="T" value={preview.payableSpecial} />
-              <ComputedRow label="Gross" hint="W" value={preview.gross} />
-              <ComputedRow label="PF wage" hint="X = R+T" value={preview.pfWage} />
-              <ComputedRow label="Employee PF" hint="Y = MIN(X,ceiling)×12%" value={preview.pf} />
-              <ComputedRow label="EDLI / admin (employer)" hint="Z — not in AC" value={preview.edli} />
-              <ComputedRow label="Employee ESI" hint="AA" value={preview.esi} />
-              <ComputedRow label="Employer ESI" hint="3.25%" value={preview.employerEsi} />
-              <ComputedRow label="TDS for the year" hint="AG on AE = N×12" value={preview.tdsYear} />
-              <ComputedRow label="TDS for the month" hint="AH = ROUNDUP(AG/12)" value={preview.tdsMonth} />
-              <ComputedRow label="Total deduction" hint="AC = Y+AA+AB" value={preview.totalDed} />
-              <ComputedRow label="Net payable" hint="AD = W−AC" value={preview.net} emphasize />
-              <ComputedRow label="Employer cost" hint="M+Z+ER ESI" value={preview.employerCost} />
-            </dl>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <dl className="space-y-2 text-sm">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Earnings
+                </p>
+                <ComputedRow label="Payable basic" hint="R" value={preview.payableBasic} />
+                <ComputedRow label="Payable HRA" hint="S" value={preview.payableHra} />
+                <ComputedRow label="Payable special" hint="T" value={preview.payableSpecial} />
+                <ComputedRow label="Gross" hint="W" value={preview.gross} emphasize />
+              </dl>
+              <dl className="space-y-2 text-sm">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Deductions &amp; employer
+                </p>
+                <ComputedRow label="PF wage" hint="X = R+T" value={preview.pfWage} />
+                <ComputedRow label="Employee PF" hint="Y = MIN(X,ceiling)×12%" value={preview.pf} />
+                <ComputedRow label="EDLI / admin (employer)" hint="Z — not in AC" value={preview.edli} />
+                <ComputedRow label="Employee ESI" hint="AA" value={preview.esi} />
+                <ComputedRow label="Employer ESI" hint="3.25%" value={preview.employerEsi} />
+                <ComputedRow label="TDS for the year" hint="AG on AE = N×12" value={preview.tdsYear} />
+                <ComputedRow label="TDS for the month" hint="AH = ROUNDUP(AG/12)" value={preview.tdsMonth} />
+                <ComputedRow label="Total deduction" hint="AC = Y+AA+AB" value={preview.totalDed} />
+                <ComputedRow label="Net payable" hint="AD = W−AC" value={preview.net} emphasize />
+                <ComputedRow label="Employer cost" hint="M+Z+ER ESI" value={preview.employerCost} />
+              </dl>
+            </div>
           </section>
         </div>
         </fieldset>

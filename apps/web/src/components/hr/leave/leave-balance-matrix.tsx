@@ -15,7 +15,7 @@ import {
   type LeaveDirectory,
 } from "@/services/leave-management-service";
 import type { LeaveBalanceRecord, LeaveTypeRecord } from "@/types/leave-management";
-import { isVisibleLeaveType } from "@/types/leave-management";
+import { DEFAULT_LEAVE_COLORS, isCompOffLeaveType } from "@/types/leave-management";
 import { formatApiError } from "@/services/api-client";
 
 type EmployeeRow = {
@@ -127,13 +127,57 @@ export function LeaveBalancePanel({
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<EmployeeRow | null>(null);
 
-  const leaveTypes = useMemo(
-    () =>
-      directory.leaveTypes
-        .filter((t) => isActiveLeaveType(t) && isVisibleLeaveType(t.code, t.name))
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    [directory.leaveTypes],
-  );
+  /** One column per leave code (multi-company setups can have 4× "Comp Off"). */
+  const leaveTypes = useMemo(() => {
+    const active = directory.leaveTypes.filter((t) => isActiveLeaveType(t));
+    const byKey = new Map<string, LeaveTypeRecord>();
+    for (const t of active) {
+      const key = isCompOffLeaveType(t.code, t.name)
+        ? "CO"
+        : String(t.code || t.name || t.id).trim().toUpperCase();
+      if (!key) continue;
+      if (!byKey.has(key)) byKey.set(key, t);
+    }
+    if (![...byKey.keys()].some((k) => k === "CO")) {
+      byKey.set("CO", {
+        id: "__comp_off__",
+        code: "CO",
+        name: "Comp Off",
+        isPaid: true,
+        maxDays: 0,
+        daysPerMonth: 0,
+        requiresAttachment: false,
+        status: "active",
+        version: 1,
+        color: DEFAULT_LEAVE_COLORS.CO ?? "#8b5cf6",
+        carryForwardAllowed: false,
+        approvalRequired: true,
+        genderRestriction: "",
+        eligibility: "Earned via OT / holiday / weekly-off work",
+      });
+    }
+    return [...byKey.values()].sort((a, b) => {
+      const aCo = isCompOffLeaveType(a.code, a.name) ? 1 : 0;
+      const bCo = isCompOffLeaveType(b.code, b.name) ? 1 : 0;
+      if (aCo !== bCo) return aCo - bCo;
+      return a.name.localeCompare(b.name);
+    });
+  }, [directory.leaveTypes]);
+
+  /** All leave-type ids that map to a display column (e.g. every company CO → one Comp Off). */
+  const typeIdsByColumn = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const t of directory.leaveTypes) {
+      if (!isActiveLeaveType(t)) continue;
+      const key = isCompOffLeaveType(t.code, t.name)
+        ? "CO"
+        : String(t.code || t.name || t.id).trim().toUpperCase();
+      const list = map.get(key) ?? [];
+      list.push(t.id);
+      map.set(key, list);
+    }
+    return map;
+  }, [directory.leaveTypes]);
 
   const balanceYear = currentLeaveBalanceYear();
   const balanceByEmpType = useMemo(() => {
@@ -147,6 +191,28 @@ export function LeaveBalancePanel({
     }
     return map;
   }, [directory.balances, balanceYear]);
+
+  function balanceFor(empId: string, t: LeaveTypeRecord): LeaveBalanceRecord | undefined {
+    const colKey = isCompOffLeaveType(t.code, t.name)
+      ? "CO"
+      : String(t.code || t.name || t.id).trim().toUpperCase();
+    const ids = typeIdsByColumn.get(colKey) ?? [t.id];
+    const rows = ids
+      .map((id) => balanceByEmpType.get(`${empId}:${id}`))
+      .filter((b): b is LeaveBalanceRecord => Boolean(b));
+    if (!rows.length) return undefined;
+    if (rows.length === 1) return rows[0];
+    // Sum Comp Off (or duplicate codes) across company-scoped type ids.
+    return {
+      ...rows[0]!,
+      available: rows.reduce((s, r) => s + r.available, 0),
+      used: rows.reduce((s, r) => s + r.used, 0),
+      pending: rows.reduce((s, r) => s + r.pending, 0),
+      accrued: rows.reduce((s, r) => s + r.accrued, 0),
+      allocated: rows.reduce((s, r) => s + r.allocated, 0),
+      closing: rows.reduce((s, r) => s + r.closing, 0),
+    };
+  }
 
   const employees = useMemo(() => {
     // Unique by employee id, then by emp code (avoid directory/balance double-add)
@@ -236,9 +302,12 @@ export function LeaveBalancePanel({
               <th className="px-2 py-2 font-medium">Entity</th>
               {leaveTypes.map((t) => (
                 <th key={t.id} className="px-2 py-2 font-medium whitespace-nowrap">
-                  <span className="inline-flex items-center gap-1" title={leaveTypePolicyCredit(t).label}>
+                  <span
+                    className="inline-flex items-center gap-1"
+                    title={`${t.name} (${t.code}) · ${leaveTypePolicyCredit(t).label}`}
+                  >
                     <span className="size-2 rounded-full" style={{ backgroundColor: t.color }} />
-                    {t.code}
+                    {t.name || t.code}
                   </span>
                 </th>
               ))}
@@ -258,12 +327,17 @@ export function LeaveBalancePanel({
                 <td className="px-2 py-2 font-mono text-muted-foreground">{emp.code || "—"}</td>
                 <td className="px-2 py-2 text-muted-foreground">{emp.companyName || "—"}</td>
                 {leaveTypes.map((t) => {
-                  const bal = balanceByEmpType.get(`${emp.id}:${t.id}`);
+                  const bal = balanceFor(emp.id, t);
+                  const isCo = isCompOffLeaveType(t.code, t.name);
                   return (
                     <td key={t.id} className="px-2 py-2 text-center tabular-nums">
                       {bal ? (
                         <span title={`Avail ${bal.available} · Used ${bal.used} · Pending ${bal.pending}`}>
                           {bal.available}
+                        </span>
+                      ) : isCo ? (
+                        <span className="text-muted-foreground" title="No Comp Off credited yet (auto from OT / holiday work)">
+                          0
                         </span>
                       ) : (
                         <span className="text-muted-foreground">-</span>

@@ -1494,6 +1494,10 @@ def biometric_device_live_feed(
     )
 
 
+@biometric_devices_router.get(
+    "/punches",
+    response_model=APIResponse[list[BiometricPunchResponse]],
+)
 @attendance_router.get(
     "/biometric-punches",
     response_model=APIResponse[list[BiometricPunchResponse]],

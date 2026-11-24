@@ -10,6 +10,7 @@ KIND_DEFAULT_HREF: dict[str, str] = {
     "probation": "/hr/workforce",
     "policy": "/hr/ess-policies",
     "payroll_due": "/hr/payroll",
+    "training": "/hr/training",
 }
 
 

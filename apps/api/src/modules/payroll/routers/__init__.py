@@ -6,12 +6,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from database.session import get_db
 from modules.foundation.dependencies import require_permission
 from modules.foundation.domain.value_objects import TenantContext
 from modules.payroll.dependencies import (
     PaginationParams,
     extract_update_fields,
+    get_db,
     get_pagination,
     paginate,
 )

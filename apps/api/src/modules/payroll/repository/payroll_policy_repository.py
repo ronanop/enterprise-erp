@@ -60,8 +60,10 @@ class PayrollPolicyRepository(PayScopedRepository):
         if row is None:
             return None
         for k, v in fields.items():
-            if v is not None:
-                setattr(row, k, v)
+            # Keep False / 0 — only skip explicit None (unset).
+            if v is None:
+                continue
+            setattr(row, k, v)
         row.updated_at = utcnow()
         row.updated_by = ctx.user_id
         if hasattr(row, "version"):

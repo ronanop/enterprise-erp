@@ -5,10 +5,12 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundException
+from core.logging import get_logger
 from modules.foundation.domain.value_objects import TenantContext
 from modules.platform.compat.audit_facade import PlatformAuditFacade
 from modules.recruitment.adapters.hr_port import RecruitmentHrAdapter
 from modules.recruitment.adapters.master_data_port import RecruitmentMasterDataAdapter
+from modules.recruitment.adapters.payroll_port import RecruitmentPayrollAdapter
 from modules.recruitment.domain.enums import OnboardingStatus, PayrollHandoffStatus, RecEntityType
 from modules.recruitment.domain.exceptions import InvalidOnboardingState
 from modules.recruitment.models import RecOnboarding
@@ -18,6 +20,8 @@ from modules.recruitment.repository.onboarding_repository import OnboardingRepos
 from modules.recruitment.service.document_number_service import DocumentNumberService
 from modules.recruitment.service.engines import CandidateEngine, OnboardingEngine
 from modules.recruitment.service.recruitment_scope_validator import RecruitmentScopeValidator
+
+logger = get_logger(__name__)
 
 
 class OnboardingService:
@@ -32,6 +36,7 @@ class OnboardingService:
         self._candidate_engine = CandidateEngine()
         self._master = RecruitmentMasterDataAdapter(db)
         self._hr = RecruitmentHrAdapter(db)
+        self._payroll = RecruitmentPayrollAdapter(db)
         self._audit = PlatformAuditFacade(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
@@ -128,6 +133,48 @@ class OnboardingService:
         row.hr_employment_request_id = employment.id
         row.payroll_handoff_status = PayrollHandoffStatus.PENDING.value
 
+        # Auto-create payroll salary structure from offer annual CTC (Excel 60/50 split).
+        emp_name = " ".join(
+            x for x in (candidate.first_name, candidate.last_name) if x
+        ).strip() or str(employee.employee_code)
+        try:
+            structure = self._payroll.assign_annual_ctc_on_hire(
+                ctx,
+                company_id=row.company_id,
+                branch_id=row.branch_id,
+                employee_id=employee.id,
+                employment_id=employment.id,
+                department_id=row.department_id,
+                annual_ctc=offer.offered_ctc,
+                employee_code=str(employee.employee_code or ""),
+                employee_name=emp_name,
+                effective_from=offer.joining_date,
+                existing_structure_id=getattr(offer, "salary_structure_id", None),
+            )
+            if structure is not None:
+                row.payroll_handoff_status = PayrollHandoffStatus.COMPLETED.value
+                if getattr(offer, "salary_structure_id", None) != structure.id:
+                    self._offers.update(
+                        ctx,
+                        offer.id,
+                        salary_structure_id=structure.id,
+                        offered_gross=structure.basic_amount
+                        + structure.hra_amount
+                        + structure.special_allowance
+                        + structure.telephone_allowance,
+                    )
+            elif offer.offered_ctc is None or float(offer.offered_ctc or 0) <= 0:
+                row.payroll_handoff_status = PayrollHandoffStatus.NOT_REQUIRED.value
+            else:
+                row.payroll_handoff_status = PayrollHandoffStatus.FAILED.value
+        except Exception:
+            logger.exception(
+                "payroll salary handoff failed onboarding_id=%s employee_id=%s",
+                row_id,
+                employee.id,
+            )
+            row.payroll_handoff_status = PayrollHandoffStatus.FAILED.value
+
         self._engine.complete(row)
         updated = self._repo.update(
             ctx,
@@ -145,6 +192,10 @@ class OnboardingService:
             entity_id=row_id,
             operation="complete",
             performed_by=ctx.user_id,
+            new_value={
+                "employee_id": str(employee.id),
+                "payroll_handoff_status": row.payroll_handoff_status,
+            },
         )
         return updated
 

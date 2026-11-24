@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 
-const STORAGE_KEY = "erp.hr.workforce.tablePrefs.v5";
+const STORAGE_KEY = "erp.hr.workforce.tablePrefs.v6";
 
 export type EmployeeTableColumnKey =
   | "employeeCode"
   | "name"
+  | "tag"
+  | "deployedAt"
   | "entity"
   | "organisation"
   | "branch"
@@ -44,6 +46,8 @@ export type EmployeeTablePrefs = {
 export const DEFAULT_EMPLOYEE_TABLE_COLUMNS: EmployeeTableColumnKey[] = [
   "employeeCode",
   "name",
+  "tag",
+  "deployedAt",
   "entity",
   "organisation",
   "location",
@@ -68,6 +72,8 @@ export const REQUIRED_EMPLOYEE_TABLE_COLUMNS: EmployeeTableColumnKey[] = [
 export const EMPLOYEE_TABLE_COLUMN_LABELS: Record<EmployeeTableColumnKey, string> = {
   employeeCode: "EMPLOYEE ID",
   name: "NAME",
+  tag: "Tag",
+  deployedAt: "Deployed At",
   entity: "Entity",
   organisation: "Organisation",
   branch: "Branch",
@@ -105,6 +111,8 @@ export const EMPLOYEE_TABLE_COLUMN_LABELS: Record<EmployeeTableColumnKey, string
 export const EXCEL_EMPLOYEE_TABLE_COLUMNS: EmployeeTableColumnKey[] = [
   "employeeCode",
   "name",
+  "tag",
+  "deployedAt",
   "entity",
   "organisation",
   "location",

@@ -13,6 +13,7 @@ import {
   applyOfferMergeFields,
   type OfferMergeValues,
 } from "@/lib/recruitment/offer-letter-merge";
+import { formatSalaryBreakdownText } from "@/lib/salary-structure-excel";
 import {
   formatInrGrouping,
   parseInrInput,
@@ -82,6 +83,7 @@ function buildLetterBody(opts: {
     "",
     "Regards,",
     "HR Team",
+    opts.ctc > 0 ? formatSalaryBreakdownText(opts.ctc) : "",
   ]
     .filter((line) => line !== undefined && line !== "")
     .join("\n");
@@ -430,6 +432,14 @@ export function OfferDrawer({
     setLetterDirty(false);
   }
 
+  function bodyWithSalaryBreakdown(raw: string): string {
+    const base = (raw || "").trim();
+    if (!(ctc > 0)) return base;
+    if (/Salary structure \(monthly/i.test(base)) return base;
+    const block = formatSalaryBreakdownText(ctc);
+    return block ? `${base}\n${block}` : base;
+  }
+
   // Compose letterhead + body for live PDF preview when a shell is present
   useEffect(() => {
     if (!open || !letterShellDataUrl) {
@@ -440,7 +450,7 @@ export function OfferDrawer({
     const t = window.setTimeout(() => {
       void composeOfferLetterPdf({
         letterheadDataUrl: letterShellDataUrl,
-        body: letterBody || generatedLetter,
+        body: bodyWithSalaryBreakdown(letterBody || generatedLetter),
       })
         .then((url) => {
           if (!cancelled) setComposePreviewUrl(url);
@@ -453,7 +463,8 @@ export function OfferDrawer({
       cancelled = true;
       window.clearTimeout(t);
     };
-  }, [open, letterShellDataUrl, letterBody, generatedLetter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bodyWithSalaryBreakdown uses ctc
+  }, [open, letterShellDataUrl, letterBody, generatedLetter, ctc]);
 
   async function save(asSent: boolean) {
     if (!candidateId || !joiningDate || saving) return;
@@ -466,12 +477,13 @@ export function OfferDrawer({
       (templateKind === "internship" ? "internship-offer-letter.pdf" : "standard-offer-letter.pdf");
     setSaving(true);
     try {
+      const letterForPdf = bodyWithSalaryBreakdown(letterBody || generatedLetter);
       let documentContentDataUrl = letterShellDataUrl || undefined;
       if (letterShellDataUrl) {
         try {
           documentContentDataUrl = await composeOfferLetterPdf({
             letterheadDataUrl: letterShellDataUrl,
-            body: letterBody || generatedLetter,
+            body: letterForPdf,
           });
         } catch {
           /* keep letterhead-only if compose fails */
@@ -494,7 +506,7 @@ export function OfferDrawer({
         templateKind,
         offerLetterName: letterName,
         templateFileName: templatePdfName,
-        mergedPreview: preview,
+        mergedPreview: bodyWithSalaryBreakdown(preview),
         status: asSent ? "sent" : "draft",
         documentContentDataUrl,
         documentMimeType: documentContentDataUrl ? "application/pdf" : undefined,

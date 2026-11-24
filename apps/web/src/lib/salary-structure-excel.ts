@@ -288,3 +288,57 @@ export function amountsFromSplit(split: CtcSplit) {
     ...blankRunComponents(),
   };
 }
+
+/** Annual offer CTC → monthly Excel 60/50 split (same as Assign Salary). */
+export function computeSplitFromAnnualCtc(
+  annualCtc: number,
+  employerContribution: number = EXCEL_DEFAULTS.employerContribution,
+): CtcSplit {
+  const monthly = rupee(Math.max(0, Number(annualCtc) || 0) / 12);
+  return computeCtcSplit({
+    grossCtc: monthly,
+    basicPercent: EXCEL_DEFAULTS.basicPercent,
+    hraPercentOfBasic: EXCEL_DEFAULTS.hraPercentOfBasic,
+    telephoneAllowance: EXCEL_DEFAULTS.telephoneAllowance,
+    employerContribution,
+  });
+}
+
+export type SalaryBreakdownLine = { label: string; amount: number; hint?: string };
+
+/** Rows for negotiation UI + offer letter PDF. */
+export function salaryBreakdownLines(split: CtcSplit): SalaryBreakdownLine[] {
+  return [
+    { label: "Monthly CTC", amount: split.monthlyCtc, hint: "Annual ÷ 12" },
+    { label: "Basic", amount: split.basic, hint: "60% of monthly CTC" },
+    { label: "HRA", amount: split.hra, hint: "50% of Basic" },
+    { label: "Special allowance", amount: Math.max(0, split.specialAllowance), hint: "Residual" },
+    {
+      label: "Employer contribution",
+      amount: split.employerContribution,
+      hint: "PF / statutory (employer)",
+    },
+    { label: "Employee gross", amount: split.employeeGross, hint: "Excludes employer" },
+    { label: "Structure CTC", amount: split.ctc, hint: "Gross + employer" },
+  ];
+}
+
+/** Plain-text block appended to offer letter body. */
+export function formatSalaryBreakdownText(annualCtc: number): string {
+  const split = computeSplitFromAnnualCtc(annualCtc);
+  if (!(annualCtc > 0) || !split.valid) return "";
+  const fmt = (n: number) =>
+    n.toLocaleString("en-IN", { maximumFractionDigits: 0 });
+  const lines = [
+    "",
+    "Salary structure (monthly, Excel 60/50 split):",
+    `  Annual CTC: Rs.${fmt(rupee(annualCtc))}`,
+    `  Monthly CTC: Rs.${fmt(split.monthlyCtc)}`,
+    `  Basic (60%): Rs.${fmt(split.basic)}`,
+    `  HRA (50% of Basic): Rs.${fmt(split.hra)}`,
+    `  Special allowance: Rs.${fmt(Math.max(0, split.specialAllowance))}`,
+    `  Employer contribution: Rs.${fmt(split.employerContribution)}`,
+    `  Employee gross: Rs.${fmt(split.employeeGross)}`,
+  ];
+  return lines.join("\n");
+}

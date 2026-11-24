@@ -646,6 +646,7 @@ function syncCandidateDocumentFolders(
             title: "Offer Letter",
             offerCode: offer.offerCode,
             body: offer.mergedPreview,
+            annualCtc: offer.ctc || undefined,
           });
           const idx = docs.findIndex((d) => d.id === existing.id);
           if (idx >= 0) {
@@ -680,6 +681,7 @@ function syncCandidateDocumentFolders(
           title: "Offer Letter",
           offerCode: offer.offerCode,
           body: offer.mergedPreview,
+          annualCtc: offer.ctc || undefined,
         });
       }
     } catch {
@@ -2973,6 +2975,7 @@ export async function generateOffer(
         title: "Offer Letter",
         offerCode: row.offerCode,
         body: row.mergedPreview || `Offer ${row.offerCode}`,
+        annualCtc: row.ctc || undefined,
       });
       mimeType = "application/pdf";
     }
@@ -3183,6 +3186,7 @@ export async function sendOfferLetterEmail(
     pdfDataUrl = buildOfferLetterPdfDataUrl({
       offerCode: offer.offerCode,
       body: letterBody,
+      annualCtc: offer.ctc || undefined,
     });
   }
   const pdfAttachment = dataUrlToEmailAttachment(

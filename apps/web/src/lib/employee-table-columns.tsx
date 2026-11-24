@@ -77,12 +77,52 @@ function lifecycleLabel(status: EmployeeRecord["lifecycleStatus"]): string {
   return status;
 }
 
+/** Workforce tag from profile/import: client_side → Client, else Office. */
+export function isClientSideWorkforce(row: EmployeeRecord): boolean {
+  const raw = [...(row.tags ?? []), ...(row.extension?.tags ?? [])];
+  return raw.some((t) => String(t || "").trim().toLowerCase() === "client_side");
+}
+
+export function workforceTagLabel(row: EmployeeRecord): "Client" | "Office" {
+  return isClientSideWorkforce(row) ? "Client" : "Office";
+}
+
+export function deployedAtCell(row: EmployeeRecord): string {
+  // Office staff are Cache-deployed; client staff use Deployed At from import/profile.
+  if (!isClientSideWorkforce(row)) return "Cache";
+  return dash(row.extension?.employment?.deployedAt);
+}
+
+export function WorkforceTagBadge({ row }: { row: EmployeeRecord }) {
+  const client = isClientSideWorkforce(row);
+  return (
+    <span
+      className={
+        client
+          ? "inline-flex shrink-0 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800"
+          : "inline-flex shrink-0 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-700"
+      }
+      title={
+        client
+          ? `Client-side${row.extension?.employment?.deployedAt ? ` · ${row.extension.employment.deployedAt}` : ""}`
+          : "Office staff (Cache)"
+      }
+    >
+      {client ? "Client" : "Office"}
+    </span>
+  );
+}
+
 export function renderEmployeeCell(key: EmployeeTableColumnKey, row: EmployeeRecord): ReactNode {
   switch (key) {
     case "employeeCode":
       return <span className="font-mono text-xs text-muted-foreground">{row.employeeCode}</span>;
     case "name":
       return dash(row.displayName);
+    case "tag":
+      return <WorkforceTagBadge row={row} />;
+    case "deployedAt":
+      return deployedAtCell(row);
     case "entity":
       return excelEntityCell(row);
     case "organisation":
@@ -162,6 +202,8 @@ export function renderEmployeeCell(key: EmployeeTableColumnKey, row: EmployeeRec
 export const EXACT_CASE_HEADER_COLUMNS = new Set<EmployeeTableColumnKey>([
   "employeeCode",
   "name",
+  "tag",
+  "deployedAt",
   "entity",
   "organisation",
   "branch",
