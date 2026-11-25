@@ -27,6 +27,7 @@ from modules.master_data.published import EmployeeRead
 from modules.organization.models.company import OrgCompany
 from security.ess_default_password import normalize_employee_code
 from security.ess_login_captcha import verify_challenge
+from security.field_crypto import pii_lookup
 from security.jwt import JWTService
 from security.password import PasswordHasher, validate_password_policy
 from shared.text_safety import escape_html_text
@@ -35,6 +36,11 @@ logger = logging.getLogger(__name__)
 
 # Users deactivated by HRMS sync (exited employees) cannot sign in.
 BLOCKED_LOGIN_STATUSES = frozenset({"inactive"})
+
+# Public ESS portal company codes → org company_code (ERP remains CDPL, etc.).
+ESS_PORTAL_COMPANY_ALIASES: dict[str, str] = {
+    "CDPL0112": "CDPL",
+}
 
 # Zero-width / BOM / NBSP often sneak in when copying credentials from HTML email.
 _INVISIBLE_RE = re.compile(r"[\u200b\u200c\u200d\ufeff\u00a0]")
@@ -45,6 +51,11 @@ def _sanitize_login_text(value: str) -> str:
     # Fullwidth @ / digits sometimes appear after Outlook linkify + copy.
     text = text.replace("\uff20", "@").replace("＠", "@")
     return text.strip()
+
+
+def _resolve_ess_company_code(company_code: str) -> str:
+    code = _sanitize_login_text(company_code).upper()
+    return ESS_PORTAL_COMPANY_ALIASES.get(code, code)
 
 
 class AuthService:
@@ -197,22 +208,47 @@ class AuthService:
 
         return self._issue_tokens(user, ip_address=ip_address, user_agent=user_agent)
 
+    def lookup_ess_company(self, *, company_code: str) -> dict:
+        """Public company check for the ESS login step-1 screen."""
+        portal_code = _sanitize_login_text(company_code).upper()
+        code = _resolve_ess_company_code(portal_code)
+        if not code:
+            raise InvalidCredentialsException("Enter a valid company code")
+        company = self._db.scalar(
+            select(OrgCompany).where(
+                OrgCompany.company_code == code,
+                OrgCompany.is_deleted.is_(False),
+            )
+        )
+        if company is None:
+            raise InvalidCredentialsException("Company code not found")
+        # Echo the portal code users typed (e.g. CDPL0112), not the internal ERP code.
+        return {
+            "company_code": portal_code or company.company_code,
+            "company_name": company.company_name,
+        }
+
     def login_ess(
         self,
         *,
         company_code: str,
-        employee_code: str,
+        email: str,
         password: str,
         captcha_id: str | None = None,
         captcha_answer: str | None = None,
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> dict:
+        """ESS sign-in: validated company + work email + password (default = code+DOB)."""
         if not verify_challenge(captcha_id, captcha_answer):
             raise InvalidCredentialsException("CAPTCHA verification failed")
 
-        code = company_code.strip().upper()
-        emp_code = normalize_employee_code(employee_code)
+        code = _resolve_ess_company_code(company_code)
+        email_clean = _sanitize_login_text(email).lower()
+        password = _sanitize_login_text(password)
+        if not code or not email_clean or "@" not in email_clean:
+            raise InvalidCredentialsException()
+
         company = self._db.scalar(
             select(OrgCompany).where(
                 OrgCompany.company_code == code,
@@ -222,19 +258,29 @@ class AuthService:
         if company is None:
             raise InvalidCredentialsException()
 
-        candidates = list(
-            self._db.scalars(
+        email_key = pii_lookup(email_clean)
+        employee: MasterEmployee | None = None
+        if email_key:
+            employee = self._db.scalar(
                 select(MasterEmployee).where(
                     MasterEmployee.company_id == company.id,
+                    MasterEmployee.email_lookup == email_key,
                     MasterEmployee.is_deleted.is_(False),
                 )
-            ).all()
-        )
-        employee = None
-        for row in candidates:
-            if normalize_employee_code(row.employee_code) == emp_code:
-                employee = row
-                break
+            )
+
+        # Fallback: resolve ERP user by email, then ensure they belong to this company.
+        if employee is None:
+            user_by_email = self._users.get_active_by_email(email_clean)
+            if user_by_email is not None:
+                employee = self._db.scalar(
+                    select(MasterEmployee).where(
+                        MasterEmployee.company_id == company.id,
+                        MasterEmployee.user_id == user_by_email.id,
+                        MasterEmployee.is_deleted.is_(False),
+                    )
+                )
+
         if employee is None:
             raise InvalidCredentialsException()
 
@@ -249,6 +295,7 @@ class AuthService:
         )
 
         user = self._db.get(SecUser, employee.user_id) if employee.user_id else None
+        used_default_password = False
 
         password_valid = False
         if user and user.password_hash:
@@ -257,14 +304,19 @@ class AuthService:
         if not password_valid and profile and profile.date_of_birth:
             if verify_ess_dob_password(password, employee.employee_code, profile.date_of_birth):
                 password_valid = True
+                used_default_password = True
+                display = f"{employee.first_name} {employee.last_name or ''}".strip()
+                # Prefer the login email the employee typed (work mailbox).
+                bind_email = email_clean
                 if user is None:
                     user = SecUser(
                         tenant_id=employee.tenant_id,
-                        email=employee.email or f"{emp_code.lower()}@{code.lower()}.local",
-                        display_name=f"{employee.first_name} {employee.last_name or ''}".strip(),
+                        email=bind_email,
+                        display_name=display or bind_email,
                         user_type="employee",
                         status="active",
                         password_hash=PasswordHasher.hash_password(password, validate=False),
+                        must_change_password=True,
                     )
                     self._db.add(user)
                     self._db.flush()
@@ -272,6 +324,7 @@ class AuthService:
                     self._db.flush()
                 else:
                     user.password_hash = PasswordHasher.hash_password(password, validate=False)
+                    user.must_change_password = True
                     self._db.flush()
 
         if user is None or user.is_deleted or not password_valid:
@@ -289,6 +342,14 @@ class AuthService:
                 "Account is temporarily locked. Try again later or contact HR."
             )
 
+        if user.status in BLOCKED_LOGIN_STATUSES:
+            raise InvalidCredentialsException("This account is inactive. Contact HR.")
+
+        # Default ESS password (employee code + DOB) always requires a change.
+        if used_default_password:
+            user.must_change_password = True
+            self._db.flush()
+
         if user.mfa_enabled:
             challenge = self._jwt.create_access_token(
                 user_id=user.id,
@@ -296,7 +357,11 @@ class AuthService:
                 user_type=user.user_type,
                 session_id=uuid4(),
             )
-            return {"mfa_required": True, "mfa_challenge_token": challenge}
+            return {
+                "mfa_required": True,
+                "mfa_challenge_token": challenge,
+                "must_change_password": bool(user.must_change_password),
+            }
 
         return self._issue_tokens(user, ip_address=ip_address, user_agent=user_agent)
 
@@ -637,4 +702,5 @@ class AuthService:
             "refresh_token": refresh,
             "token_type": "bearer",
             "session_id": str(session.id),
+            "must_change_password": bool(getattr(user, "must_change_password", False)),
         }

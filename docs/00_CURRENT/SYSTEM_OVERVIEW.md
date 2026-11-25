@@ -44,7 +44,7 @@ apps/
   api/          FastAPI (src/modules/*, alembic/, workers/)
   web/          Next.js admin UI
   employee-app/ ESS / employee PWA (optional)
-  employee-mobile/
+  employee-app-by-Rishabh/ Employee mobile (Expo / React Native)
 docs/           Baseline pack + 00_CURRENT living docs
 design-system/  UI/UX Pro Max tokens for iConnect Plus
 docker/         MinIO build contexts

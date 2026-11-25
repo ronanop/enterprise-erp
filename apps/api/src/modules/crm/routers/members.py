@@ -1,4 +1,4 @@
-"""CRM team member lookup (module-assigned users with employee records)."""
+"""CRM owner/assignee lookup (all active application users with employee records)."""
 
 from typing import Annotated
 

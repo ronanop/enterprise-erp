@@ -20,7 +20,7 @@ function buildMailto(employeeCode?: string, email?: string) {
       `App platform:`,
       `Reason (optional):`,
       "",
-      "I understand that after approval, app login and eligible app-associated data may be removed, while employment / payroll / statutory records may be retained by my employer where required by law or HR policy.",
+      "I understand that employment or payroll records may be retained where required by law or my employer.",
       "",
       "Thank you.",
     ].join("\n"),
@@ -55,24 +55,16 @@ export default function DataDeletionScreen() {
       contentStyle={styles.content}
     >
       <AlertBox tone="warn">
-        We do not collect deletion requests in the app. Email HR with the
-        template below. After approval we remove app login and eligible
-        app-associated data. Employment, payroll, attendance, tax, KYC, and
-        audit records may stay with your employer where law or HR policy
-        requires it.
+        We do not collect deletion requests in the app. Tap the button to email
+        HR with a ready-made template. Your employee account is managed by your
+        organization; some employment records may be retained where required by
+        law.
       </AlertBox>
 
       <Card style={styles.card}>
         <Text style={styles.label}>Signed-in account</Text>
         <Text style={styles.value}>{me?.email || "—"}</Text>
         <Text style={styles.value}>Code: {me?.employee_code || "—"}</Text>
-
-        <Text style={styles.retainTitle}>Typically retained by employer</Text>
-        <Text style={styles.retainBody}>
-          Employee master, attendance / leave history, payslips &amp; tax
-          registers, required KYC documents, and audit logs — see the web page
-          for full wording.
-        </Text>
 
         <Button title="Email deletion request" onPress={() => void emailRequest()} />
         <Button
@@ -96,17 +88,5 @@ const styles = StyleSheet.create({
     color: colors.onSurfaceVariant,
   },
   value: { fontSize: 14, fontWeight: "600", color: colors.onSurface },
-  retainTitle: {
-    marginTop: 4,
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.onSurface,
-  },
-  retainBody: {
-    fontSize: 13,
-    lineHeight: 19,
-    color: colors.onSurfaceVariant,
-  },
   hint: { fontSize: 12, color: colors.outline, textAlign: "center" },
 });
-

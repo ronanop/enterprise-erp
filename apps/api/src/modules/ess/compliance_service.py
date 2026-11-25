@@ -123,7 +123,25 @@ class EssComplianceService:
         user = self._db.get(SecUser, ctx.user_id)
         if user is None or user.tenant_id != ctx.tenant_id:
             raise NotFoundException("User not found")
-        if not PasswordHasher.verify_password(body.current_password, user.password_hash):
+        current_ok = PasswordHasher.verify_password(body.current_password, user.password_hash)
+        # First-login path: allow default ESS password (employee code + DOB) as "current".
+        if not current_ok and bool(getattr(user, "must_change_password", False)):
+            emp = self._ess.resolve_employee(ctx)
+            from modules.hr.models import HrEmployeeProfile
+            from security.ess_default_password import verify_ess_dob_password
+            from sqlalchemy import select
+
+            profile = self._db.scalar(
+                select(HrEmployeeProfile).where(
+                    HrEmployeeProfile.employee_id == emp.id,
+                    HrEmployeeProfile.is_deleted.is_(False),
+                )
+            )
+            if profile and profile.date_of_birth:
+                current_ok = verify_ess_dob_password(
+                    body.current_password, emp.employee_code, profile.date_of_birth
+                )
+        if not current_ok:
             raise ForbiddenException("Current password is incorrect")
         new_pw = body.new_password.strip()
         if len(new_pw) < 8:

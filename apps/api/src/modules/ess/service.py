@@ -56,6 +56,7 @@ from modules.ess.schemas import (
 )
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.models.notification import NtfEvent
+from modules.foundation.schemas import HrmsUserProfileResponse
 from modules.foundation.repository.base import utcnow
 from modules.foundation.service.notification_href import sanitize_inbox_href
 from modules.ess.adapters.asset_adapter import EssAssetAdapter
@@ -275,6 +276,20 @@ class EssService:
             EmployeeService(self._db).update_employee(ctx, emp.id, **fields)
         return self.get_me(ctx)
 
+    def get_hrms_profile(self, ctx: TenantContext, *, refresh: bool = False) -> HrmsUserProfileResponse:
+        """Caller's profile + leave balances from the remote HRMS configured by the tenant admin."""
+        from modules.foundation.service.hrms_user_profile_service import HrmsUserProfileService
+
+        if ctx.user_id is None:
+            raise ForbiddenException("Authenticated user required")
+        view = HrmsUserProfileService(self._db).get_for_user(
+            tenant_id=ctx.tenant_id,
+            user_id=ctx.user_id,
+            actor_user_id=ctx.user_id,
+            force_refresh=refresh,
+        )
+        return HrmsUserProfileResponse.model_validate(view)
+
     def list_leave_types(self, ctx: TenantContext) -> list[EssLeaveTypeResponse]:
         emp = self.resolve_employee(ctx)
         rows = self._leave_types.list(ctx, emp.company_id)
@@ -387,6 +402,15 @@ class EssService:
         face_enabled = bool(getattr(profile, "face_auth_enabled", False))
         selfie = bool(rule and getattr(rule, "ess_selfie_required", False))
         face_punch = bool(rule and getattr(rule, "ess_face_at_punch_required", False))
+        from core.config import settings
+
+        if settings.ess_store_review_mode:
+            return EssPunchPolicyResponse(
+                geofence_required=False,
+                selfie_required=False,
+                face_at_punch_required=False,
+                face_enrolled=False,
+            )
         return EssPunchPolicyResponse(
             geofence_required=bool(rule and rule.geofence_required),
             selfie_required=selfie,
@@ -445,6 +469,10 @@ class EssService:
         longitude: float | None,
     ) -> None:
         rule = self._att_rules.get_active(ctx, emp.company_id)
+        from core.config import settings
+
+        if settings.ess_store_review_mode:
+            return
         geofence_required = bool(rule and rule.geofence_required)
         locations = self._geofence_locations(ctx, emp)
         if not locations and not geofence_required:

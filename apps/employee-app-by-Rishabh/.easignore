@@ -1,0 +1,24 @@
+# Keep EAS upload small — do not ship local deps / docs / junk
+node_modules/
+.expo/
+dist/
+web-build/
+.git/
+.claude/
+docs/
+**/*.md
+!README.md
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+coverage/
+android/
+ios/
+store-assets/
+docs/store-assets/
+**/store-assets/
+tsconfig.tsbuildinfo
+expo-env.d.ts
+package-lock.json.bak

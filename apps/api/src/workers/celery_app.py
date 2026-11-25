@@ -77,6 +77,16 @@ celery_app.conf.update(
             "task": "inventory.reservation_cleanup",
             "schedule": 3600.0,
         },
+        # ESS Instagram Stories — soft-expire past 24h TTL.
+        "ess.expire_stories": {
+            "task": "ess.expire_stories",
+            "schedule": 300.0,
+        },
+        # ESS workplace tasks — deadline approaching / overdue reminders.
+        "ess.task_deadline_reminders": {
+            "task": "ess.task_deadline_reminders",
+            "schedule": 3600.0,
+        },
     },
 )
 
@@ -95,6 +105,7 @@ celery_app.autodiscover_tasks(
         "modules.quality",
         "modules.crm",
         "modules.hr",
+        "modules.ess",
         "modules.payroll",
         "modules.recruitment",
         "modules.project",

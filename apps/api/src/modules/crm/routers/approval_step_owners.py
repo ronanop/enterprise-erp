@@ -25,6 +25,12 @@ class StepOwnerUser(BaseModel):
     email: str
 
 
+class ApprovalStepOwnerCandidate(BaseModel):
+    id: UUID
+    display_name: str
+    email: str
+
+
 class ApprovalStepOwnersGroup(BaseModel):
     step_key: str
     label: str
@@ -43,6 +49,21 @@ def list_approval_step_owners(
 ):
     rows = ApprovalStepOwnerService(db).list_grouped(ctx)
     return APIResponse(message="OK", data=[ApprovalStepOwnersGroup(**row) for row in rows])
+
+
+@approval_step_owners_router.get(
+    "/candidates",
+    response_model=APIResponse[list[ApprovalStepOwnerCandidate]],
+)
+def list_approval_step_owner_candidates(
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.my_jobs:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    rows = ApprovalStepOwnerService(db).list_candidates(ctx)
+    return APIResponse(
+        message="OK",
+        data=[ApprovalStepOwnerCandidate(**row) for row in rows],
+    )
 
 
 @approval_step_owners_router.put(

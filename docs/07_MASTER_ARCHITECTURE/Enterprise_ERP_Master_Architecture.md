@@ -277,7 +277,7 @@ enterprise-erp/   # iConnect Plus monorepo
 ├── apps/api/                    # FastAPI modular monolith (+ platform, alembic, workers)
 ├── apps/web/                    # Next.js admin (iconnectplus.in)
 ├── apps/employee-app/           # Next.js ESS PWA (ess.iconnectplus.in)
-├── apps/employee-mobile/        # Employee mobile
+├── apps/employee-app-by-Rishabh/ # Employee mobile (Expo / React Native)
 ├── docs/                        # Baseline pack + 00_CURRENT living docs
 ├── design-system/               # UI/UX Pro Max tokens
 ├── docker-compose.local.yml     # All-in-one local

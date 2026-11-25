@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from email.message import EmailMessage
 from typing import Sequence
 
-from core.config import settings
+from core.config import get_settings, settings
 from shared.email_utils import strip_html
 
 # Process-wide spacing between sends to avoid SMTP provider rate limits
@@ -45,12 +45,53 @@ class SmtpEmailAdapter:
         from_email: str | None = None,
         use_tls: bool | None = None,
     ) -> None:
-        self._host = (host if host is not None else settings.smtp_host).strip()
-        self._port = int(port if port is not None else settings.smtp_port)
-        self._user = (user if user is not None else settings.smtp_user).strip()
-        self._password = password if password is not None else settings.smtp_password
-        self._from_email = (from_email if from_email is not None else settings.smtp_from_address).strip()
-        self._use_tls = settings.smtp_use_tls if use_tls is None else use_tls
+        # Keep optional overrides; otherwise always read live settings so .env
+        # changes take effect after API restart without stale module snapshots.
+        self._host_override = host
+        self._port_override = port
+        self._user_override = user
+        self._password_override = password
+        self._from_email_override = from_email
+        self._use_tls_override = use_tls
+
+    def _cfg(self):
+        return get_settings()
+
+    @property
+    def _host(self) -> str:
+        if self._host_override is not None:
+            return self._host_override.strip()
+        return self._cfg().smtp_host.strip()
+
+    @property
+    def _port(self) -> int:
+        if self._port_override is not None:
+            return int(self._port_override)
+        return int(self._cfg().smtp_port)
+
+    @property
+    def _user(self) -> str:
+        if self._user_override is not None:
+            return self._user_override.strip()
+        return self._cfg().smtp_user.strip()
+
+    @property
+    def _password(self) -> str:
+        if self._password_override is not None:
+            return self._password_override
+        return self._cfg().smtp_password
+
+    @property
+    def _from_email(self) -> str:
+        if self._from_email_override is not None:
+            return self._from_email_override.strip()
+        return self._cfg().smtp_from_address.strip()
+
+    @property
+    def _use_tls(self) -> bool:
+        if self._use_tls_override is not None:
+            return self._use_tls_override
+        return self._cfg().smtp_use_tls
 
     @property
     def configured(self) -> bool:

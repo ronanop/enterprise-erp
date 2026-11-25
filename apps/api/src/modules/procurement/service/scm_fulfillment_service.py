@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from core.config import settings
+from core.config import get_settings, settings
 from core.exceptions import ConflictException, NotFoundException, ValidationException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.procurement.adapters.crm_adapter import ProcurementCrmAdapter
@@ -317,7 +317,7 @@ class ScmFulfillmentService:
             if getattr(order, "po_sent_to_vendor_at", None) is not None:
                 raise ConflictException("PO was already sent to the vendor")
             raise ValidationException(f"Cannot send PO to vendor from stage '{stage}'")
-        if not settings.smtp_configured:
+        if not get_settings().smtp_configured:
             raise ValidationException(
                 "SMTP is not configured. Set SMTP_HOST and SMTP_FROM_ADDRESS before sending."
             )
@@ -423,7 +423,7 @@ class ScmFulfillmentService:
             raise ValidationException(
                 "Customer EDD is missing. Accept the vendor response with a vendor EDD first."
             )
-        if not settings.smtp_configured:
+        if not get_settings().smtp_configured:
             raise ValidationException(
                 "SMTP is not configured. Set SMTP_HOST and SMTP_FROM_ADDRESS before sending."
             )
@@ -714,7 +714,7 @@ class ScmFulfillmentService:
             raise ValidationException(
                 "Confirm customer delivery details before sharing dispatch"
             )
-        if not settings.smtp_configured:
+        if not get_settings().smtp_configured:
             raise ValidationException(
                 "SMTP is not configured. Set SMTP_HOST and SMTP_FROM_ADDRESS before sending."
             )

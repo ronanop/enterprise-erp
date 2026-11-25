@@ -68,7 +68,7 @@ export function SiteLayout() {
         </div>
         <div className="container footer-copy">
           © {new Date().getFullYear()} iConnect Plus · iconnectplus.in · Package
-          com.cache.employeeportal
+          com.iconnectplusin.employeeportal
         </div>
       </footer>
     </div>

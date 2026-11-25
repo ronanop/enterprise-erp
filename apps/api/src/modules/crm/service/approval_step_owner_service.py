@@ -63,14 +63,7 @@ class ApprovalStepOwnerService:
             step_key = str(step["key"])
             owners = []
             for uid in by_step.get(step_key, []):
-                user = users.get(uid)
-                owners.append(
-                    {
-                        "user_id": uid,
-                        "display_name": (user.display_name if user else None) or (user.email if user else str(uid)),
-                        "email": user.email if user else "",
-                    }
-                )
+                owners.append(self._owner_payload(uid, users.get(uid)))
             result.append(
                 {
                     "step_key": step_key,
@@ -104,6 +97,31 @@ class ApprovalStepOwnerService:
         grouped = self.list_grouped(ctx)
         return next(row for row in grouped if row["step_key"] == step_key)["owners"]
 
+    def list_candidates(self, ctx: TenantContext) -> list[dict]:
+        """Active tenant users selectable as default My Jobs owners (full org roster)."""
+        stmt = (
+            select(SecUser)
+            .where(
+                SecUser.tenant_id == ctx.tenant_id,
+                SecUser.is_deleted.is_(False),
+                SecUser.status == "active",
+            )
+            .order_by(SecUser.display_name.asc(), SecUser.email.asc())
+        )
+        rows: list[dict] = []
+        for user in self._db.scalars(stmt).all():
+            email = (user.email or "").strip()
+            user_type = (user.user_type or "").strip().lower()
+            # Keep platform/tenant admins even on @example.com demo addresses.
+            if email.lower().endswith("@example.com") and user_type not in {
+                "super_admin",
+                "tenant_admin",
+            }:
+                continue
+            name = (user.display_name or "").strip() or email or "User"
+            rows.append({"id": user.id, "display_name": name, "email": email})
+        return rows
+
     def _validate_owner_candidates(self, ctx: TenantContext, _step_key: str, user_ids: list[UUID]) -> None:
         """Owners must be active users in the tenant (CRM / Procurement / admin alike)."""
         if not user_ids:
@@ -115,6 +133,18 @@ class ApprovalStepOwnerService:
         ]
         if missing or inactive:
             raise ConflictException("Step owners must be active users in this tenant")
+
+    @staticmethod
+    def _owner_payload(uid: UUID, user: SecUser | None) -> dict:
+        if user is None:
+            return {
+                "user_id": uid,
+                "display_name": "Unknown user",
+                "email": "",
+            }
+        email = (user.email or "").strip()
+        name = (user.display_name or "").strip() or email or "Unknown user"
+        return {"user_id": uid, "display_name": name, "email": email}
 
     def _user_map(self, tenant_id: UUID, user_ids: set[UUID]) -> dict[UUID, SecUser]:
         if not user_ids:

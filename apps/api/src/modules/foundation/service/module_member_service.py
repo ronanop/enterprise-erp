@@ -33,15 +33,21 @@ class ModuleMemberService:
         """Employee options for module assignees (admin + member roles)."""
         if module_key not in ERP_MODULE_KEY_SET:
             return []
+        return self._employee_options_for_users(ctx, self._list_module_assigned_users(ctx, module_key))
 
+    def list_all_tenant_member_options(self, ctx: TenantContext) -> list[dict]:
+        """Employee options for every active login in the tenant (full org roster)."""
+        return self._employee_options_for_users(ctx, self._list_active_tenant_users(ctx))
+
+    def _employee_options_for_users(self, ctx: TenantContext, users: list[SecUser]) -> list[dict]:
         options: list[dict] = []
         seen_employee_ids: set[UUID] = set()
 
-        for user in self._list_module_assigned_users(ctx, module_key):
+        for user in users:
             try:
                 employee = self._user_employees.find_employee_for_user(ctx, user)
                 if employee is None:
-                    # Module assignees need an employee id for PM/owner FKs.
+                    # Owner FKs need an employee id — auto-link when possible.
                     employee = self._user_employees.ensure_employee_for_user(
                         ctx,
                         user,
@@ -68,6 +74,29 @@ class ModuleMemberService:
 
         options.sort(key=lambda row: row["label"].lower())
         return options
+
+    def _list_active_tenant_users(self, ctx: TenantContext) -> list[SecUser]:
+        """All active, non-deleted users in the tenant (for owner pickers)."""
+        stmt = (
+            select(SecUser)
+            .where(
+                SecUser.tenant_id == ctx.tenant_id,
+                SecUser.is_deleted.is_(False),
+                SecUser.status == "active",
+            )
+            .order_by(SecUser.display_name.asc())
+        )
+        users: list[SecUser] = []
+        for user in self._db.scalars(stmt).all():
+            email = (user.email or "").strip().lower()
+            user_type = (user.user_type or "").strip().lower()
+            if email.endswith("@example.com") and user_type not in {
+                "super_admin",
+                "tenant_admin",
+            }:
+                continue
+            users.append(user)
+        return users
 
     def _list_module_assigned_users(self, ctx: TenantContext, module_key: str) -> list[SecUser]:
         """Users with an org assignment to this module (admin or member)."""
@@ -96,7 +125,12 @@ class ModuleMemberService:
         users: list[SecUser] = []
         for user in self._db.scalars(stmt).all():
             email = (user.email or "").strip().lower()
-            if email.endswith("@example.com"):
+            user_type = (user.user_type or "").strip().lower()
+            # Keep platform/tenant admins even on @example.com demo addresses.
+            if email.endswith("@example.com") and user_type not in {
+                "super_admin",
+                "tenant_admin",
+            }:
                 continue
             users.append(user)
         return users

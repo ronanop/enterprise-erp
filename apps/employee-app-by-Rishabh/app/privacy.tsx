@@ -23,11 +23,8 @@ export default function PrivacyPolicyScreen() {
         <Text style={styles.body}>
           Accounts are provisioned by your organization. To request deletion of
           your login or associated personal data, use Profile → Request account
-          / data deletion, or visit the web page below. After an approved
-          request we remove app login and eligible app-associated data.
-          Employment master data, attendance / leave history, payslips, tax
-          registers, required KYC documents, and audit logs may remain with your
-          employer where law or HR policy requires it.
+          / data deletion, or visit the web form below. Some employment records
+          may be retained where the law or your employer requires it.
         </Text>
         <Pressable onPress={() => void Linking.openURL(env.privacyPolicyUrl)}>
           <Text style={styles.link}>Open full Privacy Policy</Text>

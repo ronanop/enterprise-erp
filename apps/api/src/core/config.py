@@ -172,6 +172,14 @@ class Settings(BaseSettings):
         alias="ESS_LOGIN_CAPTCHA_ENABLED",
         description="Require math CAPTCHA on ESS employee code login.",
     )
+    ess_store_review_mode: bool = Field(
+        default=False,
+        alias="ESS_STORE_REVIEW_MODE",
+        description=(
+            "Staging/store-review: relax punch geofence + selfie/face gates so "
+            "App Store / Play reviewers can exercise attendance from anywhere."
+        ),
+    )
 
     opensearch_url: str = Field(
         default="http://172.16.200.26:9200",

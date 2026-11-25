@@ -1708,6 +1708,18 @@ export async function listApprovalStepOwners(): Promise<ApprovalStepOwnersGroup[
   return asArray(res.data);
 }
 
+export type ApprovalStepOwnerCandidate = {
+  id: string;
+  display_name: string;
+  email: string;
+};
+
+/** Active org users selectable as default My Jobs step owners. */
+export async function listApprovalStepOwnerCandidates(): Promise<ApprovalStepOwnerCandidate[]> {
+  const res = await apiClient<ApprovalStepOwnerCandidate[]>("/crm/approval-step-owners/candidates");
+  return asArray(res.data);
+}
+
 export async function replaceApprovalStepOwners(
   stepKey: string,
   userIds: string[],

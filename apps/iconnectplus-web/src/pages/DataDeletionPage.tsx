@@ -16,7 +16,7 @@ const MAILTO =
       "App platform (Android / iOS / both):",
       "Reason (optional):",
       "",
-      "I understand that after approval, app login and eligible app-associated data may be removed, while employment / payroll / statutory records may be retained by my employer where required by law or HR policy.",
+      "I understand that after deletion of my app login, employment records (attendance, leave, payroll, tax/statutory, KYC references, approvals, and audit logs) may still be retained by my employer as required by law and company policy.",
       "",
       "Thank you.",
     ].join("\n"),
@@ -28,8 +28,7 @@ export function DataDeletionPage() {
       <h1>Request account / data deletion</h1>
       <p className="meta">
         Required web path for Google Play &amp; Apple App Store · Also available
-        in the Employee App under Profile · Contact:{" "}
-        <a href="mailto:erp@iconnectplus.in">erp@iconnectplus.in</a>
+        in the Employee App under Profile.
       </p>
 
       <div className="card" style={{ marginBottom: "1.5rem" }}>
@@ -50,44 +49,33 @@ export function DataDeletionPage() {
             employer approval.
           </li>
           <li>
-            Package: <code>com.cache.employeeportal</code> · Domain:{" "}
+            Package: <code>com.iconnectplusin.employeeportal</code> · Domain:{" "}
             <code>iconnectplus.in</code>
           </li>
         </ul>
       </div>
 
-      <h2>What we remove after an approved request</h2>
-      <ul>
-        <li>Employee App login / session access for that account</li>
-        <li>
-          Eligible app-associated data we control (e.g. push tokens, device
-          session material, app preferences tied to the login)
-        </li>
-      </ul>
-
-      <h2>What employment records stay (HR / legal retention)</h2>
+      <h2>What stays after deletion (retention)</h2>
       <p>
-        Your employer may keep the records below in HR, ERP, or payroll systems
-        even after the mobile login is deleted. This is normal for employment
-        law, payroll, tax, and audit:
+        An approved request removes or disables <strong>Employee App login
+        access</strong>, device push tokens, and related app session data. It
+        does <strong>not</strong> erase your employer&apos;s statutory or HR
+        records. The following typically remain in the ERP / HRMS under your
+        employer&apos;s retention schedule and applicable law:
       </p>
       <ul>
-        <li>
-          Employee master data (name, employee code, role, joining / exit dates,
-          work contact details on the HR file)
-        </li>
+        <li>Employment master data (identity, role, joining / exit)</li>
         <li>Attendance, leave, and timesheet history</li>
-        <li>Payslips, tax, and other statutory / payroll registers</li>
-        <li>
-          KYC and employment documents the organization is required to retain
-        </li>
-        <li>Approval trails and security / audit logs under legal hold</li>
+        <li>Payroll, payslips, and tax / statutory filings</li>
+        <li>Approvals, workflow history, and audit / security logs</li>
+        <li>Employment KYC / government ID references where required</li>
+        <li>Emails about this deletion request</li>
       </ul>
       <p>
-        Retention length follows your <strong>employer&apos;s HR policy</strong>{" "}
-        and applicable law. Uninstalling the app does not erase those employer
-        records. See also the{" "}
-        <a href="/legal/privacy">Privacy Policy — Retention</a> section.
+        Full detail:{" "}
+        <a href="/legal/privacy">Privacy Policy §5 Retention</a>. For your
+        organization&apos;s exact retention period, ask HR or email{" "}
+        <a href="mailto:erp@iconnectplus.in">erp@iconnectplus.in</a>.
       </p>
 
       <div className="cta-row">

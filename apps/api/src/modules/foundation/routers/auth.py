@@ -14,6 +14,9 @@ from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.models.security import SecUser
 from modules.foundation.schemas import (
     ChangePasswordRequest,
+    EssCompanyLookupRequest,
+    EssCompanyLookupResponse,
+    EssLoginRequest,
     ForgotPasswordRequest,
     LoginRequest,
     MfaVerifyRequest,
@@ -59,6 +62,43 @@ def login(
     result = service.login(
         email=body.email,
         password=body.password,
+        ip_address=get_client_ip(request),
+        user_agent=request.headers.get("User-Agent"),
+    )
+    db.commit()
+    if result.get("access_token"):
+        _apply_auth_cookies(response, result, request)
+    return APIResponse(message="Login successful", data=TokenResponse(**result))
+
+
+@router.post("/ess/company", response_model=APIResponse[EssCompanyLookupResponse])
+def ess_lookup_company(
+    body: EssCompanyLookupRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[EssCompanyLookupResponse]:
+    """Step 1 of ESS login — validate company code before asking for credentials."""
+    result = AuthService(db).lookup_ess_company(company_code=body.company_code)
+    return APIResponse(
+        message="Company verified",
+        data=EssCompanyLookupResponse(**result),
+    )
+
+
+@router.post("/ess/login", response_model=APIResponse[TokenResponse])
+def ess_login(
+    body: EssLoginRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    response: Response,
+) -> APIResponse[TokenResponse]:
+    """ESS login: company + work email + password (default = employee code + DOB)."""
+    service = AuthService(db)
+    result = service.login_ess(
+        company_code=body.company_code,
+        email=str(body.email),
+        password=body.password,
+        captcha_id=body.captcha_id,
+        captcha_answer=body.captcha_answer,
         ip_address=get_client_ip(request),
         user_agent=request.headers.get("User-Agent"),
     )

@@ -94,7 +94,15 @@ class UserEmployeeLinkService:
             return existing
 
         email = (user.email or "").strip().lower()
-        if not email or email.endswith("@example.com"):
+        user_type = (user.user_type or "").strip().lower()
+        # Demo @example.com logins are skipped, except platform/tenant admins
+        # that need an employee row for CRM owner FKs.
+        if not email:
+            return None
+        if email.endswith("@example.com") and user_type not in {
+            "super_admin",
+            "tenant_admin",
+        }:
             return None
 
         company_id, branch_id = self._org.resolve_company_and_branch(

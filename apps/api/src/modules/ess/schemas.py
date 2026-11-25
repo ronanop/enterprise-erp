@@ -2,6 +2,7 @@
 
 from datetime import date, datetime, time
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -574,3 +575,270 @@ class EssPolicyAckResponse(BaseModel):
 class EssChangePasswordBody(BaseModel):
     current_password: str
     new_password: str
+
+
+# --- ESS social feed ---------------------------------------------------------
+
+
+class EssFeedMediaUpload(BaseModel):
+    media_type: Literal["image", "video"]
+    file_name: str = Field(max_length=255)
+    content_base64: str = Field(min_length=8)
+    width: int | None = Field(default=None, ge=1, le=8000)
+    height: int | None = Field(default=None, ge=1, le=8000)
+    duration_seconds: int | None = Field(default=None, ge=0, le=60)
+
+
+class EssFeedPostCreate(BaseModel):
+    caption: str | None = Field(default=None, max_length=2200)
+    aspect_ratio: Literal["1:1", "3:4", "4:3"] = "1:1"
+    media: list[EssFeedMediaUpload] = Field(min_length=1, max_length=10)
+
+
+class EssFeedMediaItem(BaseModel):
+    id: UUID
+    media_type: str
+    sort_order: int
+    content_type: str
+    width: int | None = None
+    height: int | None = None
+    duration_seconds: int | None = None
+    processing_status: str
+    url: str
+
+
+class EssFeedPostItem(BaseModel):
+    id: UUID
+    author_employee_id: UUID
+    author_name: str
+    author_employee_code: str
+    caption: str | None = None
+    aspect_ratio: str
+    status: str
+    like_count: int
+    comment_count: int
+    liked_by_me: bool
+    published_at: datetime
+    media: list[EssFeedMediaItem] = Field(default_factory=list)
+
+
+class EssFeedCommentCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=2000)
+
+
+class EssFeedCommentItem(BaseModel):
+    id: UUID
+    post_id: UUID
+    author_employee_id: UUID
+    author_name: str
+    body: str
+    is_edited: bool
+    created_at: datetime
+
+
+# --- ESS Instagram Stories ---------------------------------------------------
+
+
+class EssStoryOverlay(BaseModel):
+    """Text/emoji sticker on a story (normalized 0–1 coords, center point)."""
+
+    id: str = Field(max_length=64)
+    text: str = Field(min_length=1, max_length=280)
+    x: float = Field(ge=0, le=1, default=0.5)
+    y: float = Field(ge=0, le=1, default=0.45)
+    color: str = Field(default="#ffffff", max_length=32)
+    font_size: int = Field(default=22, ge=12, le=96)
+    background_enabled: bool = False
+    background_color: str = Field(default="#000000", max_length=32)
+
+
+class EssStoryMentionRef(BaseModel):
+    employee_id: UUID
+    display_name: str = Field(max_length=200)
+
+
+class EssStoryCreate(BaseModel):
+    media_type: Literal["image", "video"]
+    file_name: str = Field(max_length=255)
+    content_base64: str = Field(min_length=8)
+    caption: str | None = Field(default=None, max_length=500)
+    width: int | None = Field(default=None, ge=1, le=8000)
+    height: int | None = Field(default=None, ge=1, le=8000)
+    duration_seconds: int | None = Field(default=None, ge=0, le=15)
+    overlays: list[EssStoryOverlay] = Field(default_factory=list, max_length=8)
+    mentions: list[EssStoryMentionRef] = Field(default_factory=list, max_length=20)
+
+
+class EssStoryMentionItem(BaseModel):
+    employee_id: UUID
+    display_name: str
+    email: str | None = None
+
+
+class EssStoryItem(BaseModel):
+    id: UUID
+    author_employee_id: UUID
+    author_name: str
+    author_employee_code: str
+    media_type: str
+    content_type: str
+    caption: str | None = None
+    overlays: list[EssStoryOverlay] = Field(default_factory=list)
+    mentions: list[EssStoryMentionItem] = Field(default_factory=list)
+    width: int | None = None
+    height: int | None = None
+    duration_seconds: int | None = None
+    published_at: datetime
+    expires_at: datetime
+    viewed_by_me: bool
+    liked_by_me: bool = False
+    like_count: int = 0
+    url: str
+
+
+class EssStoryTrayAuthor(BaseModel):
+    author_employee_id: UUID
+    author_name: str
+    author_employee_code: str
+    is_me: bool
+    has_unseen: bool
+    story_count: int
+    latest_published_at: datetime
+
+
+class EssStoryMentionSearchHit(BaseModel):
+    employee_id: UUID
+    display_name: str
+    email: str
+    employee_code: str
+    name_is_duplicate: bool = False
+
+
+class EssEmployeeDirectoryItem(BaseModel):
+    employee_id: UUID
+    employee_code: str
+    name: str
+    initials: str
+    company_code: str = ""
+    designation: str = ""
+    is_manager: bool = False
+    department_id: UUID | None = None
+    department_name: str = ""
+
+
+class EssDepartmentDirectoryItem(BaseModel):
+    department_id: UUID
+    department_code: str
+    department_name: str
+    company_code: str = ""
+    member_count: int = 0
+    head_employee_id: UUID | None = None
+    head_name: str = ""
+    head_employee_code: str = ""
+    assignable: bool = False
+
+
+class EssTaskCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    description: str = ""
+    deadline: datetime | None = None
+    assignment_mode: str = Field(default="users", pattern="^(users|department)$")
+    assignee_employee_ids: list[UUID] = Field(default_factory=list)
+    department_id: UUID | None = None
+
+
+class EssTaskReassign(BaseModel):
+    assignee_employee_ids: list[UUID] = Field(..., min_length=1)
+
+
+class EssTaskTransfer(BaseModel):
+    """Assignee transfers their pending assignment to a person or department."""
+
+    assignment_mode: str = Field(default="users", pattern="^(users|department)$")
+    assignee_employee_ids: list[UUID] = Field(default_factory=list)
+    department_id: UUID | None = None
+    note: str = ""
+
+
+class EssTaskProofFileInput(BaseModel):
+    file_base64: str = Field(..., min_length=1)
+    file_name: str = Field(..., min_length=1, max_length=255)
+    content_type: str | None = None
+
+
+class EssTaskCompleteBody(BaseModel):
+    note: str = ""
+    files: list[EssTaskProofFileInput] = Field(..., min_length=1, max_length=5)
+
+
+class EssTaskRequestRedoBody(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=2000)
+    title: str | None = Field(default=None, max_length=200)
+    description: str | None = None
+    deadline: datetime | None = None
+
+
+class EssTaskMilestone(BaseModel):
+    key: str
+    label: str
+    done: bool
+
+
+class EssTaskProofItem(BaseModel):
+    id: UUID
+    assignee_id: UUID
+    file_name: str
+    content_type: str
+    byte_size: int
+    note: str = ""
+    download_path: str
+    created_at: datetime
+
+
+class EssTaskAssigneeItem(BaseModel):
+    id: UUID
+    employee_id: UUID
+    employee_code: str
+    name: str
+    initials: str
+    status: str
+    responded_at: datetime | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    review_note: str = ""
+    submitted_at: datetime | None = None
+    verified_at: datetime | None = None
+    proofs: list[EssTaskProofItem] = Field(default_factory=list)
+    milestones: list[EssTaskMilestone] = Field(default_factory=list)
+
+
+class EssTaskEventItem(BaseModel):
+    id: UUID
+    event_type: str
+    label: str
+    detail: str = ""
+    actor_name: str | None = None
+    created_at: datetime
+
+
+class EssTaskItem(BaseModel):
+    id: UUID
+    title: str
+    description: str
+    deadline: datetime | None = None
+    status: str
+    assignment_mode: str = "users"
+    department_id: UUID | None = None
+    department_name: str = ""
+    department_code: str = ""
+    can_reassign_within_department: bool = False
+    can_verify: bool = False
+    creator_employee_id: UUID
+    creator_name: str
+    creator_initials: str
+    creator_employee_code: str = ""
+    assignee_count: int
+    assignees: list[EssTaskAssigneeItem] = Field(default_factory=list)
+    my_assignee_status: str | None = None
+    events: list[EssTaskEventItem] = Field(default_factory=list)
+    created_at: datetime

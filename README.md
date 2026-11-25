@@ -44,7 +44,7 @@ enterprise-erp/
 │   ├── api/                 # FastAPI backend (modules/*, alembic, workers)
 │   ├── web/                 # Next.js admin UI
 │   ├── employee-app/        # Employee PWA (optional)
-│   └── employee-mobile/
+│   └── employee-app-by-Rishabh/ # Employee mobile (Expo)
 ├── design-system/           # UI/UX Pro Max — iConnect Plus
 ├── docker/                  # MinIO build contexts
 ├── docs/                    # Baseline pack + living 00_CURRENT

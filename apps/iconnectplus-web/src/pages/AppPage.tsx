@@ -10,7 +10,7 @@ export function AppPage() {
           <p>
             Mobile ESS for attendance, leave, payslips, documents, approvals,
             and workplace tools. Package id{" "}
-            <strong>com.cache.employeeportal</strong>.
+            <strong>com.iconnectplusin.employeeportal</strong>.
           </p>
           <div className="cta-row">
             <Link className="btn btn-primary" to="/support">

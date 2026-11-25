@@ -33,6 +33,24 @@ from modules.hr.models.training_request import HrTrainingRequest
 from modules.hr.models.training_room import HrTrainingRoom
 from modules.hr.models.wfh_request import HrWfhRequest
 from modules.hr.models.ess_policy import HrEssPolicy, HrEssPolicyAck
+from modules.hr.models.ess_feed import (
+    HrEssFeedComment,
+    HrEssFeedLike,
+    HrEssFeedMedia,
+    HrEssFeedPost,
+)
+from modules.hr.models.ess_story import (
+    HrEssStory,
+    HrEssStoryLike,
+    HrEssStoryMention,
+    HrEssStoryView,
+)
+from modules.hr.models.workplace_task import (
+    HrWorkplaceTask,
+    HrWorkplaceTaskAssignee,
+    HrWorkplaceTaskEvent,
+    HrWorkplaceTaskProof,
+)
 from modules.hr.models.weekly_off_policy import HrWeeklyOffPolicy
 from modules.hr.models.on_duty_request import HrOnDutyRequest
 from modules.hr.models.ot_allotment import HrOtAllotment
@@ -69,6 +87,18 @@ __all__ = [
     "HrWfhRequest",
     "HrEssPolicy",
     "HrEssPolicyAck",
+    "HrEssFeedPost",
+    "HrEssFeedMedia",
+    "HrEssFeedLike",
+    "HrEssFeedComment",
+    "HrEssStory",
+    "HrEssStoryView",
+    "HrEssStoryLike",
+    "HrEssStoryMention",
+    "HrWorkplaceTask",
+    "HrWorkplaceTaskAssignee",
+    "HrWorkplaceTaskEvent",
+    "HrWorkplaceTaskProof",
     "HrOtAllotment",
     "HrKpi",
     "HrOkr",

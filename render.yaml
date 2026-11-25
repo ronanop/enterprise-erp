@@ -1,0 +1,56 @@
+# Render Blueprint — ESS store-review staging API (App Store / Play review).
+#
+# IMPORTANT — avoid free sleep:
+#   Use a paid Web Service plan (Starter or higher). Free web services spin down
+#   after ~15 min idle and will fail App Review cold-starts.
+#
+# Deploy:
+#   1. Neon DB ready (project iconnect-ess-store-review) + DATABASE_URL set
+#   2. Render → New → Blueprint → this repo → render.yaml
+#   3. Fill env vars in the dashboard (secrets below are placeholders)
+#   4. After first deploy: Shell → python -m scripts.seed_store_review
+#
+# Health: GET https://<service>.onrender.com/api/v1/health
+
+services:
+  - type: web
+    name: iconnect-ess-store-review-api
+    runtime: docker
+    plan: starter
+    region: singapore
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: ./apps/api
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      - key: ENVIRONMENT
+        value: staging
+      - key: ESS_STORE_REVIEW_MODE
+        value: "true"
+      - key: ESS_LOGIN_CAPTCHA_ENABLED
+        value: "false"
+      - key: RUN_MIGRATIONS
+        value: "true"
+      - key: OBJECT_STORAGE_BACKEND
+        value: local
+      - key: ASSET_STORAGE_BACKEND
+        value: local
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: API_HOST
+        value: 0.0.0.0
+      # Render injects PORT; entrypoint maps it to uvicorn.
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: PII_ENCRYPTION_KEY
+        sync: false
+      - key: FIELD_ENCRYPTION_KEYS
+        sync: false
+      - key: CELERY_BROKER_URL
+        value: "memory://"
+
+# Optional: ping every 5 min so Neon compute + Render stay warm during review week.
+# Create in Render Dashboard → Cron Jobs (Starter) hitting /api/v1/health.
+# Or use an external uptime monitor (UptimeRobot free) on the health URL.

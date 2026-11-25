@@ -67,6 +67,26 @@ class TokenResponse(BaseModel):
     mfa_required: bool = False
     mfa_challenge_token: str | None = None
     redirect_to: str | None = None
+    must_change_password: bool = False
+
+
+class EssCompanyLookupRequest(BaseModel):
+    company_code: str = Field(min_length=1, max_length=50)
+
+
+class EssCompanyLookupResponse(BaseModel):
+    company_code: str
+    company_name: str
+
+
+class EssLoginRequest(BaseModel):
+    """Employee Self-Service login: company scope + work email + password."""
+
+    company_code: str = Field(min_length=1, max_length=50)
+    email: EmailStr
+    password: str = Field(min_length=4, max_length=128)
+    captcha_id: str | None = None
+    captcha_answer: str | None = None
 
 
 class TenantCreateRequest(BaseModel):
@@ -189,6 +209,8 @@ class HrmsIntegrationSyncResponse(BaseModel):
 
 
 class HrmsLeaveBalanceItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     leave_type_code: str = ""
     leave_type_name: str = ""
     opening_balance: float = 0
@@ -199,6 +221,8 @@ class HrmsLeaveBalanceItem(BaseModel):
 
 
 class HrmsUserProfileResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     user_id: UUID
     employee_id: UUID | None = None
     employee_code: str

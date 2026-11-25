@@ -7,17 +7,12 @@ import { ApproverMultiSelect } from "@/components/crm/sales/approver-multi-selec
 import { Button } from "@/components/ui/button";
 import { formatApiError } from "@/services/api-client";
 import {
+  listApprovalStepOwnerCandidates,
   listApprovalStepOwners,
-  listCrmApprovalUsers,
   replaceApprovalStepOwners,
+  type ApprovalStepOwnerCandidate,
   type ApprovalStepOwnersGroup,
-  type CrmApprovalUser,
 } from "@/services/sales-crm-service";
-import { listModuleMembers, type ModuleUserRecord } from "@/services/module-users-service";
-
-const FREIGHT_STEP = "ovf_provide_freight";
-const SUPPORTING_ITEMS_STEP = "ovf_provide_supporting_items";
-const SERVICE_VISITS_STEP = "ovf_provide_service_visits";
 
 type OwnerOption = { id: string; label: string; name: string; email: string };
 
@@ -40,20 +35,25 @@ const CRM_FLOW_STEP_ORDER = [
   "ovf_send_for_approval",
 ] as const;
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function toOption(id: string, name: string, email: string): OwnerOption {
-  const display = (name || email || "User").trim();
+  const rawName = (name || "").trim();
+  const rawEmail = (email || "").trim();
+  // Never treat a raw user id as a human-readable name (stale / deleted owners).
+  const safeName = rawName && !UUID_RE.test(rawName) ? rawName : "";
+  const display = safeName || rawEmail || "Unknown user";
   return {
     id: String(id),
     name: display,
-    email: email || "",
-    label: email ? `${display} (${email})` : display,
+    email: rawEmail,
+    label: rawEmail && display !== rawEmail ? `${display} (${rawEmail})` : display,
   };
 }
 
 export function CrmDefaultTaskOwnersPanel() {
   const [groups, setGroups] = useState<ApprovalStepOwnersGroup[]>([]);
-  const [crmUsers, setCrmUsers] = useState<CrmApprovalUser[]>([]);
-  const [procurementMembers, setProcurementMembers] = useState<ModuleUserRecord[]>([]);
+  const [candidates, setCandidates] = useState<ApprovalStepOwnerCandidate[]>([]);
   const [draft, setDraft] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState<string | null>(null);
@@ -64,14 +64,12 @@ export function CrmDefaultTaskOwnersPanel() {
     setLoading(true);
     setError(null);
     try {
-      const [ownerGroups, approvalUsers, procMembers] = await Promise.all([
+      const [ownerGroups, ownerCandidates] = await Promise.all([
         listApprovalStepOwners(),
-        listCrmApprovalUsers(),
-        listModuleMembers("procurement").catch(() => [] as ModuleUserRecord[]),
+        listApprovalStepOwnerCandidates().catch(() => [] as ApprovalStepOwnerCandidate[]),
       ]);
       setGroups(ownerGroups);
-      setCrmUsers(approvalUsers);
-      setProcurementMembers(procMembers);
+      setCandidates(ownerCandidates);
       setDraft(
         Object.fromEntries(
           ownerGroups.map((g) => [g.step_key, g.owners.map((o) => String(o.user_id))]),
@@ -105,16 +103,10 @@ export function CrmDefaultTaskOwnersPanel() {
 
   const allKnownOptions = useMemo(() => {
     const byId = new Map<string, OwnerOption>();
-    for (const user of crmUsers) {
+    for (const user of candidates) {
       byId.set(String(user.id), toOption(user.id, user.display_name, user.email));
     }
-    for (const member of procurementMembers) {
-      const id = String(member.user_id);
-      if (!byId.has(id)) {
-        byId.set(id, toOption(id, member.display_name, member.email));
-      }
-    }
-    // Always include already-configured owners so chips show names, not UUIDs.
+    // Already-configured owners (including stale / deleted) so chips stay labeled.
     for (const group of groups) {
       for (const owner of group.owners) {
         const id = String(owner.user_id);
@@ -124,24 +116,13 @@ export function CrmDefaultTaskOwnersPanel() {
       }
     }
     return byId;
-  }, [crmUsers, procurementMembers, groups]);
+  }, [candidates, groups]);
 
-  function optionsForStep(stepKey: string, selectedIds: string[]): OwnerOption[] {
-    const crmIds = new Set(crmUsers.map((user) => String(user.id)));
-    const allowAll =
-      stepKey === FREIGHT_STEP ||
-      stepKey === SUPPORTING_ITEMS_STEP ||
-      stepKey === SERVICE_VISITS_STEP;
-    const byId = new Map<string, OwnerOption>();
-
-    for (const [id, opt] of allKnownOptions) {
-      if (allowAll || crmIds.has(id) || selectedIds.includes(id)) {
-        byId.set(id, opt);
-      }
-    }
+  function optionsForStep(selectedIds: string[]): OwnerOption[] {
+    const byId = new Map(allKnownOptions);
     for (const id of selectedIds) {
-      if (!byId.has(id) && allKnownOptions.has(id)) {
-        byId.set(id, allKnownOptions.get(id)!);
+      if (!byId.has(id)) {
+        byId.set(id, toOption(id, "", ""));
       }
     }
     return [...byId.values()].sort((a, b) => a.label.localeCompare(b.label));
@@ -177,7 +158,7 @@ export function CrmDefaultTaskOwnersPanel() {
           <div>
             <p className="text-sm font-semibold text-foreground">Default task owners</p>
             <p className="text-[11px] text-muted-foreground">
-              Users who receive My Jobs by default — ordered by CRM sales flow
+              Search any active org user — ordered by CRM sales flow
             </p>
           </div>
         </div>
@@ -214,7 +195,7 @@ export function CrmDefaultTaskOwnersPanel() {
             ) : (
               orderedGroups.map((group, index) => {
                 const selected = draft[group.step_key] ?? [];
-                const pool = optionsForStep(group.step_key, selected);
+                const pool = optionsForStep(selected);
                 return (
                   <tr
                     key={group.step_key}
@@ -231,13 +212,15 @@ export function CrmDefaultTaskOwnersPanel() {
                     <td className="px-4 py-3 capitalize text-muted-foreground">{group.team_role}</td>
                     <td className="min-w-[280px] px-4 py-3">
                       {pool.length === 0 ? (
-                        <span className="text-xs text-muted-foreground">No eligible users</span>
+                        <span className="text-xs text-muted-foreground">
+                          No active users in this tenant yet
+                        </span>
                       ) : (
                         <ApproverMultiSelect
                           options={pool}
                           value={selected}
                           onChange={(ids) => setOwners(group.step_key, ids)}
-                          placeholder="Select default owner(s)"
+                          placeholder="Search and select users"
                         />
                       )}
                     </td>

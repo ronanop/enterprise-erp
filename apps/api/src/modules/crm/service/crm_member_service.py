@@ -1,4 +1,4 @@
-"""CRM team members - users with CRM module access, mapped to master employees."""
+"""CRM team members / owner pickers — mapped to master employees."""
 
 from sqlalchemy.orm import Session
 
@@ -16,4 +16,5 @@ class CrmMemberService:
         return self._members.list_user_options(ctx, CRM_MODULE_KEY)
 
     def list_member_options(self, ctx: TenantContext) -> list[dict]:
-        return self._members.list_member_options(ctx, CRM_MODULE_KEY)
+        """Owner / assignee pickers: every active application user with an employee row."""
+        return self._members.list_all_tenant_member_options(ctx)
