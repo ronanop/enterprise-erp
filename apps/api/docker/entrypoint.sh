@@ -12,6 +12,13 @@ if [ -z "${DATABASE_URL:-}" ]; then
   exit 1
 fi
 
+# Neon / standard Postgres URIs default to psycopg2; this image ships psycopg3.
+case "${DATABASE_URL}" in
+  postgresql+psycopg://*|postgres+psycopg://*) ;;
+  postgresql://*) export DATABASE_URL="postgresql+psycopg://${DATABASE_URL#postgresql://}" ;;
+  postgres://*) export DATABASE_URL="postgresql+psycopg://${DATABASE_URL#postgres://}" ;;
+esac
+
 # Fail fast on unreachable DB instead of hanging Coolify for minutes.
 case "${DATABASE_URL}" in
   *connect_timeout=*) ;;

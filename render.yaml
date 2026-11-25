@@ -36,7 +36,7 @@ services:
       - key: ASSET_STORAGE_BACKEND
         value: local
       - key: CORS_ORIGINS
-        value: "*"
+        value: '["*"]'
       - key: API_HOST
         value: 0.0.0.0
       # Render injects PORT; entrypoint maps it to uvicorn.

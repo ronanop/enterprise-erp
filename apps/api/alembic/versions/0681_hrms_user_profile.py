@@ -7,7 +7,9 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "0681_hrms_user_profile"
-down_revision: str | Sequence[str] | None = "0680_crm_ovf_charge_request"
+# Parallel branch off charge-request; merged in 0687 with assets head (0686).
+# (CRM charge-request was renumbered 0680 → 0684 on main.)
+down_revision: str | Sequence[str] | None = "0684_crm_ovf_charge_request"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
