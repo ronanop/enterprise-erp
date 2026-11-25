@@ -53,6 +53,14 @@ if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
       echo "ERROR: store-review schema bootstrap failed." >&2
       exit 1
     fi
+    # Free Render has no Shell — seed review users on boot (idempotent).
+    if [ "${SEED_STORE_REVIEW:-true}" = "true" ]; then
+      echo "Store-review mode: seeding review accounts…"
+      if ! python -m scripts.seed_store_review; then
+        echo "ERROR: store-review seed failed." >&2
+        exit 1
+      fi
+    fi
   else
     echo "Running Alembic migrations (connect_timeout=10)…"
     if ! alembic upgrade head; then

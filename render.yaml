@@ -27,6 +27,8 @@ services:
         value: staging
       - key: ESS_STORE_REVIEW_MODE
         value: "true"
+      - key: SEED_STORE_REVIEW
+        value: "true"
       - key: ESS_LOGIN_CAPTCHA_ENABLED
         value: "false"
       - key: RUN_MIGRATIONS
