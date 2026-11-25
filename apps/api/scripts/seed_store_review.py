@@ -51,7 +51,9 @@ from modules.organization.models.hierarchy import OrgDepartment  # noqa: E402
 from security.password import PasswordHasher  # noqa: E402
 
 # --- Fixed store-review credentials (also documented in STORE_REVIEW_STAGING.md) ---
-COMPANY_CODE = "CDPL0112"
+# Reviewers type portal code CDPL0112; auth aliases it to ERP company_code CDPL.
+PORTAL_COMPANY_CODE = "CDPL0112"
+COMPANY_CODE = "CDPL"
 COMPANY_NAME = "iConnect Plus Demo Co"
 REVIEW_PASSWORD = "Review@2026"
 BALANCE_YEAR = date.today().year
@@ -131,6 +133,20 @@ def ensure_company_branch_dept(
             OrgCompany.is_deleted.is_(False),
         )
     )
+    # Older store-review seeds used portal code as org code; auth aliases CDPL0112→CDPL.
+    if company is None:
+        legacy = db.scalar(
+            select(OrgCompany).where(
+                OrgCompany.tenant_id == tenant.id,
+                OrgCompany.company_code == PORTAL_COMPANY_CODE,
+                OrgCompany.is_deleted.is_(False),
+            )
+        )
+        if legacy is not None:
+            legacy.company_code = COMPANY_CODE
+            legacy.updated_by = admin_id
+            company = legacy
+            db.flush()
     if company is None:
         company = OrgCompany(
             id=uuid4(),
@@ -615,7 +631,8 @@ def main() -> None:
         print("=" * 64)
         print("STORE REVIEW SEED OK")
         print("=" * 64)
-        print(f"Company code : {COMPANY_CODE}")
+        print(f"Company code (type in app): {PORTAL_COMPANY_CODE}")
+        print(f"Org company_code (ERP)    : {COMPANY_CODE}")
         print()
         print("EMPLOYEE (primary — use this in App Review notes)")
         print(f"  Email    : {emp_spec[0]}")
