@@ -45,12 +45,22 @@ if [ -z "${CELERY_BROKER_URL:-}" ]; then
 fi
 
 if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
-  echo "Running Alembic migrations (connect_timeout=10)…"
-  if ! alembic upgrade head; then
-    echo "ERROR: alembic upgrade head failed." >&2
-    echo "Most common Coolify cause: RDS security group does not allow this EC2 on port 5432." >&2
-    echo "Also verify DATABASE_URL user/password/db name and sslmode=require." >&2
-    exit 1
+  # Store-review Neon: greenfield alembic from 0001 breaks on live-metadata
+  # early revisions (cross-schema FKs). Bootstrap ORM + stamp instead.
+  if [ "${ESS_STORE_REVIEW_MODE:-false}" = "true" ]; then
+    echo "Store-review mode: bootstrapping schema (create_all + alembic stamp)…"
+    if ! python -m scripts.bootstrap_store_review_schema; then
+      echo "ERROR: store-review schema bootstrap failed." >&2
+      exit 1
+    fi
+  else
+    echo "Running Alembic migrations (connect_timeout=10)…"
+    if ! alembic upgrade head; then
+      echo "ERROR: alembic upgrade head failed." >&2
+      echo "Most common Coolify cause: RDS security group does not allow this EC2 on port 5432." >&2
+      echo "Also verify DATABASE_URL user/password/db name and sslmode=require." >&2
+      exit 1
+    fi
   fi
   echo "Migrations complete."
 fi
