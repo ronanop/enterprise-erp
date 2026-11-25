@@ -498,12 +498,11 @@ export function DeliveryStatusListPage() {
 
       <div className={procurementUi.tableShell}>
         <div className={procurementUi.tableScroll}>
-          <table className={cn(procurementUi.table, "min-w-[980px]")}>
+          <table className={cn(procurementUi.table, "min-w-[860px]")}>
             <thead className={procurementUi.thead}>
               <tr>
                 <th className={procurementUi.th}>PO number</th>
                 <th className={procurementUi.th}>GRN number</th>
-                <th className={procurementUi.th}>Challan number</th>
                 <th className={procurementUi.th}>Invoice</th>
                 <th className={procurementUi.th}>Delivery status</th>
                 <th className={procurementUi.th}>Actions</th>
@@ -512,7 +511,7 @@ export function DeliveryStatusListPage() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className={procurementUi.empty}>
+                  <td colSpan={5} className={procurementUi.empty}>
                     {rows.length === 0
                       ? "No GRNs to track yet."
                       : "No rows match your search."}
@@ -528,9 +527,6 @@ export function DeliveryStatusListPage() {
                   </td>
                   <td className={cn(procurementUi.tdNumeric, "text-muted-foreground")}>
                     {row.grnSummary || "-"}
-                  </td>
-                  <td className={cn(procurementUi.tdNumeric, "tabular-nums")}>
-                    {docs.challan || "-"}
                   </td>
                   <td className={cn(procurementUi.tdNumeric, "tabular-nums")}>
                     {docs.invoice || "-"}

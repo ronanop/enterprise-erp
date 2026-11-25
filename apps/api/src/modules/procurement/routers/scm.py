@@ -415,7 +415,7 @@ def update_scm_ovf_charges(
     )
     db.commit()
     return APIResponse(
-        message="Freight and finance sent for approval",
+        message="Freight updated. OVF owner and admin notified (no approval required).",
         data=ScmOvfPreviewResponse.model_validate(row),
     )
 

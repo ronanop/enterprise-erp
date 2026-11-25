@@ -51,6 +51,11 @@ import {
   downloadPurchaseOrderPdf,
   purchaseOrderPdfInputFromOrder,
 } from "@/utils/purchase-order-pdf";
+import {
+  findVendorAddressEntryByState,
+  vendorAddressForState,
+  vendorSupplyStates,
+} from "@/utils/vendor-oem-match";
 
 const TAX_OPTIONS = ["0", "5", "12", "18", "28"] as const;
 const CUSTOM_SHIPPING_ID_PREFIX = "custom-po-";
@@ -177,6 +182,7 @@ export function ProcurementManualCreatePoPage() {
   const [poLines, setPoLines] = useState<PoLineDraft[]>(() => [newLine()]);
 
   const [vendorId, setVendorId] = useState("");
+  const [vendorSupplyState, setVendorSupplyState] = useState("");
   const [entityCode, setEntityCode] = useState("CDT");
   const initialCompanyLocation = companyPoLocationByEntityCode("CDT");
   const [billingAddress, setBillingAddress] = useState(() =>
@@ -251,24 +257,38 @@ export function ProcurementManualCreatePoPage() {
     [vendors, vendorId],
   );
 
+  const vendorStateOptions = useMemo(
+    () => vendorSupplyStates(selectedVendor),
+    [selectedVendor],
+  );
+
+  useEffect(() => {
+    if (!selectedVendor) {
+      setVendorSupplyState("");
+      return;
+    }
+    const states = vendorSupplyStates(selectedVendor);
+    setVendorSupplyState((current) => {
+      if (current && states.some((s) => s.toLowerCase() === current.toLowerCase())) {
+        return current;
+      }
+      return states[0] || "";
+    });
+  }, [selectedVendor]);
+
   const selectedVendorEntry = useMemo(() => {
     if (!selectedVendor) return null;
-    const entries = selectedVendor.addressEntries || [];
     return (
-      entries.find((e) => e.address.trim() || e.gstNumber.trim()) ||
-      entries[0] ||
+      findVendorAddressEntryByState(selectedVendor, vendorSupplyState)?.entry ||
+      selectedVendor.addressEntries?.[0] ||
       null
     );
-  }, [selectedVendor]);
+  }, [selectedVendor, vendorSupplyState]);
 
   const vendorBillingAddressText = useMemo(() => {
     if (!selectedVendor) return "";
-    const entries = (selectedVendor.addressEntries || [])
-      .map((e) => e.address.trim())
-      .filter(Boolean);
-    if (entries.length > 0) return entries.join("\n\n");
-    return (selectedVendor.address || "").trim();
-  }, [selectedVendor]);
+    return vendorAddressForState(selectedVendor, vendorSupplyState);
+  }, [selectedVendor, vendorSupplyState]);
 
   const vendorGstNumber = useMemo(() => {
     if (!selectedVendor) return "";
@@ -278,17 +298,6 @@ export function ProcurementManualCreatePoPage() {
       ""
     );
   }, [selectedVendor, selectedVendorEntry]);
-
-  const vendorSourceOfSupply = useMemo(
-    () => selectedVendorEntry?.sourceOfSupply?.trim() || "",
-    [selectedVendorEntry],
-  );
-
-  const vendorDestinationOfSupply = useMemo(() => {
-    const fromVendor = selectedVendorEntry?.destinationOfSupply?.trim() || "";
-    if (fromVendor) return fromVendor;
-    return companyPoLocationByEntityCode(entityCode).gstState;
-  }, [selectedVendorEntry, entityCode]);
 
   const allStockSelected =
     stockRows.length > 0 &&
@@ -813,16 +822,30 @@ export function ProcurementManualCreatePoPage() {
 
           {vendorId ? (
             <div className="space-y-4">
-              <FinanceField label="Vendor billing address">
-                <FinanceTextarea
-                  value={vendorBillingAddressText}
-                  readOnly
-                  rows={5}
-                  placeholder="No address on file"
-                  className="min-h-[7rem] cursor-default resize-none overflow-y-auto bg-muted/30 font-medium text-foreground"
-                />
-              </FinanceField>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FinanceField label="Vendor supply state">
+                  {vendorStateOptions.length > 1 ? (
+                    <FinanceSelect
+                      value={vendorSupplyState}
+                      onChange={(e) => setVendorSupplyState(e.target.value)}
+                      disabled={busy}
+                      aria-label="Vendor supply state"
+                    >
+                      {vendorStateOptions.map((state) => (
+                        <option key={state} value={state}>
+                          {state}
+                        </option>
+                      ))}
+                    </FinanceSelect>
+                  ) : (
+                    <Input
+                      value={vendorSupplyState || "-"}
+                      readOnly
+                      className="h-8 cursor-default bg-muted/30 font-medium text-foreground"
+                      aria-label="Vendor supply state"
+                    />
+                  )}
+                </FinanceField>
                 <FinanceField label="GST number">
                   <Input
                     value={vendorGstNumber || "-"}
@@ -831,23 +854,16 @@ export function ProcurementManualCreatePoPage() {
                     aria-label="Vendor GST number"
                   />
                 </FinanceField>
-                <FinanceField label="Source of supply">
-                  <Input
-                    value={vendorSourceOfSupply || "-"}
-                    readOnly
-                    className="h-8 cursor-default bg-muted/30 font-medium text-foreground"
-                    aria-label="Source of supply"
-                  />
-                </FinanceField>
-                <FinanceField label="Destination of supply">
-                  <Input
-                    value={vendorDestinationOfSupply || "-"}
-                    readOnly
-                    className="h-8 cursor-default bg-muted/30 font-medium text-foreground"
-                    aria-label="Destination of supply"
-                  />
-                </FinanceField>
               </div>
+              <FinanceField label="Vendor billing address">
+                <FinanceTextarea
+                  value={vendorBillingAddressText}
+                  readOnly
+                  rows={5}
+                  placeholder="No address on file for this state"
+                  className="min-h-[7rem] cursor-default resize-none overflow-y-auto bg-muted/30 font-medium text-foreground"
+                />
+              </FinanceField>
             </div>
           ) : null}
         </div>

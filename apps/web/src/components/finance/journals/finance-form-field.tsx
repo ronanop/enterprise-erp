@@ -66,15 +66,27 @@ function optionText(node: ReactNode): string {
 function extractSelectOptions(children: ReactNode): SearchableSelectOption[] {
   const out: SearchableSelectOption[] = [];
   Children.forEach(children, (child) => {
-    if (!isValidElement<{ value?: string | number; disabled?: boolean; children?: ReactNode }>(child)) {
+    if (
+      !isValidElement<{
+        value?: string | number;
+        disabled?: boolean;
+        children?: ReactNode;
+        "data-description"?: string;
+      }>(child)
+    ) {
       return;
     }
     if (child.type !== "option") return;
     const raw = child.props.value;
     const value = raw == null ? "" : String(raw);
+    const description =
+      typeof child.props["data-description"] === "string"
+        ? child.props["data-description"].trim()
+        : "";
     out.push({
       value,
       label: optionText(child.props.children) || value || "—",
+      description: description || undefined,
       disabled: Boolean(child.props.disabled),
     });
   });

@@ -1,6 +1,6 @@
 /** Local demo store for procurement approval requests (user → admin). */
 
-export type PoApprovalStatus = "pending" | "accepted" | "rejected";
+export type PoApprovalStatus = "pending" | "accepted" | "rejected" | "notified";
 
 /** finalize = issue an existing draft PO; create_po_in_stock = allow Create PO on IN STOCK OVF; hold_ovf = park an OVF; freight_finance = change freight and finance. */
 export type PoApprovalKind = "finalize" | "create_po_in_stock" | "hold_ovf" | "freight_finance";

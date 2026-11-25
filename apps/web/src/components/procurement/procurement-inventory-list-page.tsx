@@ -305,24 +305,22 @@ export function ProcurementInventoryListPage() {
                   <table
                     className={cn(
                       procurementUi.table,
-                      "w-full min-w-[960px] table-fixed border-separate border-spacing-0",
+                      "w-full min-w-[860px] table-fixed border-separate border-spacing-0",
                     )}
                   >
                     <colgroup>
-                      <col className="w-[22%]" />
-                      <col className="w-[7%]" />
+                      <col className="w-[26%]" />
+                      <col className="w-[8%]" />
+                      <col className="w-[10%]" />
                       <col className="w-[16%]" />
-                      <col className="w-[9%]" />
                       <col className="w-[14%]" />
                       <col className="w-[12%]" />
-                      <col className="w-[10%]" />
-                      <col className="w-[10%]" />
+                      <col className="w-[14%]" />
                     </colgroup>
                     <thead className={procurementUi.thead}>
                       <tr>
                         <th className={cn(procurementUi.th, "px-3")}>Product</th>
                         <th className={cn(procurementUi.th, "px-3 text-right")}>Qty</th>
-                        <th className={cn(procurementUi.th, "px-3")}>Description</th>
                         <th className={cn(procurementUi.th, "px-3 text-right")}>Price</th>
                         <th className={cn(procurementUi.th, "px-3")}>Serial</th>
                         <th className={cn(procurementUi.th, "px-3")}>GRN</th>
@@ -370,16 +368,6 @@ export function ProcurementInventoryListPage() {
                             )}
                           >
                             {line.stockQty.toLocaleString("en-IN")}
-                          </td>
-                          <td
-                            className={cn(
-                              procurementUi.td,
-                              "px-3 text-muted-foreground",
-                            )}
-                          >
-                            <span className="line-clamp-2" title={line.description}>
-                              {line.description}
-                            </span>
                           </td>
                           <td
                             className={cn(

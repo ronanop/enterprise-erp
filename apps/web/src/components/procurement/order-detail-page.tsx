@@ -11,7 +11,7 @@ import {
 
 import { DeliveryChallanFormPage } from "@/components/procurement/delivery-challan-form-page";
 import { GrnPdfPickDialog } from "@/components/procurement/grn-pdf-pick-dialog";
-import { NegotiationApprovalCard } from "@/components/procurement/negotiation-approval-card";
+import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
 import { PoFulfillmentPanel } from "@/components/procurement/po-fulfillment-panel";
 import {
   ReceiptSerialsDialog,
@@ -33,6 +33,7 @@ import {
 } from "@/lib/procurement-approval-notifications";
 import { ApiClientError } from "@/services/api-client";
 import {
+  cancelPurchaseOrder,
   formatInr,
   formatUsd,
   getPurchaseOrder,
@@ -48,6 +49,10 @@ import {
   type ScmReceiptBatch,
   type ScmVendorDispatch,
 } from "@/services/procurement-service";
+import {
+  poLifecycleBadgeClass,
+  resolvePoLifecycleStatus,
+} from "@/utils/procurement-po-lifecycle-status";
 import type { GrnReceiptPdfContext } from "@/utils/grn-batch-pdf-download";
 import { resolveReceiptBatchId } from "@/utils/resolve-receipt-batch-id";
 import {
@@ -135,33 +140,6 @@ function receiptBadgeVariant(
   if (status === "delivered") return "default";
   if (status === "partial") return "secondary";
   return "outline";
-}
-
-function formatOrderStatusLabel(status: string): string {
-  return status.replaceAll("_", " ").trim() || "-";
-}
-
-function orderStatusBadgeClass(status: string, pendingApproval: boolean): string {
-  if (pendingApproval) {
-    return "border-amber-300 bg-amber-50 text-amber-900";
-  }
-  const value = status.toLowerCase();
-  if (value === "draft" || value === "submitted") {
-    return "border-sky-300 bg-sky-50 text-sky-900";
-  }
-  if (value === "approved" || value === "issued" || value === "ordered") {
-    return "border-emerald-300 bg-emerald-50 text-emerald-900";
-  }
-  if (value === "partially_received") {
-    return "border-amber-300 bg-amber-50 text-amber-900";
-  }
-  if (value === "received" || value === "delivered" || value === "closed" || value === "completed") {
-    return "border-emerald-300 bg-emerald-50 text-emerald-900";
-  }
-  if (value === "cancelled" || value === "rejected") {
-    return "border-red-300 bg-red-50 text-red-800";
-  }
-  return "border-border bg-muted/40 text-foreground";
 }
 
 function isReceiptLocked(ordered: number, quantityReceived: number): boolean {
@@ -325,6 +303,8 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
   const [vendorGst, setVendorGst] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
   const [savingReceipts, setSavingReceipts] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [grnPdfPickOpen, setGrnPdfPickOpen] = useState(false);
@@ -502,6 +482,23 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       setError(err instanceof ApiClientError ? err.message : "Failed to send PO for approval");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function onCancelDraftPo() {
+    if (!order) return;
+    setCancelBusy(true);
+    setError(null);
+    try {
+      const updated = await cancelPurchaseOrder(order.id);
+      setOrder(updated);
+      setCancelDialogOpen(false);
+      router.replace(`/procurement/orders/${order.id}`);
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Failed to cancel purchase order");
+      setCancelDialogOpen(false);
+    } finally {
+      setCancelBusy(false);
     }
   }
 
@@ -850,19 +847,15 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
     (approvalPendingFlag || order?.source_module === "crm" || approvalRejected);
   const finalizeBlockedByApproval =
     pendingApproval || (isAdmin && approvalPendingFlag);
-  // Management must approve the post-negotiation price before the PO can be
-  // issued to the distributor.
-  const negotiationApplies = Boolean(
-    order && order.status === "draft" && order.source_module === "crm",
-  );
   const orderKind = (order?.order_kind || "product").toLowerCase();
   const isInternalServicePo = orderKind === "internal_service";
   const isVendorServicePo = orderKind === "vendor_service";
-  // Fulfillment wizard for CRM product/OVF and outsourced service POs (not Cache Service).
+  // Fulfillment wizard for CRM product/OVF and Create-PO (inventory) POs (not Cache Service).
   const fulfillmentApplies = Boolean(
     order &&
-    order.source_module === "crm" &&
     !isInternalServicePo &&
+    (order.source_module === "crm" ||
+      order.source_document_type === "inventory_initiated") &&
     !["draft", "submitted", "cancelled"].includes((order.status || "").toLowerCase()),
   );
   const GRN_UNLOCK_STAGES = new Set([
@@ -884,8 +877,6 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
     !fulfillmentBlocksGrn,
   );
   const showGrnWorkspace = canReceipt && viewMode === "grn";
-  const negotiationBlocksIssue =
-    order?.negotiation_status === "pending" || order?.negotiation_status === "rejected";
   const canFinalize =
     order &&
     orderStatus === "draft" &&
@@ -896,7 +887,6 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       isInternalServicePo) &&
     (order.lines?.length ?? 0) > 0 &&
     !finalizeBlockedByApproval &&
-    !negotiationBlocksIssue &&
     // Admins may also send Internal/Vendor Service POs for Accept PO → Management.
     (!isAdmin || isInternalServicePo || isVendorServicePo);
   const isOpportunityServicePo =
@@ -915,6 +905,8 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       !isOpportunityServicePo
       ? `/procurement/scm/ovf/${order.source_document_id}`
       : null;
+  const canEditDraftPo = Boolean(order && orderStatus === "draft" && editPoHref);
+  const canCancelDraftPo = Boolean(order && orderStatus === "draft");
   const lineCount = order?.lines?.length ?? 0;
   const orderLines = useMemo(() => {
     const rows = [...(order?.lines || [])];
@@ -1086,7 +1078,6 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
   const emptyColSpan = showReceiptColumns ? 11 : showGrnWorkspace ? 10 : 7;
   const backToScm = searchParams.get("from") === "scm";
   const backToGrns = searchParams.get("from") === "grns";
-  const statusLabel = (order?.status || "").toLowerCase();
 
   return (
     <div className="space-y-4">
@@ -1145,15 +1136,38 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                 {pdfBusy ? "Preparing…" : "Download PO PDF"}
               </Button>
             ) : null}
+            {canEditDraftPo && !showGrnWorkspace ? (
+              <Link
+                href={editPoHref!}
+                className={cn(
+                  buttonVariants({ size: "sm", variant: "outline" }),
+                  "cursor-pointer transition-colors duration-200",
+                )}
+              >
+                Edit PO
+              </Link>
+            ) : null}
             {canFinalize && !showGrnWorkspace ? (
               <Button
                 type="button"
                 size="sm"
                 className="cursor-pointer transition-colors duration-200"
-                disabled={busy}
+                disabled={busy || cancelBusy}
                 onClick={() => void onFinalize()}
               >
                 {approvalRejected ? "Resubmit for approval" : "Send for admin approval"}
+              </Button>
+            ) : null}
+            {canCancelDraftPo && !showGrnWorkspace ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="cursor-pointer border-red-200 text-red-800 transition-colors duration-200 hover:bg-red-50"
+                disabled={busy || cancelBusy}
+                onClick={() => setCancelDialogOpen(true)}
+              >
+                Cancel PO
               </Button>
             ) : null}
             {isAdmin && approvalPendingFlag && !showGrnWorkspace ? (
@@ -1165,17 +1179,6 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                 )}
               >
                 Review on Approval
-              </Link>
-            ) : null}
-            {!isAdmin && approvalRejected && editPoHref && !showGrnWorkspace ? (
-              <Link
-                href={editPoHref}
-                className={cn(
-                  buttonVariants({ size: "sm", variant: "outline" }),
-                  "cursor-pointer transition-colors duration-200",
-                )}
-              >
-                Edit PO
               </Link>
             ) : null}
             {pendingApproval || (orderStatus === "draft" && approvalPendingFlag) ? (
@@ -1278,13 +1281,6 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
             />
           ) : !showGrnWorkspace ? (
             <>
-              <NegotiationApprovalCard
-                orderId={order.id}
-                enabled={negotiationApplies}
-                isAdmin={isAdmin}
-                onDecided={() => void load()}
-              />
-
               {fulfillmentApplies ? (
                 <PoFulfillmentPanel
                   order={order}
@@ -1338,23 +1334,33 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                       ) : (
                         order.ovf_no.trim()
                       )
+                    ) : order.source_document_type === "inventory_initiated" ? (
+                      <span className="inline-flex items-center rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-900">
+                        Created without OVF
+                      </span>
                     ) : (
                       "-"
                     )}
                   </DetailItem>
                   <DetailItem label="PO date">{order.document_date || "-"}</DetailItem>
                   <DetailItem label="Status">
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "uppercase",
-                        orderStatusBadgeClass(statusLabel, approvalPendingFlag),
-                      )}
-                    >
-                      {approvalPendingFlag
-                        ? "Pending approval"
-                        : formatOrderStatusLabel(statusLabel)}
-                    </Badge>
+                    {(() => {
+                      const lifecycle = resolvePoLifecycleStatus({
+                        status: order.status,
+                        scm_approval_stage: order.scm_approval_stage,
+                        fulfillment_stage: order.fulfillment_stage,
+                        vendor_response_status: order.vendor_response_status,
+                        po_sent_to_vendor_at: order.po_sent_to_vendor_at,
+                      });
+                      return (
+                        <Badge
+                          variant="outline"
+                          className={cn("font-medium", poLifecycleBadgeClass(lifecycle))}
+                        >
+                          {lifecycle}
+                        </Badge>
+                      );
+                    })()}
                   </DetailItem>
                   <DetailItem label="Customer">{order.customer_name?.trim() || "-"}</DetailItem>
                   <DetailItem label="Vendor">{vendorName || "-"}</DetailItem>
@@ -1816,6 +1822,25 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           onReversed={() => void load()}
         />
       ) : null}
+
+      <ConfirmDialog
+        open={cancelDialogOpen}
+        title="Cancel this purchase order?"
+        confirmLabel="Cancel PO"
+        cancelLabel="Keep draft"
+        busy={cancelBusy}
+        onConfirm={() => void onCancelDraftPo()}
+        onCancel={() => {
+          if (!cancelBusy) setCancelDialogOpen(false);
+        }}
+      >
+        <div className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+          <p>
+            This draft PO will be cancelled and will not proceed to approval or the vendor.
+            You can create a new PO from the OVF if needed.
+          </p>
+        </div>
+      </ConfirmDialog>
     </div>
   );
 }

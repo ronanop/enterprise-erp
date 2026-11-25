@@ -164,18 +164,21 @@ export function deriveScmOvfQueueStatus(
     covered >= total &&
     orderIds.some((id) => pending?.has(id));
 
+  const active = activeOrders(row);
+  const allActiveDraft =
+    active.length > 0 &&
+    active.every((order) => (order.status || "").toLowerCase() === "draft");
+
   // Fully covered demand from stock with nothing left to buy → Close.
   if (row.stock_fulfillment_status === "complete" && total === 0) {
-    return "close";
+    return allActiveDraft ? "draft" : "close";
   }
 
   if (total === 0) {
     if (status === "cancelled") return "hold";
-    const active = orders.filter((order) => {
-      const s = (order.status || "").toLowerCase();
-      return s !== "cancelled";
-    });
-    if (active.length > 0 || allCoveredPending) return "close";
+    if (active.length > 0 || allCoveredPending) {
+      return allActiveDraft ? "draft" : "close";
+    }
     return "open";
   }
 
@@ -189,7 +192,10 @@ export function deriveScmOvfQueueStatus(
   // A distributor group that still has no PO means items are left to create.
   if (openDistributorCount(row) > 0) return "partial";
 
-  // All required qty/items have a PO (draft or issued), including finalize-pending.
+  // All required qty/items have a PO. Keep Draft while every covering PO is still draft.
+  if (allActiveDraft) return "draft";
+
+  // Issued / approved / sent covering POs → Close on the SCM queue.
   return "close";
 }
 

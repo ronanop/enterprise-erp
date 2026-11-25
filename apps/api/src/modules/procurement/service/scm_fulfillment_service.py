@@ -1,4 +1,4 @@
-"""Post-issue PO fulfillment workflow for CRM-sourced purchase orders.
+"""Post-issue PO fulfillment workflow for CRM and inventory-initiated POs.
 
 Stages: send PO → vendor response → customer order-processed mail → vendor
 dispatch → GRN (capped by dispatch) → customer delivery / share / POD.
@@ -77,9 +77,20 @@ class ScmFulfillmentService:
         self._scope.validate_company_access(ctx, order.company_id)
         return order
 
-    def _require_crm_live(self, order: ProcOrderHeader) -> None:
-        if (order.source_module or "").lower() != "crm":
-            raise ValidationException("Fulfillment workflow applies to CRM purchase orders only")
+    @staticmethod
+    def _fulfillment_eligible(order: ProcOrderHeader) -> bool:
+        """CRM OVF/product POs and Create-PO (inventory_initiated) share this chain."""
+        module = (order.source_module or "").strip().lower()
+        doc_type = (getattr(order, "source_document_type", None) or "").strip().lower()
+        if module == "crm":
+            return True
+        return module == "procurement" and doc_type == "inventory_initiated"
+
+    def _require_fulfillment_live(self, order: ProcOrderHeader) -> None:
+        if not self._fulfillment_eligible(order):
+            raise ValidationException(
+                "Fulfillment workflow applies to CRM and Create-PO purchase orders only"
+            )
         if order.status not in _LIVE_STATUSES:
             raise ValidationException("Issue the purchase order before starting fulfillment")
 
@@ -87,18 +98,22 @@ class ScmFulfillmentService:
         stage = getattr(order, "fulfillment_stage", None)
         if stage:
             return stage
-        if order.status in _LIVE_STATUSES and (order.source_module or "").lower() == "crm":
+        if order.status in _LIVE_STATUSES and self._fulfillment_eligible(order):
             order.fulfillment_stage = STAGE_AWAITING_VENDOR_SEND
             return STAGE_AWAITING_VENDOR_SEND
         return STAGE_AWAITING_VENDOR_SEND
 
     def _customer(self, ctx: TenantContext, order: ProcOrderHeader) -> dict[str, Any]:
+        fallback_name = (getattr(order, "customer_name", None) or "").strip() or None
         if order.source_document_id is None:
-            return {}
+            return {"customer_name": fallback_name} if fallback_name else {}
         try:
-            return self._crm.get_customer_contact(ctx, order.source_document_id)
+            contact = self._crm.get_customer_contact(ctx, order.source_document_id)
+            if fallback_name and not (contact.get("customer_name") or contact.get("account_name")):
+                contact = {**contact, "customer_name": fallback_name}
+            return contact
         except (NotFoundException, ConflictException):
-            return {}
+            return {"customer_name": fallback_name} if fallback_name else {}
 
     def _vendor(self, ctx: TenantContext, order: ProcOrderHeader) -> dict[str, Any]:
         try:
@@ -248,7 +263,9 @@ class ScmFulfillmentService:
 
     def get_fulfillment(self, ctx: TenantContext, order_id: UUID) -> dict[str, Any]:
         order = self._require_order(ctx, order_id)
-        stage = self._ensure_stage(order) if (order.source_module or "").lower() == "crm" else None
+        stage = (
+            self._ensure_stage(order) if self._fulfillment_eligible(order) else None
+        )
         if stage and not getattr(order, "fulfillment_stage", None):
             self._db.flush()
         dispatched = self._dispatched_qty_by_line(order.id)
@@ -311,7 +328,7 @@ class ScmFulfillmentService:
         po_pdf_filename: str | None = None,
     ) -> dict[str, Any]:
         order = self._require_order(ctx, order_id)
-        self._require_crm_live(order)
+        self._require_fulfillment_live(order)
         stage = self._ensure_stage(order)
         if stage not in {STAGE_AWAITING_VENDOR_SEND}:
             if getattr(order, "po_sent_to_vendor_at", None) is not None:
@@ -370,7 +387,7 @@ class ScmFulfillmentService:
         expected_delivery_date: date | None = None,
     ) -> dict[str, Any]:
         order = self._require_order(ctx, order_id)
-        self._require_crm_live(order)
+        self._require_fulfillment_live(order)
         stage = self._ensure_stage(order)
         if stage != STAGE_AWAITING_VENDOR_RESPONSE:
             raise ValidationException(
@@ -413,7 +430,7 @@ class ScmFulfillmentService:
         email: str | None = None,
     ) -> dict[str, Any]:
         order = self._require_order(ctx, order_id)
-        self._require_crm_live(order)
+        self._require_fulfillment_live(order)
         stage = self._ensure_stage(order)
         if stage != STAGE_VENDOR_ACCEPTED:
             raise ValidationException(
@@ -461,7 +478,7 @@ class ScmFulfillmentService:
         lines: list[dict[str, Any]],
     ) -> dict[str, Any]:
         order = self._require_order(ctx, order_id)
-        self._require_crm_live(order)
+        self._require_fulfillment_live(order)
         stage = self._ensure_stage(order)
         if stage not in {
             STAGE_CUSTOMER_NOTIFIED,
@@ -586,8 +603,8 @@ class ScmFulfillmentService:
         previous_received_qty: Decimal | None = None,
         vendor_dispatch_id: UUID | None = None,
     ) -> None:
-        """Gate GRN: CRM fulfillment must be past customer notify + dispatch; cap by dispatched."""
-        if (order.source_module or "").lower() != "crm":
+        """Gate GRN: fulfillment must be past customer notify + dispatch; cap by dispatched."""
+        if not self._fulfillment_eligible(order):
             return
         stage = self._ensure_stage(order)
         if stage not in _GRN_UNLOCK_STAGES:
@@ -625,7 +642,7 @@ class ScmFulfillmentService:
 
     def mark_grn_progress(self, ctx: TenantContext, order: ProcOrderHeader) -> None:
         """Advance stage after GRN when all dispatched qty is received."""
-        if (order.source_module or "").lower() != "crm":
+        if not self._fulfillment_eligible(order):
             return
         stage = getattr(order, "fulfillment_stage", None)
         if stage not in {STAGE_VENDOR_DISPATCH_RECORDED, STAGE_GRN_IN_STOCK}:
@@ -660,7 +677,7 @@ class ScmFulfillmentService:
         mark_ready: bool = False,
     ) -> dict[str, Any]:
         order = self._require_order(ctx, order_id)
-        self._require_crm_live(order)
+        self._require_fulfillment_live(order)
         stage = self._ensure_stage(order)
         if stage not in {
             STAGE_GRN_IN_STOCK,
@@ -708,7 +725,7 @@ class ScmFulfillmentService:
         email: str | None = None,
     ) -> dict[str, Any]:
         order = self._require_order(ctx, order_id)
-        self._require_crm_live(order)
+        self._require_fulfillment_live(order)
         stage = self._ensure_stage(order)
         if stage not in {STAGE_CUSTOMER_DELIVERY_READY, STAGE_CUSTOMER_DISPATCHED}:
             raise ValidationException(
@@ -753,7 +770,7 @@ class ScmFulfillmentService:
         note: str | None = None,
     ) -> dict[str, Any]:
         order = self._require_order(ctx, order_id)
-        self._require_crm_live(order)
+        self._require_fulfillment_live(order)
         stage = self._ensure_stage(order)
         if stage not in {STAGE_CUSTOMER_DISPATCHED, STAGE_DELIVERED}:
             raise ValidationException("Upload POD after customer dispatch has been shared")
@@ -776,8 +793,8 @@ class ScmFulfillmentService:
         return self.get_fulfillment(ctx, order_id)
 
     def initialize_on_issue(self, order: ProcOrderHeader) -> None:
-        """Called when a CRM PO is issued (status → sent)."""
-        if (order.source_module or "").lower() != "crm":
+        """Called when an eligible PO is issued (status → sent)."""
+        if not self._fulfillment_eligible(order):
             return
         if not getattr(order, "fulfillment_stage", None):
             order.fulfillment_stage = STAGE_AWAITING_VENDOR_SEND

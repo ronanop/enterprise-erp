@@ -1343,7 +1343,7 @@ export type ScmChargeApproval = {
   ovf_no: string;
   customer_name: string | null;
   owner_name: string | null;
-  status: "pending" | "accepted" | "rejected";
+  status: "pending" | "accepted" | "rejected" | "notified";
   freight: number;
   finance_cost_pct: number;
   requested_at: string | null;
@@ -2186,6 +2186,14 @@ export async function getPurchaseOrder(
     method: "GET",
     query: options?.includeCommercial ? { include_commercial: true } : undefined,
   });
+  return unwrapData(res);
+}
+
+export async function cancelPurchaseOrder(orderId: string): Promise<ProcOrder> {
+  const res = await apiClient<ProcOrder>(`/procurement/orders/${orderId}/cancel`, {
+    method: "POST",
+  });
+  invalidateProcurementListCache();
   return unwrapData(res);
 }
 

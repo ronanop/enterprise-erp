@@ -153,9 +153,11 @@ function parseChargeInput(raw: string): string | null {
   return cleaned === "" ? "0" : cleaned;
 }
 
-function normalizeChargeOnBlur(value: string): string {
-  if (value.trim() === "" || value === ".") return "0";
-  return value;
+function parseDraftChargeAmount(value: string): number | null {
+  const trimmed = value.trim();
+  if (trimmed === "" || trimmed === ".") return null;
+  const amount = Number(trimmed);
+  return Number.isFinite(amount) ? amount : null;
 }
 
 function scmOvfStatusLabel(status: ScmOvfQueueStatus): string {
@@ -637,6 +639,7 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
   const [inventorySelection, setInventorySelection] = useState<InventoryLineSelection>({});
   const [unholdDialogOpen, setUnholdDialogOpen] = useState(false);
   const [unholdBusy, setUnholdBusy] = useState(false);
+  const [freightDialogOpen, setFreightDialogOpen] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [ovfDocsRefreshKey, setOvfDocsRefreshKey] = useState(0);
   const ovfPdfAttachKeyRef = useRef<string | null>(null);
@@ -712,10 +715,45 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
     router.replace(`/procurement/scm/ovf/${ovfId}`, { scroll: false });
   }, [ovfId, router]);
 
-  async function saveFreight() {
+  const savedFreightAmount = Number(preview?.freight) || 0;
+  const draftFreightAmount = parseDraftChargeAmount(freight);
+  const freightDirty =
+    draftFreightAmount != null && draftFreightAmount !== savedFreightAmount;
+
+  function restoreFreightDraft() {
+    setFreight(String(savedFreightAmount));
+  }
+
+  function openFreightSaveDialog() {
     if (!preview || preview.purchase_order_id) return;
     if (preview.scm_on_hold) {
       setError("Unhold this OVF before changing freight.");
+      return;
+    }
+    if (draftFreightAmount == null) {
+      restoreFreightDraft();
+      setChargesBanner("Enter a freight amount before saving.");
+      return;
+    }
+    if (!freightDirty) {
+      setChargesBanner("Freight is already this value.");
+      return;
+    }
+    setError(null);
+    setFreightDialogOpen(true);
+  }
+
+  async function confirmSaveFreight() {
+    if (!preview || preview.purchase_order_id) return;
+    if (preview.scm_on_hold) {
+      setError("Unhold this OVF before changing freight.");
+      setFreightDialogOpen(false);
+      return;
+    }
+    if (draftFreightAmount == null) {
+      restoreFreightDraft();
+      setFreightDialogOpen(false);
+      setChargesBanner("Enter a freight amount before saving.");
       return;
     }
     setChargesBusy(true);
@@ -723,15 +761,19 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
     setChargesBanner(null);
     try {
       const row = await updateScmOvfCharges(ovfId, {
-        freight: Number(freight) || 0,
+        freight: draftFreightAmount,
         additional_charges: Number(preview.additional_charges) || 0,
         finance_cost_pct: Number(preview.finance_cost_pct) || 0,
       });
       setPreview(row);
       syncChargesFromPreview(row);
-      setChargesBanner("Freight saved.");
+      setFreightDialogOpen(false);
+      setChargesBanner(
+        "Freight saved. OVF owner and admin were notified in Approvals (no approval required).",
+      );
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to update freight");
+      setFreightDialogOpen(false);
     } finally {
       setChargesBusy(false);
     }
@@ -766,7 +808,9 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
       (sum, row) => sum + (Number(row.line_total) || 0),
       0,
     );
-    const freightAmount = Number(freight) || 0;
+    // Empty/incomplete input keeps margin on last saved freight (not auto-zero).
+    const freightAmount =
+      draftFreightAmount != null ? draftFreightAmount : savedFreightAmount;
     const additionalAmount = Number(preview.additional_charges) || 0;
     const financePct = Number(financeCostPct) || 0;
     const financeAmount = (vendorTotal * financePct) / 100;
@@ -774,7 +818,7 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
       customerTotal - vendorTotal - freightAmount - additionalAmount - financeAmount;
     const marginPct = customerTotal ? (margin / customerTotal) * 100 : 0;
     return { customerTotal, vendorTotal, margin, marginPct };
-  }, [preview, freight, financeCostPct]);
+  }, [preview, draftFreightAmount, savedFreightAmount, financeCostPct]);
 
   const queueStatus = preview ? deriveScmOvfQueueStatus(preview) : null;
   const chargesLockedByPo = Boolean(preview?.purchase_order_id);
@@ -1250,11 +1294,21 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
                       if (next === null) return;
                       setFreight(next);
                     }}
-                    onBlur={() => setFreight((v) => normalizeChargeOnBlur(v))}
+                    onBlur={() => {
+                      // Clearing the box must not stick as 0 — restore last saved freight.
+                      if (parseDraftChargeAmount(freight) == null) {
+                        restoreFreightDraft();
+                      }
+                    }}
                     disabled={chargesBusy || chargesLocked}
                     readOnly={chargesLocked}
                     className={cn("h-8 tabular-nums", CHARGE_NO_SPINNER)}
                   />
+                  {freightDirty ? (
+                    <p className="text-[11px] font-medium text-amber-800">
+                      Unsaved draft — margin below is a preview. Click Save freight to apply.
+                    </p>
+                  ) : null}
                 </FinanceField>
                 <FinanceField label="Finance cost (%)">
                   <Input
@@ -1270,12 +1324,24 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
               </div>
               {!chargesLocked ? (
                 <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                  {freightDirty ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="cursor-pointer transition-colors duration-200"
+                      disabled={chargesBusy}
+                      onClick={restoreFreightDraft}
+                    >
+                      Reset
+                    </Button>
+                  ) : null}
                   <Button
                     type="button"
                     size="sm"
                     className="cursor-pointer transition-colors duration-200"
-                    disabled={chargesBusy}
-                    onClick={() => void saveFreight()}
+                    disabled={chargesBusy || !freightDirty}
+                    onClick={openFreightSaveDialog}
                   >
                     {chargesBusy ? "Saving…" : "Save freight"}
                   </Button>
@@ -1385,6 +1451,37 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
       >
         <div className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
           <p>After this, you can create the purchase order.</p>
+        </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={freightDialogOpen}
+        title="Save freight change?"
+        confirmLabel="Save freight"
+        busy={chargesBusy}
+        onConfirm={() => void confirmSaveFreight()}
+        onCancel={() => {
+          if (!chargesBusy) setFreightDialogOpen(false);
+        }}
+      >
+        <div className="mt-1.5 space-y-2 text-xs leading-relaxed text-muted-foreground">
+          <p>
+            Freight will update to{" "}
+            <span className="font-semibold text-foreground">
+              ₹{(draftFreightAmount ?? savedFreightAmount).toLocaleString("en-IN")}
+            </span>
+            . Margin on this OVF will recalculate.
+          </p>
+          <p>
+            A notice goes to the OVF owner
+            {preview?.owner_name ? (
+              <>
+                {" "}
+                (<span className="font-semibold text-foreground">{preview.owner_name}</span>)
+              </>
+            ) : null}{" "}
+            and admin in Approvals. Freight change does not require approval.
+          </p>
         </div>
       </ConfirmDialog>
     </div>

@@ -244,7 +244,7 @@ class OvfService:
 
     def list_display_meta_by_ids(
         self, ctx: TenantContext, ovf_ids: Sequence[UUID]
-    ) -> dict[UUID, dict[str, str | date | None]]:
+    ) -> dict[UUID, dict[str, str | date | int | None]]:
         """Lightweight OVF fields for Procurement list enrichment (no ORM leak)."""
         rows = self._repo.list_by_ids(ctx, list(ovf_ids))
         return {
@@ -253,6 +253,8 @@ class OvfService:
                 "po_number": row.po_number,
                 "customer_name": row.customer_name,
                 "po_date": self._resolve_customer_po_display_date(ctx, row),
+                "customer_payment_days": int(row.customer_payment_days or 0),
+                "vendor_payment_days": int(row.vendor_payment_days or 0),
             }
             for row in rows
         }
@@ -574,6 +576,8 @@ class OvfService:
             "description": "; ".join(desc_parts) if desc_parts else None,
             "customer_po_number": ovf.po_number,
             "customer_po_date": self._resolve_customer_po_display_date(ctx, ovf),
+            "customer_payment_days": int(ovf.customer_payment_days or 0),
+            "vendor_payment_days": int(ovf.vendor_payment_days or 0),
         }
 
     def _resolve_lead_scm_context(self, ctx: TenantContext, opportunity_id: UUID) -> dict[str, str | None]:
@@ -2164,6 +2168,7 @@ class OvfService:
         finance = getattr(ovf, "scm_charge_request_finance_pct", None)
         if freight is None or finance is None:
             raise ConflictException("The freight and finance request is incomplete")
+        # Apply live values; then mark accepted (overrides any notified flag from update).
         self.update_scm_charges(
             ctx,
             ovf_id,
@@ -2188,7 +2193,7 @@ class OvfService:
             row
             for row in rows
             if (getattr(row, "scm_charge_request_status", None) or "")
-            in {"pending", "accepted", "rejected"}
+            in {"pending", "accepted", "rejected", "notified"}
         ]
 
     def update_scm_charges(
@@ -2232,10 +2237,35 @@ class OvfService:
         if not fields:
             return ovf
 
+        previous_freight = Decimal(str(ovf.freight or 0)).quantize(Decimal("0.0001"))
+        freight_changed = (
+            "freight" in fields and fields["freight"] != previous_freight
+        )
+
         row = self._repo.update(ctx, ovf_id, **fields)
         if row is None:
             raise NotFoundException("OVF not found")
         self._recompute_margin(ctx, ovf_id)
+
+        # Informational Approvals inbox row (status=notified). No Accept/Reject.
+        if freight_changed:
+            self._repo.update(
+                ctx,
+                ovf_id,
+                scm_charge_request_status="notified",
+                scm_charge_request_freight=fields["freight"],
+                scm_charge_request_finance_pct=Decimal(
+                    str(
+                        fields.get(
+                            "finance_cost_pct",
+                            ovf.finance_cost_pct or 0,
+                        )
+                    )
+                ),
+                scm_charge_requested_at=datetime.now(timezone.utc),
+                scm_charge_requested_by=ctx.user_id,
+            )
+
         row = self.get(ctx, ovf_id)
         self._log(
             ctx,

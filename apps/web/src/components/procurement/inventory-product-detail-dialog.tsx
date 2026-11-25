@@ -4,16 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
-import { InventorySerialEditor } from "@/components/procurement/inventory-serial-editor";
 import { procurementUi } from "@/components/procurement/procurement-ui";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { formatInr } from "@/services/procurement-service";
+import {
+  formatInr,
+  type ProcurementInventoryRow,
+} from "@/services/procurement-service";
 import {
   formatInventoryDateAdded,
   formatInventoryWarrantyLabel,
-  inventoryAddedByLabel,
-  inventoryRowAddedBy,
   inventoryRowStableKey,
   isInventoryWarrantyExpired,
   nonBilledStockQuantity,
@@ -22,8 +22,72 @@ import {
 
 function displaySerial(value: string | null | undefined): string {
   const text = (value ?? "").trim();
-  if (!text || text.toUpperCase() === "NA" || text === "-" || text === "-") return "-";
+  if (!text || text.toUpperCase() === "NA" || text === "-") return "";
   return text;
+}
+
+type MergedUnitRow = {
+  key: string;
+  companyPoNumber: string;
+  grnNumber: string;
+  hasReversal: boolean;
+  serials: string;
+  dateAdded: string | null;
+  warrantyUntil: string | null;
+  qty: number;
+  rate: number;
+  lines: ProcurementInventoryRow[];
+};
+
+function mergeUnitRows(lines: ProcurementInventoryRow[]): MergedUnitRow[] {
+  const map = new Map<string, MergedUnitRow>();
+  for (const row of lines) {
+    const companyPoNumber = (row.company_po_number ?? "").trim() || "-";
+    const grnNumber = (row.grn_number ?? "").trim() || "-";
+    const key = `${companyPoNumber}::${grnNumber}`;
+    const qty = nonBilledStockQuantity(row);
+    const serial = displaySerial(row.serial_number);
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, {
+        key,
+        companyPoNumber,
+        grnNumber,
+        hasReversal: row.source === "grn_reversal",
+        serials: serial,
+        dateAdded: row.receipt_at ?? null,
+        warrantyUntil: row.warranty_valid_till ?? null,
+        qty,
+        rate: Number(row.unit_cost) || 0,
+        lines: [row],
+      });
+      continue;
+    }
+    existing.qty += qty;
+    existing.hasReversal = existing.hasReversal || row.source === "grn_reversal";
+    existing.lines.push(row);
+    if (serial) {
+      const parts = existing.serials
+        ? existing.serials.split(", ").filter(Boolean)
+        : [];
+      if (!parts.includes(serial)) parts.push(serial);
+      existing.serials = parts.join(", ");
+    }
+    if (!existing.dateAdded && row.receipt_at) existing.dateAdded = row.receipt_at;
+    if (!existing.warrantyUntil && row.warranty_valid_till) {
+      existing.warrantyUntil = row.warranty_valid_till;
+    }
+    const cost = Number(row.unit_cost) || 0;
+    if (cost > 0 && existing.rate <= 0) existing.rate = cost;
+  }
+
+  return Array.from(map.values()).sort((a, b) => {
+    const po = a.companyPoNumber.localeCompare(b.companyPoNumber, undefined, {
+      numeric: true,
+    });
+    if (po !== 0) return po;
+    return a.grnNumber.localeCompare(b.grnNumber, undefined, { numeric: true });
+  });
 }
 
 type InventoryProductDetailDialogProps = {
@@ -38,9 +102,11 @@ export function InventoryProductDetailDialog({
   open,
   product,
   onClose,
-  onRefresh,
-  onError,
+  onRefresh: _onRefresh,
+  onError: _onError,
 }: InventoryProductDetailDialogProps) {
+  void _onRefresh;
+  void _onError;
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -56,22 +122,14 @@ export function InventoryProductDetailDialog({
     };
   }, [open]);
 
-  const unitRows = useMemo(() => {
+  const mergedRows = useMemo(() => {
     if (!product) return [];
-    return [...product.lines].sort((a, b) => {
-      const po = (a.company_po_number ?? "").localeCompare(b.company_po_number ?? "", undefined, {
-        numeric: true,
-      });
-      if (po !== 0) return po;
-      const grn = (a.grn_number ?? "").localeCompare(b.grn_number ?? "", undefined, {
-        numeric: true,
-      });
-      if (grn !== 0) return grn;
-      return displaySerial(a.serial_number).localeCompare(displaySerial(b.serial_number));
-    });
+    return mergeUnitRows(product.lines);
   }, [product]);
 
   if (!open || !mounted || !product) return null;
+
+  const description = (product.description || "").trim();
 
   return createPortal(
     <div
@@ -88,30 +146,12 @@ export function InventoryProductDetailDialog({
       >
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
           <div className="min-w-0">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <span
-                className={cn(
-                  "inline-flex shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                  product.addedBy === "po"
-                    ? "border-sky-200 bg-sky-50 text-sky-800"
-                    : product.addedBy === "manual"
-                      ? "border-border/80 bg-muted/60 text-muted-foreground"
-                      : "border-amber-200 bg-amber-50 text-amber-900",
-                )}
-              >
-                {inventoryAddedByLabel(product.addedBy)}
-              </span>
-              <h2
-                id="inventory-product-detail-title"
-                className="text-base font-semibold tracking-tight"
-              >
-                {product.productName}
-              </h2>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {product.stockQty.toLocaleString("en-IN")} unit{product.stockQty === 1 ? "" : "s"} on
-              hand · avg {formatInr(product.avgUnitCost)}
-            </p>
+            <h2
+              id="inventory-product-detail-title"
+              className="text-base font-semibold tracking-tight"
+            >
+              {product.productName}
+            </h2>
           </div>
           <Button
             type="button"
@@ -126,25 +166,25 @@ export function InventoryProductDetailDialog({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          <p className="mb-3 text-xs text-muted-foreground">
-            Source breakdown by company PO, GRN, serial, warranty, and vendor rate.
-          </p>
+          {description && description !== "-" ? (
+            <p className="mb-3 text-sm text-muted-foreground whitespace-pre-wrap">
+              {description}
+            </p>
+          ) : null}
           <div className={procurementUi.tableShell}>
             <div className="overflow-x-auto">
               <table className={cn(procurementUi.table, "w-full min-w-[720px] table-fixed")}>
                 <colgroup>
-                  <col className="w-[72px]" />
+                  <col className="w-[16%]" />
                   <col className="w-[14%]" />
-                  <col className="w-[12%]" />
-                  <col className="w-[18%]" />
+                  <col className="w-[28%]" />
                   <col className="w-[12%]" />
                   <col className="w-[14%]" />
-                  <col className="w-[56px]" />
-                  <col className="w-[12%]" />
+                  <col className="w-[8%]" />
+                  <col className="w-[8%]" />
                 </colgroup>
                 <thead className={procurementUi.thead}>
                   <tr>
-                    <th className={cn(procurementUi.th, "px-2")}>Source</th>
                     <th className={cn(procurementUi.th, "px-2")}>Company PO</th>
                     <th className={cn(procurementUi.th, "px-2")}>GRN</th>
                     <th className={cn(procurementUi.th, "px-2")}>Serial</th>
@@ -155,55 +195,44 @@ export function InventoryProductDetailDialog({
                   </tr>
                 </thead>
                 <tbody>
-                  {unitRows.map((row, index) => {
-                    const addedBy = inventoryRowAddedBy(row);
-                    const expired = isInventoryWarrantyExpired(row.warranty_valid_till);
+                  {mergedRows.map((row) => {
+                    const expired = isInventoryWarrantyExpired(row.warrantyUntil);
                     return (
                       <tr
-                        key={inventoryRowStableKey(row, index)}
+                        key={row.key || inventoryRowStableKey(row.lines[0]!, 0)}
                         className={cn(procurementUi.tr, expired && "bg-destructive/5")}
                       >
-                        <td className={cn(procurementUi.td, "px-2")}>
-                          <span
-                            className={cn(
-                              "inline-flex rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                              addedBy === "po"
-                                ? "border-sky-200 bg-sky-50 text-sky-800"
-                                : "border-border/80 bg-muted/60 text-muted-foreground",
-                            )}
-                          >
-                            {addedBy === "po" ? "PO" : "Manual"}
-                          </span>
+                        <td
+                          className={cn(
+                            procurementUi.td,
+                            "max-w-0 truncate px-2 font-mono text-xs tabular-nums",
+                          )}
+                          title={row.companyPoNumber !== "-" ? row.companyPoNumber : undefined}
+                        >
+                          {row.companyPoNumber}
                         </td>
                         <td
                           className={cn(
                             procurementUi.td,
                             "max-w-0 truncate px-2 font-mono text-xs tabular-nums",
                           )}
-                          title={row.company_po_number?.trim() || undefined}
+                          title={row.grnNumber !== "-" ? row.grnNumber : undefined}
                         >
-                          {row.company_po_number?.trim() || "-"}
-                        </td>
-                        <td
-                          className={cn(
-                            procurementUi.td,
-                            "max-w-0 truncate px-2 font-mono text-xs tabular-nums",
-                          )}
-                          title={row.grn_number?.trim() || undefined}
-                        >
-                          {row.grn_number?.trim() || "-"}
-                          {row.source === "grn_reversal" ? (
+                          {row.grnNumber}
+                          {row.hasReversal ? (
                             <span className="ml-1 text-[10px] font-medium uppercase text-destructive">
                               Rev
                             </span>
                           ) : null}
                         </td>
-                        <td className={cn(procurementUi.td, "min-w-0 px-2")}>
-                          <InventorySerialEditor
-                            row={row}
-                            onSaved={onRefresh}
-                            onError={onError}
-                          />
+                        <td
+                          className={cn(
+                            procurementUi.td,
+                            "min-w-0 px-2 text-xs break-words",
+                          )}
+                          title={row.serials || undefined}
+                        >
+                          {row.serials || "-"}
                         </td>
                         <td
                           className={cn(
@@ -211,7 +240,7 @@ export function InventoryProductDetailDialog({
                             "px-2 text-xs text-muted-foreground",
                           )}
                         >
-                          {formatInventoryDateAdded(row.receipt_at)}
+                          {formatInventoryDateAdded(row.dateAdded)}
                         </td>
                         <td
                           className={cn(
@@ -220,7 +249,7 @@ export function InventoryProductDetailDialog({
                             expired ? "text-destructive" : "text-muted-foreground",
                           )}
                         >
-                          {formatInventoryWarrantyLabel(row.warranty_valid_till)}
+                          {formatInventoryWarrantyLabel(row.warrantyUntil)}
                         </td>
                         <td
                           className={cn(
@@ -228,7 +257,7 @@ export function InventoryProductDetailDialog({
                             "px-2 text-right font-mono tabular-nums",
                           )}
                         >
-                          {nonBilledStockQuantity(row).toLocaleString("en-IN")}
+                          {row.qty.toLocaleString("en-IN")}
                         </td>
                         <td
                           className={cn(
@@ -236,7 +265,7 @@ export function InventoryProductDetailDialog({
                             "px-2 text-right font-mono tabular-nums",
                           )}
                         >
-                          {formatInr(Number(row.unit_cost) || 0)}
+                          {formatInr(row.rate)}
                         </td>
                       </tr>
                     );
@@ -245,18 +274,6 @@ export function InventoryProductDetailDialog({
               </table>
             </div>
           </div>
-        </div>
-
-        <div className="flex shrink-0 justify-end border-t border-border/60 px-5 py-3">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="cursor-pointer transition-colors duration-200"
-            onClick={onClose}
-          >
-            Close
-          </Button>
         </div>
       </div>
     </div>,
