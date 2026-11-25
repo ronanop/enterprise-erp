@@ -41,7 +41,7 @@ import {
   type ScmOvfQueueStatus,
 } from "@/utils/scm-queue-ovf-status";
 
-type QueueFilter = "all" | "open" | "partial" | "close" | "hold";
+type QueueFilter = "all" | "open" | "draft" | "partial" | "close" | "hold";
 type OvfStatus = ScmOvfQueueStatus;
 
 function formatReceivedDate(value?: string | null): string {
@@ -66,6 +66,7 @@ function queueDateMs(value?: string | null): number {
 const QUEUE_FILTERS: { key: QueueFilter; label: string }[] = [
   { key: "all", label: "All" },
   { key: "open", label: "Open" },
+  { key: "draft", label: "Draft" },
   { key: "partial", label: "Partial" },
   { key: "close", label: "Close" },
   { key: "hold", label: "Hold" },
@@ -74,6 +75,7 @@ const QUEUE_FILTERS: { key: QueueFilter; label: string }[] = [
 function parseQueueFilter(value: string | null): QueueFilter {
   if (
     value === "open" ||
+    value === "draft" ||
     value === "partial" ||
     value === "close" ||
     value === "hold"
@@ -286,22 +288,24 @@ export function ScmQueuePage() {
   }, [rows, pendingApprovalOrderIds]);
 
   const kpis = useMemo(() => {
-    const open = enriched.filter(
-      (r) => r.ovf_status === "open" || r.ovf_status === "draft",
-    ).length;
+    const open = enriched.filter((r) => r.ovf_status === "open").length;
+    const draft = enriched.filter((r) => r.ovf_status === "draft").length;
     const partial = enriched.filter((r) => r.ovf_status === "partial").length;
     const close = enriched.filter((r) => r.ovf_status === "close").length;
     const hold = enriched.filter((r) => r.ovf_status === "hold").length;
-    return { open, partial, close, hold, total: rows.length };
+    return { open, draft, partial, close, hold, total: rows.length };
   }, [enriched, rows]);
 
   const filtered = useMemo(() => {
     let list = enriched;
     if (filter === "open") {
-      list = enriched.filter(
-        (r) => r.ovf_status === "open" || r.ovf_status === "draft",
-      );
-    } else if (filter === "partial" || filter === "close" || filter === "hold") {
+      list = enriched.filter((r) => r.ovf_status === "open");
+    } else if (
+      filter === "draft" ||
+      filter === "partial" ||
+      filter === "close" ||
+      filter === "hold"
+    ) {
       list = enriched.filter((r) => r.ovf_status === filter);
     }
     const q = query.trim();
@@ -353,7 +357,7 @@ export function ScmQueuePage() {
         }
       />
 
-      <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         <ProcurementKpiCard
           label="TOTAL OVF"
           value={String(kpis.total)}
@@ -366,6 +370,12 @@ export function ScmQueuePage() {
           tone="warning"
           icon={ShoppingCart}
           href="/procurement/scm?filter=open"
+        />
+        <ProcurementKpiCard
+          label="DRAFT OVF"
+          value={String(kpis.draft)}
+          icon={CircleDashed}
+          href="/procurement/scm?filter=draft"
         />
         <ProcurementKpiCard
           label="PARTIAL OVF"
@@ -454,13 +464,15 @@ export function ScmQueuePage() {
                       ? "No queue rows match your search."
                       : filter === "open"
                         ? "No open OVFs awaiting Create PO."
-                        : filter === "partial"
-                          ? "No OVFs with partial Create PO coverage."
-                          : filter === "close"
-                            ? "No closed OVFs (all Create PO done) in the queue."
-                            : filter === "hold"
-                              ? "No held (cancelled) POs in the queue."
-                              : "No OVFs shared to SCM yet. Share an approved OVF from CRM Sales."}
+                        : filter === "draft"
+                          ? "No OVFs with draft purchase orders only."
+                          : filter === "partial"
+                            ? "No OVFs with partial Create PO coverage."
+                            : filter === "close"
+                              ? "No closed OVFs (all Create PO done) in the queue."
+                              : filter === "hold"
+                                ? "No held (cancelled) POs in the queue."
+                                : "No OVFs shared to SCM yet. Share an approved OVF from CRM Sales."}
                   </td>
                 </tr>
               ) : null}

@@ -496,6 +496,18 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
     };
   }, [fromInventory, isNew]);
 
+  function availableQtyForProductName(productName: string, excludeLineId?: string): number {
+    const option = inventoryProductOptions.find((row) => row.name === productName);
+    if (!option) return 0;
+    const usedElsewhere = lines.reduce((sum, row) => {
+      if (excludeLineId && row.id === excludeLineId) return sum;
+      if ((row.product || "").trim() !== productName) return sum;
+      const qty = Number(row.quantitySent);
+      return sum + (Number.isFinite(qty) && qty > 0 ? qty : 0);
+    }, 0);
+    return Math.max(0, option.availableQty - usedElsewhere);
+  }
+
   function applyInventoryProductToLine(lineId: string, productName: string) {
     const option = inventoryProductOptions.find((row) => row.name === productName);
     setLines((current) =>
@@ -504,14 +516,23 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
         if (!productName) {
           return { ...row, product: "", itemName: "", rate: "", quantitySent: "" };
         }
+        const available = Math.max(
+          0,
+          (option?.availableQty ?? 0) -
+            current.reduce((sum, other) => {
+              if (other.id === lineId) return sum;
+              if ((other.product || "").trim() !== productName) return sum;
+              const qty = Number(other.quantitySent);
+              return sum + (Number.isFinite(qty) && qty > 0 ? qty : 0);
+            }, 0),
+        );
+        const defaultQty = available > 0 ? String(available) : "";
         return {
           ...row,
           product: productName,
           itemName: option?.description || row.itemName,
           rate: option?.rate || row.rate,
-          quantitySent:
-            row.quantitySent.trim() ||
-            (option && option.availableQty > 0 ? "1" : row.quantitySent),
+          quantitySent: defaultQty,
         };
       }),
     );
@@ -1782,12 +1803,19 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
                           disabled={isLocked || isOvfPrefilledLines}
                         >
                           <option value="">Select inventory item…</option>
-                          {inventoryProductOptions.map((opt) => (
-                            <option key={opt.name} value={opt.name}>
-                              {opt.name}
-                              {opt.availableQty > 0 ? ` (${opt.availableQty} avail.)` : ""}
-                            </option>
-                          ))}
+                          {inventoryProductOptions.map((opt) => {
+                            const remaining = availableQtyForProductName(opt.name, row.id);
+                            return (
+                              <option
+                                key={opt.name}
+                                value={opt.name}
+                                disabled={remaining <= 0 && row.product !== opt.name}
+                                data-description={`${remaining.toLocaleString("en-IN")} in inventory`}
+                              >
+                                {opt.name}
+                              </option>
+                            );
+                          })}
                           {row.product &&
                             !inventoryProductOptions.some((opt) => opt.name === row.product) ? (
                             <option value={row.product}>{row.product}</option>
@@ -1863,9 +1891,40 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
                         onChange={
                           lockSourceFields
                             ? undefined
-                            : (e) => setLineField(row.id, "quantitySent", e.target.value)
+                            : (e) => {
+                                const raw = e.target.value;
+                                if (!fromInventory || !row.product.trim()) {
+                                  setLineField(row.id, "quantitySent", raw);
+                                  return;
+                                }
+                                const maxQty = availableQtyForProductName(
+                                  row.product.trim(),
+                                  row.id,
+                                );
+                                if (raw.trim() === "") {
+                                  setLineField(row.id, "quantitySent", "");
+                                  return;
+                                }
+                                const n = Number(raw);
+                                if (!Number.isFinite(n)) {
+                                  setLineField(row.id, "quantitySent", raw);
+                                  return;
+                                }
+                                const clamped = Math.min(Math.max(0, n), maxQty);
+                                setLineField(row.id, "quantitySent", String(clamped));
+                              }
                         }
                         readOnly={lockSourceFields}
+                        max={
+                          fromInventory && row.product.trim()
+                            ? availableQtyForProductName(row.product.trim(), row.id)
+                            : undefined
+                        }
+                        title={
+                          fromInventory && row.product.trim()
+                            ? `Max ${availableQtyForProductName(row.product.trim(), row.id).toLocaleString("en-IN")} in inventory`
+                            : undefined
+                        }
                         className={cn(
                           NO_SPINNER,
                           lockSourceFields ? READ_ONLY_INPUT : "h-8",

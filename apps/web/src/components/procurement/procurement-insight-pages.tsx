@@ -35,7 +35,6 @@ import {
 } from "@/components/procurement/procurement-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { formatApiError } from "@/services/api-client";
 import {
@@ -53,16 +52,16 @@ import {
   type VendorOption,
 } from "@/services/procurement-service";
 import { buildGrnExportRowsWithBatches, exportGrnsXlsx } from "@/utils/grns-excel-export";
-import { grnBadgeVariant } from "@/utils/grn-status-display";
-import { buildOrderExportRows, exportOrdersXlsx } from "@/utils/orders-excel-export";
+import {
+  buildOrderExportRows,
+  exportOrdersXlsx,
+  filterOpenPartialExportOrders,
+} from "@/utils/orders-excel-export";
 import {
   buildProcurementInventoryStockSummary,
   isInventoryLedgerRow,
 } from "@/utils/procurement-inventory-report";
 import { buildProcurementPipelineMetrics } from "@/utils/procurement-pipeline-metrics";
-import {
-  buildPoGrnBillingRows,
-} from "@/utils/procurement-po-grn-billing";
 import { countPoBuckets, deriveGrnStatus, emptyPoBucketCounts, poOverviewBucketForOrder, type PoOverviewBucket } from "@/utils/procurement-po-buckets";
 import { isScmOpenOvfRow } from "@/utils/scm-queue-ovf-status";
 
@@ -197,8 +196,6 @@ export function ProcurementReportsPage() {
   const { data, loading, refreshing, error, reload } = useProcurementInsightData();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
-  const [statusQuery, setStatusQuery] = useState("");
-
   const stockRows = useMemo(
     () => (data?.inventory ?? []).filter(isInventoryLedgerRow),
     [data],
@@ -215,17 +212,6 @@ export function ProcurementReportsPage() {
     () => (data?.orders ? countPoBuckets(data.orders) : emptyPoBucketCounts()),
     [data],
   );
-
-  const poStatusRows = useMemo(() => {
-    if (!data) return [];
-    return buildPoGrnBillingRows(data.vendorPos, data.inventory, data.vendors);
-  }, [data]);
-
-  const filteredPoStatusRows = useMemo(() => {
-    const q = statusQuery.trim().toLowerCase();
-    if (!q) return poStatusRows;
-    return poStatusRows.filter((row) => row.companyPo.toLowerCase().includes(q));
-  }, [poStatusRows, statusQuery]);
 
   async function runExport(id: string, action: () => Promise<void>) {
     setBusyId(id);
@@ -266,10 +252,7 @@ export function ProcurementReportsPage() {
         : `${(buckets.open + buckets.partial).toLocaleString("en-IN")} open+partial`,
       onExport: async () => {
         if (!data) return;
-        const subset = data.orders.filter((order) => {
-          const bucket = poOverviewBucketForOrder(order);
-          return bucket === "open" || bucket === "partial";
-        });
+        const subset = filterOpenPartialExportOrders(data.orders);
         const rows = buildOrderExportRows(subset, data.vendors);
         await exportOrdersXlsx(`purchase-orders-open-partial-${stampNow()}.xlsx`, rows);
       },
@@ -284,7 +267,13 @@ export function ProcurementReportsPage() {
       countLabel: loading ? "…" : `${buckets.close.toLocaleString("en-IN")} closed`,
       onExport: async () => {
         if (!data) return;
-        const subset = data.orders.filter((order) => poOverviewBucketForOrder(order) === "close");
+        const subset = data.orders.filter((order) => {
+          const status = (order.status || "").toLowerCase();
+          if (status === "draft" || status === "submitted" || status === "cancelled") {
+            return false;
+          }
+          return poOverviewBucketForOrder(order, deriveGrnStatus(order)) === "close";
+        });
         const rows = buildOrderExportRows(subset, data.vendors);
         await exportOrdersXlsx(`purchase-orders-closed-${stampNow()}.xlsx`, rows);
       },
@@ -341,13 +330,14 @@ export function ProcurementReportsPage() {
       countLabel: loading ? "…" : "All reports",
       onExport: async () => {
         if (!data) return;
-        const openPartial = data.orders.filter((order) => {
-          const bucket = poOverviewBucketForOrder(order);
-          return bucket === "open" || bucket === "partial";
+        const openPartial = filterOpenPartialExportOrders(data.orders);
+        const closed = data.orders.filter((order) => {
+          const status = (order.status || "").toLowerCase();
+          if (status === "draft" || status === "submitted" || status === "cancelled") {
+            return false;
+          }
+          return poOverviewBucketForOrder(order, deriveGrnStatus(order)) === "close";
         });
-        const closed = data.orders.filter(
-          (order) => poOverviewBucketForOrder(order) === "close",
-        );
         const inventoryRows = stockRows.map((row, index) => ({
           "#": index + 1,
           Product: row.product_name ?? "",
@@ -407,118 +397,6 @@ export function ProcurementReportsPage() {
 
       {error ? <ProcurementErrorBanner>{error}</ProcurementErrorBanner> : null}
       {exportError ? <ProcurementErrorBanner>{exportError}</ProcurementErrorBanner> : null}
-
-      <section className="space-y-3 rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold uppercase tracking-tight text-foreground">
-              Purchase order fulfillment
-            </h2>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Input
-              type="search"
-              value={statusQuery}
-              onChange={(e) => setStatusQuery(e.target.value)}
-              placeholder="Search by PO number…"
-              aria-label="Search by company PO number"
-              className={cn(procurementUi.searchInput, "w-[220px] shrink-0")}
-            />
-          </div>
-        </div>
-
-        <div className={procurementUi.tableShell}>
-          <div className={procurementUi.tableScroll}>
-            <table className={cn(procurementUi.table, "min-w-[1180px]")}>
-              <thead className={procurementUi.thead}>
-                <tr>
-                  <th className={cn(procurementUi.th, "px-3")}>Company PO</th>
-                  <th className={cn(procurementUi.th, "px-3")}>Vendor</th>
-                  <th className={cn(procurementUi.th, "px-3")}>GRN status</th>
-                  <th className={cn(procurementUi.th, "px-3")}>DC bill status</th>
-                  <th className={cn(procurementUi.th, "px-3 text-right")}>GRNs</th>
-                  <th className={cn(procurementUi.th, "px-3 text-right")}>Ordered</th>
-                  <th className={cn(procurementUi.th, "px-3 text-right")}>Received</th>
-                  <th className={cn(procurementUi.th, "px-3 text-right")}>Remaining</th>
-                  <th className={cn(procurementUi.th, "px-3 text-right")}>Billed</th>
-                  <th className={cn(procurementUi.th, "px-3")}>GRN numbers</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={10} className={procurementUi.empty}>
-                      Loading PO status…
-                    </td>
-                  </tr>
-                ) : filteredPoStatusRows.length === 0 ? (
-                  <tr>
-                    <td colSpan={10} className={procurementUi.empty}>
-                      No issued purchase orders match this filter.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredPoStatusRows.map((row) => (
-                    <tr key={row.orderId} className={procurementUi.tr}>
-                      <td className={cn(procurementUi.td, "px-3")}>
-                        <Link
-                          href={`/procurement/orders/${row.orderId}`}
-                          className="cursor-pointer font-medium text-foreground transition-colors duration-200 hover:text-[#0369A1] hover:underline"
-                        >
-                          {row.companyPo}
-                        </Link>
-                      </td>
-                      <td className={cn(procurementUi.td, "px-3")}>{row.vendor}</td>
-                      <td className={cn(procurementUi.td, "px-3")}>
-                        <Badge variant={grnBadgeVariant(row.grnStatusKey)} className="uppercase">
-                          {row.grnStatus}
-                        </Badge>
-                      </td>
-                      <td className={cn(procurementUi.td, "px-3")}>{row.dcBillStatus}</td>
-                      <td
-                        className={cn(
-                          procurementUi.tdNumeric,
-                          "px-3 text-right font-mono font-medium",
-                        )}
-                      >
-                        {row.grnDocuments.toLocaleString("en-IN")}
-                      </td>
-                      <td className={cn(procurementUi.tdNumeric, "px-3 text-right font-mono")}>
-                        {row.qtyOrdered.toLocaleString("en-IN")}
-                      </td>
-                      <td className={cn(procurementUi.tdNumeric, "px-3 text-right font-mono")}>
-                        {row.qtyReceived.toLocaleString("en-IN")}
-                      </td>
-                      <td className={cn(procurementUi.tdNumeric, "px-3 text-right font-mono")}>
-                        {row.qtyRemaining.toLocaleString("en-IN")}
-                      </td>
-                      <td className={cn(procurementUi.tdNumeric, "px-3 text-right font-mono")}>
-                        {row.qtyBilled.toLocaleString("en-IN")}
-                      </td>
-                      <td className={cn(procurementUi.td, "px-3")}>
-                        {row.grnNumbers.length === 0 ? (
-                          <span className="font-mono text-xs text-muted-foreground">-</span>
-                        ) : (
-                          <ul className="space-y-0.5">
-                            {row.grnNumbers.map((grn) => (
-                              <li
-                                key={grn}
-                                className="font-mono text-xs tabular-nums text-muted-foreground"
-                              >
-                                {grn}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {cards.map((card) => {

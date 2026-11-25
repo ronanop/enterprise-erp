@@ -1,6 +1,10 @@
+import { resolvePoLifecycleStatus } from "@/utils/procurement-po-lifecycle-status";
+
 export const ORDER_EXPORT_HEADERS = [
   "PO number",
   "Company entity name",
+  "OVF number",
+  "Customer PO number",
   "Customer name",
   "Customer pay terms",
   "Vendor name",
@@ -17,6 +21,8 @@ export type OrderExportRow = Record<(typeof ORDER_EXPORT_HEADERS)[number], strin
 export const ORDER_EXPORT_COLUMN_WIDTHS = [
   20,
   28,
+  18,
+  20,
   26,
   18,
   26,
@@ -30,33 +36,48 @@ export const ORDER_EXPORT_COLUMN_WIDTHS = [
 
 const PO_STATUS_HEADER = "Status";
 
-/** PO status labels for Excel (maps sent → Open). */
-export function formatPoStatusForExport(status: string): string {
-  const value = (status || "").trim().toLowerCase();
-  if (!value) return "";
-  switch (value) {
-    case "sent":
-    case "approved":
-      return "Open";
-    case "draft":
-      return "Draft";
-    case "partially_received":
-      return "Partially Received";
-    case "received":
-      return "Received";
-    case "closed":
-      return "Closed";
-    case "cancelled":
-      return "Cancelled";
-    case "submitted":
-      return "Submitted";
-    default:
-      return value
-        .split(/[_\s-]+/)
-        .filter(Boolean)
-        .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-        .join(" ");
+/** Fulfillment chain before GRN is complete → Excel "Pending". */
+const PRE_GRN_FULFILLMENT_STAGES = new Set([
+  "awaiting_vendor_send",
+  "awaiting_vendor_response",
+  "vendor_accepted",
+  "customer_notified",
+  "vendor_dispatch_recorded",
+]);
+
+/** PO status labels for Excel (lifecycle vocabulary; pre-GRN chain → Pending). */
+export function formatPoStatusForExport(
+  status: string,
+  extras?: {
+    scm_approval_stage?: string | null;
+    fulfillment_stage?: string | null;
+    vendor_response_status?: string | null;
+    po_sent_to_vendor_at?: string | null;
+  },
+): string {
+  if (!(status || "").trim() && !extras) return "";
+  const statusKey = (status || "").trim().toLowerCase();
+  if (
+    statusKey !== "cancelled" &&
+    statusKey !== "canceled" &&
+    statusKey !== "closed" &&
+    statusKey !== "received" &&
+    statusKey !== "partially_received" &&
+    statusKey !== "draft" &&
+    statusKey !== "submitted"
+  ) {
+    const fulfillment = (extras?.fulfillment_stage || "").trim().toLowerCase();
+    if (PRE_GRN_FULFILLMENT_STAGES.has(fulfillment)) {
+      return "Pending";
+    }
   }
+  return resolvePoLifecycleStatus({
+    status,
+    scm_approval_stage: extras?.scm_approval_stage,
+    fulfillment_stage: extras?.fulfillment_stage,
+    vendor_response_status: extras?.vendor_response_status,
+    po_sent_to_vendor_at: extras?.po_sent_to_vendor_at,
+  });
 }
 
 export function normalizeOrderExportRow(row: OrderExportRow): OrderExportRow {

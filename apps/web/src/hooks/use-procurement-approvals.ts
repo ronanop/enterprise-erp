@@ -161,6 +161,7 @@ function mapHoldApproval(row: ScmHoldApproval): PoApprovalRequest {
 function mapChargeApproval(row: ScmChargeApproval): PoApprovalRequest {
   const freight = Number(row.freight) || 0;
   const finance = Number(row.finance_cost_pct) || 0;
+  const isNotice = row.status === "notified";
   return {
     id: `charges:${row.ovf_id}`,
     kind: "freight_finance",
@@ -178,8 +179,10 @@ function mapChargeApproval(row: ScmChargeApproval): PoApprovalRequest {
     requestedByName: row.requested_by_name,
     status: row.status,
     createdAt: row.requested_at || new Date().toISOString(),
-    decidedAt: null,
-    chargeSummary: `Freight ₹${freight.toLocaleString("en-IN")} · Finance ${finance}%`,
+    decidedAt: isNotice ? row.requested_at || new Date().toISOString() : null,
+    chargeSummary: isNotice
+      ? `Freight changed to ₹${freight.toLocaleString("en-IN")} · Margin updated · No approval required`
+      : `Freight ₹${freight.toLocaleString("en-IN")} · Finance ${finance}%`,
   };
 }
 

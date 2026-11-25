@@ -39,53 +39,15 @@ import {
   buildOrderExportRows,
   exportOrdersXlsx,
 } from "@/utils/orders-excel-export";
-import {
-  formatGrnStatusBadgeLabel,
-  grnBadgeVariant,
-  grnStatusMatchesSearch,
-} from "@/utils/grn-status-display";
+import { grnStatusMatchesSearch } from "@/utils/grn-status-display";
 import { textTokenMatch } from "@/utils/procurement-search";
 import { deriveGrnStatus, filterOrdersByPoBucket, parsePoOverviewBucket, countPoBuckets, poOverviewBucketForOrder } from "@/utils/procurement-po-buckets";
+import {
+  poLifecycleBadgeClass,
+  resolvePoLifecycleStatus,
+} from "@/utils/procurement-po-lifecycle-status";
 
 type StatusFilter = "all" | "draft" | "open" | "partial" | "closed" | "cancelled";
-
-/** List Status column: approval state only (not GRN / receipt lifecycle). */
-function formatPoApprovalStatusLabel(
-  status: string | null | undefined,
-  stage?: string | null,
-): string {
-  const raw = (status || "").trim().toLowerCase();
-  if (!raw) return "-";
-  if (raw === "cancelled" || raw === "canceled") return "Cancelled";
-  if (raw === "draft") return "Draft";
-  if (raw === "submitted") {
-    if ((stage || "").trim().toLowerCase() === "management") {
-      return "Management approval left";
-    }
-    return "Admin approval left";
-  }
-  return "Approved";
-}
-
-function poApprovalStatusBadgeClass(
-  status: string | null | undefined,
-  stage?: string | null,
-): string {
-  const label = formatPoApprovalStatusLabel(status, stage);
-  if (label === "Admin approval left" || label === "Management approval left") {
-    return "border-amber-200 bg-amber-50 text-amber-900";
-  }
-  if (label === "Draft") {
-    return "border-slate-200 bg-slate-50 text-slate-700";
-  }
-  if (label === "Approved") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-900";
-  }
-  if (label === "Cancelled") {
-    return "border-red-200 bg-red-50 text-red-800";
-  }
-  return "";
-}
 
 function parseStatusFilter(value: string | null): StatusFilter {
   const allowed: StatusFilter[] = [
@@ -163,7 +125,13 @@ function orderMatchesQuery(
       textTokenMatch(vendor, token) ||
       textTokenMatch(row.status, token) ||
       textTokenMatch(
-        formatPoApprovalStatusLabel(row.status, row.scm_approval_stage),
+        resolvePoLifecycleStatus({
+          status: row.status,
+          scm_approval_stage: row.scm_approval_stage,
+          fulfillment_stage: row.fulfillment_stage,
+          vendor_response_status: row.vendor_response_status,
+          po_sent_to_vendor_at: row.po_sent_to_vendor_at,
+        }),
         token,
       ) ||
       grnStatusMatchesSearch(row.grn_status ?? "pending", token) ||
@@ -477,37 +445,36 @@ export function OrdersListPage() {
           />
         </div>
         <div className={procurementUi.tableScroll}>
-          <table className={cn(procurementUi.table, "min-w-[1200px] leading-normal")}>
+          <table className={cn(procurementUi.table, "min-w-[980px] leading-normal")}>
             <thead className={procurementUi.thead}>
               <tr>
                 <th className="px-3 py-3.5 font-bold">S.No</th>
                 <th className="px-3 py-3.5 font-bold">Company PO number</th>
-                <th className="px-3 py-3.5 font-bold">Kind</th>
+                <th className="px-3 py-3.5 font-bold">OVF number</th>
                 <th className="px-3 py-3.5 font-bold">PO date</th>
                 <th className="px-3 py-3.5 font-bold">Vendor</th>
                 <th className="px-3 py-3.5 font-bold">Status</th>
                 <th className="px-3 py-3.5 font-bold">Amount</th>
-                <th className="px-3 py-3.5 font-bold">GRN</th>
-                <th className="px-3 py-3.5 font-bold">DC / Billing</th>
               </tr>
             </thead>
             <tbody>
               {loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
                     Loading purchase orders…
                   </td>
                 </tr>
               ) : null}
               {!loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
                     No purchase orders match this filter.
                   </td>
                 </tr>
               ) : null}
               {filtered.map((row, index) => {
                 const orderHref = `/procurement/orders/${row.id}`;
+                const poLabel = row.company_po_number || row.document_number || "-";
                 return (
                   <tr
                     key={row.id}
@@ -519,20 +486,12 @@ export function OrdersListPage() {
                   >
                     <td className="px-3 py-3.5 tabular-nums text-muted-foreground">{index + 1}</td>
                     <td className="px-3 py-3.5 font-medium tabular-nums">
-                      {row.company_po_number || row.document_number || "-"}
+                      <span className="text-sky-800 underline decoration-sky-700/70 underline-offset-2">
+                        {poLabel}
+                      </span>
                     </td>
-                    <td className="px-3 py-3.5">
-                      {row.order_kind === "internal_service" ? (
-                        <Badge variant="outline" className="font-medium">
-                          Internal Service
-                        </Badge>
-                      ) : row.order_kind === "vendor_service" ? (
-                        <Badge variant="outline" className="font-medium">
-                          Vendor Service
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground">Product</span>
-                      )}
+                    <td className="px-3 py-3.5 font-medium tabular-nums text-muted-foreground">
+                      {row.ovf_no?.trim() || "-"}
                     </td>
                     <td className={cn(procurementUi.tdNumeric, "py-3.5 text-muted-foreground")}>
                       {row.document_date || "-"}
@@ -541,34 +500,26 @@ export function OrdersListPage() {
                       {vendors[row.vendor_id]?.label || row.vendor_id.slice(0, 8)}
                     </td>
                     <td className="px-3 py-3.5">
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "font-medium",
-                          poApprovalStatusBadgeClass(row.status, row.scm_approval_stage),
-                        )}
-                      >
-                        {formatPoApprovalStatusLabel(row.status, row.scm_approval_stage)}
-                      </Badge>
+                      {(() => {
+                        const lifecycle = resolvePoLifecycleStatus({
+                          status: row.status,
+                          scm_approval_stage: row.scm_approval_stage,
+                          fulfillment_stage: row.fulfillment_stage,
+                          vendor_response_status: row.vendor_response_status,
+                          po_sent_to_vendor_at: row.po_sent_to_vendor_at,
+                        });
+                        return (
+                          <Badge
+                            variant="outline"
+                            className={cn("font-medium", poLifecycleBadgeClass(lifecycle))}
+                            title={lifecycle}
+                          >
+                            {lifecycle}
+                          </Badge>
+                        );
+                      })()}
                     </td>
                     <td className="px-3 py-3.5 tabular-nums">{formatInr(row.total_amount)}</td>
-                    <td className="px-3 py-3.5">
-                      <Badge variant={grnBadgeVariant(row.grn_status ?? "pending")} className="uppercase">
-                        {formatGrnStatusBadgeLabel(row.grn_status ?? "pending")}
-                      </Badge>
-                    </td>
-                    <td className="px-3 py-3.5">
-                      {(dcBillingLeft.get(row.id) ?? 0) > 0 ? (
-                        <Badge
-                          variant="outline"
-                          className="border-amber-200 bg-amber-50 font-medium text-amber-900"
-                        >
-                          Left · {formatLeftQty(dcBillingLeft.get(row.id) ?? 0)}
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </td>
                   </tr>
                 );
               })}

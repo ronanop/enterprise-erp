@@ -119,10 +119,16 @@ class OrderService:
                 ovf_id = row.source_document_id
                 ovf = meta.get(ovf_id) or {}
                 updates: dict[str, object] = {
-                    "customer_name": ovf.get("customer_name"),
-                    "customer_po_number": ovf.get("po_number"),
-                    "customer_payment_days": int(ovf.get("customer_payment_days") or 0),
-                    "ovf_no": ovf.get("ovf_no"),
+                    "customer_name": ovf.get("customer_name")
+                    or getattr(row, "customer_name", None),
+                    "customer_po_number": ovf.get("po_number")
+                    or getattr(row, "customer_po_number", None),
+                    "customer_payment_days": int(
+                        ovf.get("customer_payment_days")
+                        or getattr(row, "customer_payment_days", 0)
+                        or 0
+                    ),
+                    "ovf_no": ovf.get("ovf_no") or getattr(row, "ovf_no", None),
                 }
                 po_date = ovf.get("po_date")
                 if po_date is not None:

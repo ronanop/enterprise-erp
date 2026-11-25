@@ -53,12 +53,15 @@ function formatWhen(iso: string): string {
 function statusTone(status: PoApprovalRequest["status"]): string {
   if (status === "accepted") return "border-emerald-200/80 bg-emerald-50 text-emerald-800";
   if (status === "rejected") return "border-red-200/80 bg-red-50 text-red-800";
+  if (status === "notified") return "border-sky-200/80 bg-sky-50 text-sky-900";
   return "border-amber-200/80 bg-amber-50 text-amber-900";
 }
 
 function approvalKindLabel(row: PoApprovalRequest): string {
   if (row.kind === "hold_ovf") return "OVF hold";
-  if (row.kind === "freight_finance") return "Freight & finance";
+  if (row.kind === "freight_finance") {
+    return row.status === "notified" ? "Freight change notice" : "Freight & finance";
+  }
   if (row.kind === "create_po_in_stock") return "Create PO (IN STOCK)";
   if (row.stageLabel) return row.stageLabel;
   if (row.scmApprovalStage === "management") return "Management PO approval";
@@ -105,6 +108,11 @@ function approvalPrimaryLabel(row: PoApprovalRequest): string {
     return row.ovfNo || row.documentNumber || "OVF";
   }
   return row.companyPoNumber || row.documentNumber;
+}
+
+function approvalIsWithoutOvf(row: PoApprovalRequest): boolean {
+  if (row.kind === "create_po_in_stock" || row.kind === "hold_ovf") return false;
+  return !(row.ovfNo || "").trim() && !(row.ovfId || "").trim();
 }
 
 async function openApprovalDocument(doc: PoApprovalDocument): Promise<void> {
@@ -256,7 +264,9 @@ export function ProcurementApprovalsPage() {
   const [downloadingPoId, setDownloadingPoId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [filter, setFilter] = useState<"all" | "pending" | "accepted" | "rejected">("all");
+  const [filter, setFilter] = useState<"all" | "pending" | "accepted" | "rejected" | "notified">(
+    "all",
+  );
   const [enriching, setEnriching] = useState(false);
 
   const hydrateLabels = useCallback(async () => {
@@ -443,6 +453,7 @@ export function ProcurementApprovalsPage() {
           [
             { key: "all", label: "All" },
             { key: "pending", label: "Pending" },
+            { key: "notified", label: "Notices" },
             { key: "accepted", label: "Accepted" },
             { key: "rejected", label: "Rejected" },
           ] as const
@@ -508,6 +519,11 @@ export function ProcurementApprovalsPage() {
                       >
                         {approvalPrimaryLabel(row)}
                       </Link>
+                      {approvalIsWithoutOvf(row) ? (
+                        <p className="mt-0.5 text-[11px] font-medium uppercase tracking-wide text-amber-800">
+                          Without OVF
+                        </p>
+                      ) : null}
                       {row.kind === "hold_ovf" && row.holdRemark ? (
                         <p className="text-[11px] text-muted-foreground">Remark: {row.holdRemark}</p>
                       ) : null}
