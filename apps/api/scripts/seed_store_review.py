@@ -425,6 +425,10 @@ def upsert_person(
         emp.is_manager = is_manager
         emp.updated_by = admin_id
 
+    # Keep both sides of the link — ESS resolve_employee uses master_employee.user_id;
+    # auth/session surfaces often use sec_user.employee_id.
+    user.employee_id = emp.id
+
     profile = db.scalar(
         select(HrEmployeeProfile).where(
             HrEmployeeProfile.employee_id == emp.id,

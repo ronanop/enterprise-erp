@@ -230,6 +230,8 @@ class EssService:
         manager_name: str | None = None
         manager_id = getattr(emp, "reporting_manager_id", None)
         if manager_id:
+            from modules.master_data.models.employee import MasterEmployee
+
             manager = self._db.get(MasterEmployee, manager_id)
             if manager and not getattr(manager, "is_deleted", False):
                 manager_name = f"{manager.first_name} {manager.last_name}".strip()
