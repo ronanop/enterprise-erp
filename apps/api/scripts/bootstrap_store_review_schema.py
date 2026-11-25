@@ -24,35 +24,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from alembic import command  # noqa: E402
-from alembic.config import Config  # noqa: E402
 from sqlalchemy import create_engine, text  # noqa: E402
 
 from core.config import settings  # noqa: E402
-from database.base import Base  # noqa: E402
-
-# Register the same ORM surface Alembic env.py uses (+ a few modules env omits).
-import modules.foundation.models  # noqa: E402, F401
-import modules.platform.models  # noqa: E402, F401
-import modules.finance.models  # noqa: E402, F401
-import modules.master_data.models  # noqa: E402, F401
-import modules.organization.models  # noqa: E402, F401
-import modules.procurement.models  # noqa: E402, F401
-import modules.inventory.models  # noqa: E402, F401
-import modules.manufacturing.models  # noqa: E402, F401
-import modules.quality.models  # noqa: E402, F401
-import modules.crm.models  # noqa: E402, F401
-import modules.hr.models  # noqa: E402, F401
-import modules.payroll.models  # noqa: E402, F401
-import modules.recruitment.models  # noqa: E402, F401
-import modules.project.models  # noqa: E402, F401
-import modules.asset.models  # noqa: E402, F401
-import modules.service.models  # noqa: E402, F401
-import modules.helpdesk.models  # noqa: E402, F401
-import modules.document.models  # noqa: E402, F401
-import modules.marketing.models  # noqa: E402, F401
-import modules.analytics.models  # noqa: E402, F401
-import modules.ecommerce.models  # noqa: E402, F401
 
 APP_SCHEMAS = (
     "analytics",
@@ -93,30 +67,48 @@ def _require_store_review_mode() -> None:
         )
 
 
-def _alembic_config() -> Config:
-    cfg = Config(str(ROOT / "alembic.ini"))
-    cfg.set_main_option("script_location", str(ROOT / "alembic"))
-    cfg.set_main_option("sqlalchemy.url", str(settings.database_url))
-    return cfg
-
-
 def _already_bootstrapped(engine) -> bool:
+    """Cheap check — no ORM imports — so restart does not re-OOM on 512Mi."""
     with engine.connect() as conn:
-        tenant = conn.execute(
+        ready = conn.execute(
             text(
-                "SELECT to_regclass('foundation.sec_tenant') IS NOT NULL "
-                "AND to_regclass('hr.hr_ess_story') IS NOT NULL"
+                """
+                SELECT
+                  to_regclass('foundation.sec_tenant') IS NOT NULL
+                  AND to_regclass('hr.hr_ess_story') IS NOT NULL
+                  AND to_regclass('public.alembic_version') IS NOT NULL
+                """
             )
         ).scalar()
-        if not tenant:
+        if not ready:
             return False
-        has_version = conn.execute(
-            text("SELECT to_regclass('public.alembic_version') IS NOT NULL")
-        ).scalar()
-        if not has_version:
-            return False
-        row = conn.execute(text("SELECT version_num FROM alembic_version")).fetchone()
+        row = conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1")).fetchone()
         return bool(row and row[0])
+
+
+def _import_models() -> None:
+    # Deferred until we know create_all is required (heavy on memory).
+    import modules.foundation.models  # noqa: F401
+    import modules.platform.models  # noqa: F401
+    import modules.finance.models  # noqa: F401
+    import modules.master_data.models  # noqa: F401
+    import modules.organization.models  # noqa: F401
+    import modules.procurement.models  # noqa: F401
+    import modules.inventory.models  # noqa: F401
+    import modules.manufacturing.models  # noqa: F401
+    import modules.quality.models  # noqa: F401
+    import modules.crm.models  # noqa: F401
+    import modules.hr.models  # noqa: F401
+    import modules.payroll.models  # noqa: F401
+    import modules.recruitment.models  # noqa: F401
+    import modules.project.models  # noqa: F401
+    import modules.asset.models  # noqa: F401
+    import modules.service.models  # noqa: F401
+    import modules.helpdesk.models  # noqa: F401
+    import modules.document.models  # noqa: F401
+    import modules.marketing.models  # noqa: F401
+    import modules.analytics.models  # noqa: F401
+    import modules.ecommerce.models  # noqa: F401
 
 
 def main() -> None:
@@ -124,11 +116,17 @@ def main() -> None:
     url = str(settings.database_url)
     engine = create_engine(url, pool_pre_ping=True)
 
-    if _already_bootstrapped(engine) and os.environ.get("FORCE_STORE_REVIEW_SCHEMA") != "true":
-        print("Store-review schema already present — skipping bootstrap.")
+    force = os.environ.get("FORCE_STORE_REVIEW_SCHEMA", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if _already_bootstrapped(engine) and not force:
+        print("Store-review schema already present — skipping bootstrap.", flush=True)
         return
 
-    print("Bootstrapping store-review schema (drop → create_all → stamp head)…")
+    print("Bootstrapping store-review schema (drop → create_all → stamp head)…", flush=True)
     with engine.begin() as conn:
         conn.execute(text("DROP TABLE IF EXISTS public.alembic_version"))
         for schema in APP_SCHEMAS:
@@ -136,9 +134,18 @@ def main() -> None:
         for schema in APP_SCHEMAS:
             conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema}"))
 
+    _import_models()
+    from alembic import command
+    from alembic.config import Config
+    from database.base import Base
+
     Base.metadata.create_all(bind=engine)
-    command.stamp(_alembic_config(), "head")
-    print("Store-review schema bootstrap complete.")
+
+    cfg = Config(str(ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(ROOT / "alembic"))
+    cfg.set_main_option("sqlalchemy.url", url)
+    command.stamp(cfg, "head")
+    print("Store-review schema bootstrap complete.", flush=True)
 
 
 if __name__ == "__main__":

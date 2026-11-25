@@ -50,6 +50,11 @@ services:
         sync: false
       - key: CELERY_BROKER_URL
         value: "memory://"
+      # Trim allocator arenas on 512Mi starter instances.
+      - key: MALLOC_ARENA_MAX
+        value: "2"
+      - key: PYTHONUNBUFFERED
+        value: "1"
 
 # Optional: ping every 5 min so Neon compute + Render stay warm during review week.
 # Create in Render Dashboard → Cron Jobs (Starter) hitting /api/v1/health.

@@ -14,17 +14,28 @@ from middleware.input_validation import InputValidationMiddleware
 from middleware.hr_api_alias import HrToHrmsAliasMiddleware
 from middleware.request_context import RequestContextMiddleware
 from middleware.security_headers import SecurityHeadersMiddleware
-from modules.mcp_server.bootstrap import mcp_lifespan, mount_mcp_on_app
 from shared.router import api_v1_router
+
+if not settings.ess_store_review_mode:
+    from modules.mcp_server.bootstrap import mcp_lifespan, mount_mcp_on_app
+else:
+    mcp_lifespan = None  # type: ignore[assignment]
+    mount_mcp_on_app = None  # type: ignore[assignment]
 
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     setup_logging()
     from core.infra_health import log_infrastructure_connections
-    from modules.asset.storage import validate_asset_storage_on_startup
 
     log_infrastructure_connections()
+    if settings.ess_store_review_mode:
+        # Skip asset/MCP startup work — keeps 512Mi Render staging alive.
+        yield
+        return
+
+    from modules.asset.storage import validate_asset_storage_on_startup
+
     validate_asset_storage_on_startup()
     async with mcp_lifespan(application):
         yield
@@ -67,7 +78,8 @@ def create_app() -> FastAPI:
 
     register_exception_handlers(application)
     application.include_router(api_v1_router, prefix=API_V1_PREFIX)
-    mount_mcp_on_app(application)
+    if not settings.ess_store_review_mode:
+        mount_mcp_on_app(application)
 
     return application
 
