@@ -73,52 +73,64 @@ function StoryRing({
   onPress: () => void;
   onAdd?: () => void;
 }) {
-  const ring = (
+  // Keep ring + add-badge as siblings (not nested Pressables) so RN-web
+  // does not emit <button> inside <button>.
+  const ringFace = (
     <View style={styles.avatarWrap}>
       <Avatar name={authorName} size="md" />
-      {isMe ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Add story"
-          onPress={onAdd ?? onPress}
-          style={styles.addBadge}
-          hitSlop={6}
-        >
-          <IconPlus size={12} color="#fff" />
-        </Pressable>
-      ) : null}
     </View>
   );
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${name} story`}
-      onPress={onPress}
-      style={({ pressed }) => [styles.item, pressed && styles.pressed]}
-    >
-      {hasStory ? (
-        <LinearGradient
-          colors={
-            hasUnseen
-              ? ["#f09433", "#e6683c", "#dc2743", "#cc2366", "#bc1888"]
-              : ["#c3c6d7", "#c3c6d7"]
-          }
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.ring}
+    <View style={styles.item}>
+      <View style={styles.ringHit}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${name} story`}
+          onPress={onPress}
+          style={({ pressed }) => [pressed && styles.pressed]}
         >
-          <View style={styles.ringInner}>{ring}</View>
-        </LinearGradient>
-      ) : (
-        <View style={[styles.ring, styles.ringEmpty]}>
-          <View style={styles.ringInner}>{ring}</View>
-        </View>
-      )}
-      <Text style={styles.label} numberOfLines={1}>
-        {name}
-      </Text>
-    </Pressable>
+          {hasStory ? (
+            <LinearGradient
+              colors={
+                hasUnseen
+                  ? ["#f09433", "#e6683c", "#dc2743", "#cc2366", "#bc1888"]
+                  : ["#c3c6d7", "#c3c6d7"]
+              }
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.ring}
+            >
+              <View style={styles.ringInner}>{ringFace}</View>
+            </LinearGradient>
+          ) : (
+            <View style={[styles.ring, styles.ringEmpty]}>
+              <View style={styles.ringInner}>{ringFace}</View>
+            </View>
+          )}
+        </Pressable>
+        {isMe ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Add story"
+            onPress={onAdd ?? onPress}
+            style={styles.addBadge}
+            hitSlop={6}
+          >
+            <IconPlus size={12} color="#fff" />
+          </Pressable>
+        ) : null}
+      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${name} story`}
+        onPress={onPress}
+      >
+        <Text style={styles.label} numberOfLines={1}>
+          {name}
+        </Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -142,6 +154,11 @@ const styles = StyleSheet.create({
     width: 76,
     alignItems: "center",
     gap: 6,
+  },
+  ringHit: {
+    width: RING,
+    height: RING,
+    position: "relative",
   },
   pressed: { opacity: 0.75 },
   ring: {
