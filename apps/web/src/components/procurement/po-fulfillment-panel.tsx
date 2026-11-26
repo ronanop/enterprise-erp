@@ -53,7 +53,10 @@ import {
   type ScmReceiptBatch,
   type ScmVendorDispatch,
 } from "@/services/procurement-service";
-import { addPendingGrnChallan } from "@/utils/grn-challan-pending";
+import {
+  addPendingGrnChallan,
+  upsertBillingQueueForOrder,
+} from "@/utils/grn-challan-pending";
 import { downloadBatchGrnPdf } from "@/utils/grn-batch-pdf-download";
 import {
   buildGrnPoInventoryShipLines,
@@ -457,7 +460,7 @@ export function PoFulfillmentPanel({ order, isAdmin, onSaved }: Props) {
         ),
       ];
       const batchKey = poGrnStockSourceKey(order.id, crypto.randomUUID());
-      addPendingGrnChallan({
+      const pendingPayload = {
         orderId: order.id,
         batchKey,
         grnNumber: grnNumbers.join(", ") || "-",
@@ -467,8 +470,13 @@ export function PoFulfillmentPanel({ order, isAdmin, onSaved }: Props) {
         customerName: (order.customer_name || "").trim(),
         itemsSummary: itemsSummary || "-",
         kind: shipKind,
-        source: "po_grn_stock",
-      });
+        source: "po_grn_stock" as const,
+      };
+      if (shipKind === "billing") {
+        upsertBillingQueueForOrder(pendingPayload);
+      } else {
+        addPendingGrnChallan(pendingPayload);
+      }
 
       const shipSelection = {
         order_id: order.id,

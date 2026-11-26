@@ -42,13 +42,13 @@ import {
   type GrnChallanKind,
 } from "@/utils/delivery-challan-storage";
 import {
-  addPendingGrnChallan,
   listAllGrnChallansByKind,
   listDeliveryChallanQueueByKind,
   patchPendingGrnChallan,
   pendingGrnChallanHref,
   rememberBillingReceiptBatch,
   invoiceAlreadyCreatedForChallan,
+  upsertBillingQueueForOrder,
   upsertPendingGrnChallan,
   type PendingGrnChallan,
 } from "@/utils/grn-challan-pending";
@@ -191,7 +191,7 @@ function syncBillingQueueFromInvoiceTasks(tasks: ProcInvoiceGenerationTask[]): v
     const invoiceNumber = (task.invoice_number || "").trim();
     const invoiceDate = (task.invoice_date || "").trim().slice(0, 10);
     const completed = String(task.status || "").toLowerCase() === "completed";
-    upsertPendingGrnChallan({
+    upsertBillingQueueForOrder({
       orderId,
       batchKey: batchId,
       grnNumber: (task.grn_number || "").trim() || "-",
@@ -220,7 +220,7 @@ function syncBillingQueueFromInvoiceTasks(tasks: ProcInvoiceGenerationTask[]): v
   }
 }
 
-/** One billing row per invoice (or per receipt batch / queue id when still pending). */
+/** One billing row per invoice; pending (no invoice yet) → one per PO/order. */
 function collapseBillingQueueRows(
   rows: PendingGrnChallan[],
   readiness: BillingInvoiceReadyMap,
@@ -230,21 +230,18 @@ function collapseBillingQueueRows(
     const meta = readiness[row.id];
     const invoice = (meta?.invoiceNumber || row.docNumber || "").trim();
     const date = (meta?.invoiceDate || row.docDate || row.createdAt || "").trim();
-    return `${date}\0${row.createdAt}\0${invoice}`;
+    const uuidBatch = looksLikeUuid(row.batchKey || "") ? "1" : "0";
+    return `${date}\0${uuidBatch}\0${row.createdAt}\0${invoice}`;
   };
   for (const row of rows) {
     const meta = readiness[row.id];
     const invoice = (meta?.invoiceNumber || row.docNumber || "").trim().toLowerCase();
-    const po = (row.purchaseOrderNumber || row.orderId || "").trim().toLowerCase();
-    const batch = looksLikeUuid(row.batchKey || "")
-      ? (row.batchKey || "").trim().toLowerCase()
-      : "";
+    const order = (row.orderId || "").trim().toLowerCase();
+    const po = (row.purchaseOrderNumber || "").trim().toLowerCase();
     const key =
       invoice && invoice !== "-"
-        ? `inv:${po}:${invoice}`
-        : batch
-          ? `batch:${batch}`
-          : `id:${row.savedRecordId || row.id}`;
+        ? `inv:${order || po}:${invoice}`
+        : `pending:${order || po || row.savedRecordId || row.id}`;
     const existing = groups.get(key);
     if (!existing || rank(row) > rank(existing)) {
       groups.set(key, row);
@@ -737,26 +734,8 @@ export function DeliveryChallanListPage() {
     setInvoiceBusyId(challan.id);
     setPdfError(null);
     try {
-      const batchKey = dcInvoiceBatchKey(challan.id);
-      const already = invoiceAlreadyCreatedForChallan(challan);
-      if (!already) {
-        addPendingGrnChallan({
-          orderId: challan.orderId || challan.id,
-          batchKey,
-          grnNumber: challan.selectedGrnNumbers.join(", ") || "-",
-          purchaseOrderNumber: challan.purchaseOrderNumber,
-          vendorName: challan.vendorName,
-          customerName: challan.customerName,
-          itemsSummary: formatChallanItemsSummary(challan.lines),
-          kind: "billing",
-          sourceChallanId: challan.id,
-          source: challan.selectedGrnKeys[0]?.startsWith("ovf-stock:")
-            ? "ovf_stock"
-            : "grn",
-        });
-      }
       const receiptBatchId = await resolveReceiptBatchId({
-        id: batchKey,
+        id: dcInvoiceBatchKey(challan.id),
         orderId: challan.orderId || challan.id,
         batchKey: challan.selectedGrnKeys.find((key) => looksLikeUuid(key)) || "",
         grnNumber: "",
@@ -785,11 +764,26 @@ export function DeliveryChallanListPage() {
         billing_quantity: totals.quantity > 0 ? totals.quantity : undefined,
         billing_amount: totals.amount > 0 ? totals.amount : undefined,
       });
+      // Reuse the GRN billing row for this PO — do not insert a dc-invoice twin.
+      upsertBillingQueueForOrder({
+        orderId: challan.orderId,
+        batchKey: receiptBatchId,
+        grnNumber: challan.selectedGrnNumbers.join(", ") || "-",
+        purchaseOrderNumber: challan.purchaseOrderNumber,
+        vendorName: challan.vendorName,
+        customerName: challan.customerName,
+        itemsSummary: formatChallanItemsSummary(challan.lines),
+        kind: "billing",
+        sourceChallanId: challan.id,
+        source: challan.selectedGrnKeys[0]?.startsWith("ovf-stock:")
+          ? "ovf_stock"
+          : "grn",
+      });
       rememberBillingReceiptBatch(
         {
-          id: batchKey,
+          id: receiptBatchId,
           orderId: challan.orderId,
-          batchKey,
+          batchKey: receiptBatchId,
           kind: "billing",
         },
         receiptBatchId,
@@ -844,7 +838,10 @@ export function DeliveryChallanListPage() {
     return b.createdAt.localeCompare(a.createdAt);
   });
   const pendingDcCount = pendingDc.filter((r) => !r.status || r.status === "pending").length;
-  const pendingBillingCount = pendingBilling.filter((r) => !r.status || r.status === "pending").length;
+  const pendingBillingCount = collapseBillingQueueRows(
+    pendingBilling,
+    billingInvoiceReady,
+  ).filter((r) => !r.status || r.status === "pending").length;
 
   return (
     <div className={procurementUi.page}>

@@ -28,10 +28,10 @@ import {
   type DeliveryChallanRecord,
 } from "@/utils/delivery-challan-storage";
 import {
-  addPendingGrnChallan,
   invoiceAlreadyCreatedForChallan,
   invoiceNumberForDeliveryChallan,
   rememberBillingReceiptBatch,
+  upsertBillingQueueForOrder,
   upsertPendingGrnChallan,
 } from "@/utils/grn-challan-pending";
 import {
@@ -386,26 +386,23 @@ export function DeliveryStatusListPage() {
         billing_quantity: totals.quantity > 0 ? totals.quantity : undefined,
         billing_amount: totals.amount > 0 ? totals.amount : undefined,
       });
-      const batchKey = `dc-invoice:${challan.id}`;
-      if (!invoiceAlreadyCreatedForChallan(challan)) {
-        addPendingGrnChallan({
-          orderId: challan.orderId,
-          batchKey,
-          grnNumber: challan.selectedGrnNumbers.join(", ") || "-",
-          purchaseOrderNumber: challan.purchaseOrderNumber,
-          vendorName: challan.vendorName,
-          customerName: challan.customerName,
-          itemsSummary,
-          kind: "billing",
-          sourceChallanId: challan.id,
-          source: "grn",
-        });
-      }
+      upsertBillingQueueForOrder({
+        orderId: challan.orderId,
+        batchKey: batchId,
+        grnNumber: challan.selectedGrnNumbers.join(", ") || "-",
+        purchaseOrderNumber: challan.purchaseOrderNumber,
+        vendorName: challan.vendorName,
+        customerName: challan.customerName,
+        itemsSummary,
+        kind: "billing",
+        sourceChallanId: challan.id,
+        source: "grn",
+      });
       rememberBillingReceiptBatch(
         {
-          id: batchKey,
+          id: batchId,
           orderId: challan.orderId,
-          batchKey,
+          batchKey: batchId,
           kind: "billing",
         },
         batchId,

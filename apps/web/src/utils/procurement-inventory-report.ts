@@ -47,6 +47,139 @@ export type GrnStockByProductRow = {
   lines: ProcurementInventoryRow[];
 };
 
+/** Stock ledger row for Inventory list (invoice / commercial columns). */
+export type InventoryStockLedgerRow = {
+  rowKey: string;
+  productKey: string;
+  productName: string;
+  invoiceDate: string | null;
+  invoiceNumber: string;
+  vendorName: string;
+  paymentTerms: string;
+  itemDescription: string;
+  stockQty: number;
+  unitRate: number;
+  taxRate: number;
+  totalWithTax: number;
+  ageingDays: number | null;
+  warrantyExpired: boolean;
+  lines: ProcurementInventoryRow[];
+};
+
+export function inventoryTotalWithTax(qty: number, unitRate: number, taxRate: number): number {
+  const base = qty * unitRate;
+  const rate = Number.isFinite(taxRate) && taxRate > 0 ? taxRate : 0;
+  return Math.round(base * (1 + rate / 100) * 100) / 100;
+}
+
+function pickMostCommon(values: string[]): string {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    const key = value.trim();
+    if (!key) continue;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  let best = "";
+  let bestCount = 0;
+  for (const [value, count] of counts) {
+    if (count > bestCount) {
+      best = value;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+/** One row per product + vendor invoice (falls back to product + vendor + GRN). */
+export function groupInventoryStockLedgerRows(
+  rows: ProcurementInventoryRow[],
+  vendorLabels: Record<string, string> = {},
+): InventoryStockLedgerRow[] {
+  const map = new Map<string, ProcurementInventoryRow[]>();
+  for (const row of rows) {
+    const productKey = inventoryProductKey(row.product_name);
+    if (!productKey) continue;
+    const invoice = (row.vendor_invoice_number || "").trim().toLowerCase() || "-";
+    const vendor =
+      (row.vendor_id || "").trim().toLowerCase() ||
+      (row.vendor_name || "").trim().toLowerCase() ||
+      "-";
+    const grn = (row.grn_number || "").trim().toLowerCase() || "-";
+    const key =
+      invoice !== "-"
+        ? `${productKey}\0${vendor}\0inv:${invoice}`
+        : `${productKey}\0${vendor}\0grn:${grn}`;
+    const list = map.get(key) ?? [];
+    list.push(row);
+    map.set(key, list);
+  }
+
+  return Array.from(map.entries())
+    .map(([rowKey, lines]) => {
+      const stockQty = lines.reduce((sum, row) => sum + nonBilledStockQuantity(row), 0);
+      const stockValue = lines.reduce(
+        (sum, row) => sum + unitCostOf(row) * nonBilledStockQuantity(row),
+        0,
+      );
+      const roundedQty = Math.round(stockQty * 1e6) / 1e6;
+      const unitRate = roundedQty > 0 ? stockValue / roundedQty : 0;
+      const taxRates = lines
+        .map((row) => Number(row.tax_rate))
+        .filter((n) => Number.isFinite(n) && n >= 0);
+      const taxRate = taxRates.length > 0 ? taxRates[0]! : 0;
+      const descriptions = lines
+        .map((row) => (row.description || row.product_name || "").trim())
+        .filter(Boolean);
+      const invoiceDates = lines
+        .map((row) => (row.vendor_invoice_date || "").trim().slice(0, 10))
+        .filter(Boolean)
+        .sort();
+      const ageingValues = lines
+        .map((row) => row.ageing_days)
+        .filter((n): n is number => typeof n === "number" && Number.isFinite(n));
+      const vendorFromApi = pickMostCommon(
+        lines.map((row) => (row.vendor_name || "").trim()).filter(Boolean),
+      );
+      const vendorId = lines.map((row) => row.vendor_id).find(Boolean) || null;
+      const vendorName =
+        vendorFromApi ||
+        (vendorId ? vendorLabels[vendorId] : "") ||
+        "-";
+      const warranty = resolveProductWarranty(lines);
+      return {
+        rowKey,
+        productKey: inventoryProductKey(lines[0]?.product_name),
+        productName: productLabel(lines[0]!),
+        invoiceDate: invoiceDates[0] || null,
+        invoiceNumber:
+          pickMostCommon(
+            lines.map((row) => (row.vendor_invoice_number || "").trim()).filter(Boolean),
+          ) || "-",
+        vendorName,
+        paymentTerms:
+          pickMostCommon(
+            lines.map((row) => (row.payment_terms || "").trim()).filter(Boolean),
+          ) || "-",
+        itemDescription: pickMostCommon(descriptions) || productLabel(lines[0]!),
+        stockQty: roundedQty,
+        unitRate,
+        taxRate,
+        totalWithTax: inventoryTotalWithTax(roundedQty, unitRate, taxRate),
+        ageingDays: ageingValues.length > 0 ? Math.max(...ageingValues) : null,
+        warrantyExpired: warranty.warrantyExpired,
+        lines,
+      };
+    })
+    .filter((row) => Math.abs(row.stockQty) > 1e-9)
+    .sort((a, b) => {
+      const byDate = (b.invoiceDate || "").localeCompare(a.invoiceDate || "");
+      if (byDate !== 0) return byDate;
+      return a.itemDescription.localeCompare(b.itemDescription, undefined, {
+        sensitivity: "base",
+      });
+    });
+}
+
 export function inventoryRowAddedBy(row: ProcurementInventoryRow): "po" | "manual" {
   return row.source === "import" ? "manual" : "po";
 }
@@ -130,7 +263,11 @@ export function isInventoryWarrantyExpired(value: string | null | undefined, tod
 export function formatInventoryDateAdded(value: string | null | undefined): string {
   const text = (value ?? "").trim();
   if (!text) return "-";
-  const date = new Date(text);
+  // Date-only (YYYY-MM-DD) — parse as local calendar day to avoid UTC shift.
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text.slice(0, 10));
+  const date = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+    : new Date(text);
   if (Number.isNaN(date.getTime())) return text.slice(0, 10);
   return new Intl.DateTimeFormat(undefined, {
     day: "2-digit",

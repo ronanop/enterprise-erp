@@ -1552,6 +1552,10 @@ class ScmProcurementInventoryRowResponse(BaseModel):
     receipt_at: datetime | None = None
     company_po_number: str
     vendor_id: UUID | None = None
+    vendor_name: str | None = None
+    payment_terms: str | None = None
+    vendor_invoice_number: str | None = None
+    vendor_invoice_date: date | None = None
     product_name: str | None = None
     line_number: int = 0
     unit_index: int
@@ -1560,6 +1564,7 @@ class ScmProcurementInventoryRowResponse(BaseModel):
     received_quantity: float = 0
     billing_quantity: float = 0
     unit_cost: float = 0
+    tax_rate: float = 0
     description: str | None = None
     stock_unit_id: UUID | None = None
     import_line_id: UUID | None = None
@@ -1567,6 +1572,7 @@ class ScmProcurementInventoryRowResponse(BaseModel):
     owner_employee_id: UUID | None = None
     source_ovf_id: UUID | None = None
     open_for_sale: bool = False
+    ageing_days: int | None = None
 
 
 class ScmInventoryImportLineRequest(BaseModel):

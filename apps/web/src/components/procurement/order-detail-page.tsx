@@ -72,7 +72,10 @@ import {
   shipmentStatusBadgeVariant,
 } from "@/utils/delivery-status-storage";
 import { receiptBatchKey } from "@/utils/delivery-challan-grn";
-import { addPendingGrnChallan } from "@/utils/grn-challan-pending";
+import {
+  addPendingGrnChallan,
+  upsertBillingQueueForOrder,
+} from "@/utils/grn-challan-pending";
 import { parseVendorQuoteNo } from "@/components/crm/sales/ovf-order-lines-section";
 import { splitPoProductFields } from "@/utils/po-fulfillment-metrics";
 import { ovfProductKey, ovfVendorDescriptionByProduct } from "@/utils/ovf-stock";
@@ -674,10 +677,12 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           });
         }
         if (hasBilling) {
-          addPendingGrnChallan({
+          // Upsert so a later "Send to billing" from DC does not twin this row.
+          upsertBillingQueueForOrder({
             ...basePending,
             kind: "billing",
             itemsSummary: itemsSummaryForKind("billing"),
+            source: "grn",
           });
           const batchUuid =
             (latestBatch?.id && String(latestBatch.id)) ||

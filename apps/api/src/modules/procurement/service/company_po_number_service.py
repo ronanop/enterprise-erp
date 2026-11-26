@@ -2,8 +2,9 @@
 
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import cast, func, select
 from sqlalchemy.orm import Session
+from sqlalchemy.types import Integer
 
 from core.exceptions import ConflictException
 from modules.procurement.models.order import ProcOrderHeader
@@ -26,21 +27,27 @@ def peek_next_company_po_number(
     *,
     company_id: UUID,
     entity_code: str,
+    tenant_id: UUID | None = None,
 ) -> str:
+    """Return the next PO/{entity}/{NNN} for the entity series.
+
+    Series is tenant-wide by entity code (not per company_id). Lexical MAX
+    on padded strings fails past 999 and per-company scoping restarts the
+    series when the same entity is used under another company row.
+    ``company_id`` is retained for call-site compatibility.
+    """
+    _ = company_id
     code = normalize_entity_code(entity_code)
     prefix = f"PO/{code}/"
-    stmt = select(func.max(ProcOrderHeader.company_po_number)).where(
-        ProcOrderHeader.company_id == company_id,
+    # Numeric suffix after PO/{entity}/ (e.g. 092 from PO/CDT/092).
+    suffix_num = cast(func.nullif(func.split_part(ProcOrderHeader.company_po_number, "/", 3), ""), Integer)
+    filters = [
         ProcOrderHeader.is_deleted.is_(False),
         ProcOrderHeader.company_po_number.like(f"{prefix}%"),
-    )
+    ]
+    if tenant_id is not None:
+        filters.append(ProcOrderHeader.tenant_id == tenant_id)
+    stmt = select(func.max(suffix_num)).where(*filters)
     last = db.scalar(stmt)
-    if last is None:
-        next_num = 1
-    else:
-        numeric = str(last).removeprefix(prefix)
-        try:
-            next_num = int(numeric) + 1
-        except ValueError:
-            next_num = 1
+    next_num = int(last or 0) + 1
     return f"{prefix}{str(next_num).zfill(_PAD)}"

@@ -80,7 +80,10 @@ class ServicePoService:
         vendor_id = self._resolve_vendor_id(ctx, opp, channel=channel)
         entity_code = self._resolve_entity_code(ctx, opp.company_id)
         company_po_number = peek_next_company_po_number(
-            self._db, company_id=opp.company_id, entity_code=entity_code
+            self._db,
+            company_id=opp.company_id,
+            entity_code=entity_code,
+            tenant_id=ctx.tenant_id,
         )
 
         order = self._order_service.create(

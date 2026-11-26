@@ -33,8 +33,8 @@ import {
 import {
   buildProcurementInventoryStockSummary,
   formatInventoryDateAdded,
-  formatInventoryWarrantyLabel,
   groupGrnStockByProduct,
+  groupInventoryStockLedgerRows,
   isInventoryLedgerRow,
 } from "@/utils/procurement-inventory-report";
 import { InventoryProductDetailDialog } from "@/components/procurement/inventory-product-detail-dialog";
@@ -104,34 +104,48 @@ export function ProcurementInventoryListPage() {
     const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     if (tokens.length === 0) return rows;
     return rows.filter((row) => {
-      const product = row.product_name ?? "";
-      const description = row.description ?? "";
-      return tokens.every(
-        (token) => textTokenMatch(product, token) || textTokenMatch(description, token),
+      const haystacks = [
+        row.product_name ?? "",
+        row.description ?? "",
+        row.vendor_name ?? "",
+        row.vendor_invoice_number ?? "",
+        row.payment_terms ?? "",
+        vendors[row.vendor_id || ""]?.label ?? "",
+      ];
+      return tokens.every((token) =>
+        haystacks.some((value) => textTokenMatch(value, token)),
       );
     });
-  }, [rows, query]);
+  }, [rows, query, vendors]);
 
   const reportSource = query.trim() ? filtered : rows;
   const grnStockRows = useMemo(
     () => reportSource.filter(isInventoryLedgerRow),
     [reportSource],
   );
+  const vendorLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    for (const [id, vendor] of Object.entries(vendors)) {
+      labels[id] = vendor.label;
+    }
+    return labels;
+  }, [vendors]);
   const grnStockByProduct = useMemo(
     () => groupGrnStockByProduct(grnStockRows),
     [grnStockRows],
+  );
+  const stockLedgerRows = useMemo(
+    () => groupInventoryStockLedgerRows(grnStockRows, vendorLabels),
+    [grnStockRows, vendorLabels],
   );
   const detailProduct = useMemo(
     () => grnStockByProduct.find((row) => row.productKey === detailProductKey) ?? null,
     [grnStockByProduct, detailProductKey],
   );
-  const stockSummary = useMemo(() => {
-    const labels: Record<string, string> = {};
-    for (const [id, vendor] of Object.entries(vendors)) {
-      labels[id] = vendor.label;
-    }
-    return buildProcurementInventoryStockSummary(grnStockRows, { vendorLabels: labels });
-  }, [grnStockRows, vendors]);
+  const stockSummary = useMemo(
+    () => buildProcurementInventoryStockSummary(grnStockRows, { vendorLabels }),
+    [grnStockRows, vendorLabels],
+  );
 
   async function onConfirmImport(draft: InventoryImportDraftRow[]) {
     setImportBusy(true);
@@ -252,8 +266,8 @@ export function ProcurementInventoryListPage() {
         <ListSearch
           value={query}
           onChange={setQuery}
-          placeholder="Search by product…"
-          aria-label="Search inventory by product"
+          placeholder="Search product, vendor, invoice…"
+          aria-label="Search inventory"
         />
       </div>
 
@@ -294,7 +308,7 @@ export function ProcurementInventoryListPage() {
 
           <div className={procurementUi.sectionCard}>
             <p className={procurementUi.sectionTitle}>Stock by product</p>
-            {grnStockRows.length === 0 ? (
+            {stockLedgerRows.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 No stock on hand. Add stock manually, import Excel, or receive on a GRN without
                 billing the full vendor-invoice quantity.
@@ -305,39 +319,53 @@ export function ProcurementInventoryListPage() {
                   <table
                     className={cn(
                       procurementUi.table,
-                      "w-full min-w-[860px] table-fixed border-separate border-spacing-0",
+                      "w-full min-w-[1180px] table-fixed border-separate border-spacing-0",
                     )}
                   >
                     <colgroup>
-                      <col className="w-[26%]" />
-                      <col className="w-[8%]" />
-                      <col className="w-[10%]" />
-                      <col className="w-[16%]" />
-                      <col className="w-[14%]" />
+                      <col className="w-[4%]" />
+                      <col className="w-[18%]" />
                       <col className="w-[12%]" />
-                      <col className="w-[14%]" />
+                      <col className="w-[9%]" />
+                      <col className="w-[10%]" />
+                      <col className="w-[9%]" />
+                      <col className="w-[6%]" />
+                      <col className="w-[10%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[10%]" />
                     </colgroup>
                     <thead className={procurementUi.thead}>
                       <tr>
-                        <th className={cn(procurementUi.th, "px-3")}>Product</th>
+                        <th className={cn(procurementUi.th, "px-2 text-right")}>S.No</th>
+                        <th className={cn(procurementUi.th, "px-3")}>Item description</th>
+                        <th className={cn(procurementUi.th, "px-3")}>Vendor name</th>
+                        <th className={cn(procurementUi.th, "px-3")}>Invoice date</th>
+                        <th className={cn(procurementUi.th, "px-3")}>Invoice number</th>
+                        <th className={cn(procurementUi.th, "px-3")}>Payterms</th>
                         <th className={cn(procurementUi.th, "px-3 text-right")}>Qty</th>
-                        <th className={cn(procurementUi.th, "px-3 text-right")}>Price</th>
-                        <th className={cn(procurementUi.th, "px-3")}>Serial</th>
-                        <th className={cn(procurementUi.th, "px-3")}>GRN</th>
-                        <th className={cn(procurementUi.th, "px-3")}>Date added</th>
-                        <th className={cn(procurementUi.th, "px-3")}>Warranty until</th>
+                        <th className={cn(procurementUi.th, "px-3 text-right")}>Unit rate</th>
+                        <th className={cn(procurementUi.th, "px-3 text-right")}>Total (w/)</th>
+                        <th className={cn(procurementUi.th, "px-3 text-right")}>Ageing days</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {grnStockByProduct.map((line) => (
+                      {stockLedgerRows.map((line, index) => (
                         <tr
-                          key={line.productKey}
+                          key={line.rowKey}
                           className={cn(
                             procurementUi.tr,
                             line.warrantyExpired &&
-                            "bg-destructive/5 hover:bg-destructive/10",
+                              "bg-destructive/5 hover:bg-destructive/10",
                           )}
                         >
+                          <td
+                            className={cn(
+                              procurementUi.tdNumeric,
+                              "px-2 text-right font-mono tabular-nums text-muted-foreground",
+                            )}
+                          >
+                            {index + 1}
+                          </td>
                           <td className={cn(procurementUi.td, "px-3")}>
                             <button
                               type="button"
@@ -352,13 +380,39 @@ export function ProcurementInventoryListPage() {
                                 setDetailProductKey(line.productKey);
                               }}
                             >
-                              {line.productName}
+                              <span className="line-clamp-2">{line.itemDescription}</span>
                             </button>
-                            {line.warrantyExpired ? (
-                              <span className="mt-1 inline-flex rounded border border-destructive/30 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-destructive">
-                                Out of warranty
-                              </span>
-                            ) : null}
+                          </td>
+                          <td className={cn(procurementUi.td, "px-3")} title={line.vendorName}>
+                            <span className="line-clamp-2">{line.vendorName}</span>
+                          </td>
+                          <td
+                            className={cn(
+                              procurementUi.td,
+                              "px-3 whitespace-nowrap text-xs text-muted-foreground",
+                            )}
+                          >
+                            {formatInventoryDateAdded(line.invoiceDate)}
+                          </td>
+                          <td
+                            className={cn(
+                              procurementUi.td,
+                              "px-3 font-mono text-xs tabular-nums",
+                            )}
+                            title={line.invoiceNumber}
+                          >
+                            <span className="line-clamp-2 break-all">
+                              {line.invoiceNumber}
+                            </span>
+                          </td>
+                          <td
+                            className={cn(
+                              procurementUi.td,
+                              "px-3 text-xs text-muted-foreground",
+                            )}
+                            title={line.paymentTerms}
+                          >
+                            <span className="line-clamp-2">{line.paymentTerms}</span>
                           </td>
                           <td
                             className={cn(
@@ -375,49 +429,33 @@ export function ProcurementInventoryListPage() {
                               "px-3 text-right font-mono tabular-nums",
                             )}
                           >
-                            {formatInr(line.avgUnitCost)}
+                            {formatInr(line.unitRate)}
                           </td>
                           <td
                             className={cn(
-                              procurementUi.td,
-                              "px-3 font-mono text-xs text-muted-foreground",
+                              procurementUi.tdNumeric,
+                              "px-3 text-right font-mono tabular-nums font-medium",
                             )}
-                            title={line.serialSummary}
+                            title={
+                              line.taxRate > 0
+                                ? `Includes ${line.taxRate}% tax`
+                                : "Qty × unit rate"
+                            }
                           >
-                            <span className="line-clamp-2 break-all">{line.serialSummary}</span>
+                            {formatInr(line.totalWithTax)}
                           </td>
                           <td
                             className={cn(
-                              procurementUi.td,
-                              "px-3 font-mono text-xs tabular-nums text-muted-foreground",
-                            )}
-                            title={line.grnSummary}
-                          >
-                            <span className="line-clamp-2 break-all">{line.grnSummary}</span>
-                            {line.hasReversal ? (
-                              <span className="mt-1 inline-flex rounded border border-destructive/30 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-destructive">
-                                Reversed
-                              </span>
-                            ) : null}
-                          </td>
-                          <td
-                            className={cn(
-                              procurementUi.td,
-                              "px-3 whitespace-nowrap text-xs text-muted-foreground",
-                            )}
-                          >
-                            {formatInventoryDateAdded(line.dateAdded)}
-                          </td>
-                          <td
-                            className={cn(
-                              procurementUi.td,
-                              "px-3 whitespace-nowrap text-xs font-medium",
-                              line.warrantyExpired
+                              procurementUi.tdNumeric,
+                              "px-3 text-right font-mono tabular-nums",
+                              (line.ageingDays ?? 0) >= 90
                                 ? "text-destructive"
                                 : "text-muted-foreground",
                             )}
                           >
-                            {formatInventoryWarrantyLabel(line.warrantyValidTill)}
+                            {line.ageingDays == null
+                              ? "-"
+                              : line.ageingDays.toLocaleString("en-IN")}
                           </td>
                         </tr>
                       ))}

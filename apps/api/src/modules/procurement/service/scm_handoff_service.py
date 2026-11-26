@@ -1296,7 +1296,10 @@ class ScmHandoffService:
         return {
             "entity_code": code,
             "company_po_number": peek_next_company_po_number(
-                self._db, company_id=cid, entity_code=code
+                self._db,
+                company_id=cid,
+                entity_code=code,
+                tenant_id=ctx.tenant_id,
             ),
         }
 
@@ -1335,7 +1338,7 @@ class ScmHandoffService:
         approver = (approved_by_name or "").strip() or None
         order_ref = (order_ref_cache or "").strip() or None
         company_po_number = peek_next_company_po_number(
-            self._db, company_id=cid, entity_code=code
+            self._db, company_id=cid, entity_code=code, tenant_id=ctx.tenant_id
         )
         order = self._order_service.create(
             ctx,
@@ -1659,7 +1662,10 @@ class ScmHandoffService:
 
             if not order.company_po_number or entity_changed:
                 order.company_po_number = peek_next_company_po_number(
-                    self._db, company_id=company_id, entity_code=code
+                    self._db,
+                    company_id=company_id,
+                    entity_code=code,
+                    tenant_id=ctx.tenant_id,
                 )
                 self._db.flush()
 
@@ -1719,7 +1725,10 @@ class ScmHandoffService:
         # Assign company PO number on draft create (same as inventory-initiated POs).
         # Finalize keeps the existing number when already set.
         company_po_number = peek_next_company_po_number(
-            self._db, company_id=company_id, entity_code=code
+            self._db,
+            company_id=company_id,
+            entity_code=code,
+            tenant_id=ctx.tenant_id,
         )
 
         order = self._order_service.create(
@@ -2521,6 +2530,7 @@ class ScmHandoffService:
                 self._db,
                 company_id=order.company_id,
                 entity_code=order.entity_code,
+                tenant_id=ctx.tenant_id,
             )
         # In-place status flip - avoid a second locked reload of the same draft.
         order.status = OrderStatus.SENT.value
@@ -4279,6 +4289,7 @@ class ScmHandoffService:
                 ProcOrderHeader.vendor_id,
                 ProcOrderHeader.company_po_number,
                 ProcOrderHeader.document_number,
+                ProcOrderHeader.payment_terms,
                 ProcOrderHeader.tenant_id,
                 ProcOrderHeader.company_id,
                 ProcOrderHeader.branch_id,
@@ -4304,8 +4315,10 @@ class ScmHandoffService:
                 ProcOrderLine.id,
                 ProcOrderLine.product_name,
                 ProcOrderLine.product_code,
+                ProcOrderLine.description,
                 ProcOrderLine.line_number,
                 ProcOrderLine.unit_cost,
+                ProcOrderLine.tax_rate,
                 ProcOrderLine.tenant_id,
                 ProcOrderLine.company_id,
                 ProcOrderLine.branch_id,
@@ -4314,6 +4327,90 @@ class ScmHandoffService:
         )
         rows = list(self._db.scalars(stmt).all())
         return {row.id: row for row in rows}
+
+    def _inventory_receipt_batches(
+        self,
+        ctx: TenantContext,
+        batch_ids: list[UUID],
+    ) -> dict[UUID, ProcOrderReceiptBatch]:
+        if not batch_ids or not self._receipt_batch_tables_exist():
+            return {}
+        rows = (
+            self._db.query(ProcOrderReceiptBatch)
+            .options(
+                load_only(
+                    ProcOrderReceiptBatch.id,
+                    ProcOrderReceiptBatch.vendor_invoice_number,
+                    ProcOrderReceiptBatch.vendor_invoice_date,
+                    ProcOrderReceiptBatch.receipt_at,
+                    ProcOrderReceiptBatch.grn_number,
+                )
+            )
+            .filter(
+                ProcOrderReceiptBatch.tenant_id == ctx.tenant_id,
+                ProcOrderReceiptBatch.is_deleted.is_(False),
+                ProcOrderReceiptBatch.id.in_(batch_ids),
+            )
+            .all()
+        )
+        return {row.id: row for row in rows}
+
+    @staticmethod
+    def _inventory_ageing_days(
+        *,
+        invoice_date: date | None,
+        receipt_at: datetime | None,
+    ) -> int | None:
+        anchor = invoice_date
+        if anchor is None and receipt_at is not None:
+            anchor = receipt_at.date() if hasattr(receipt_at, "date") else None
+        if anchor is None:
+            return None
+        return max(0, (date.today() - anchor).days)
+
+    def _inventory_row_commercial_fields(
+        self,
+        ctx: TenantContext,
+        *,
+        order: ProcOrderHeader | None,
+        line: ProcOrderLine | None,
+        batch: ProcOrderReceiptBatch | None,
+        receipt_at: datetime | None,
+        fallback_description: str | None = None,
+        vendor_name_cache: dict[UUID, str | None] | None = None,
+    ) -> dict:
+        vendor_id = order.vendor_id if order else None
+        vendor_name = None
+        if vendor_id is not None:
+            if vendor_name_cache is not None and vendor_id in vendor_name_cache:
+                vendor_name = vendor_name_cache[vendor_id]
+            else:
+                vendor_name = self._vendor_display_name(ctx, vendor_id)
+                if vendor_name_cache is not None:
+                    vendor_name_cache[vendor_id] = vendor_name
+        invoice_number = (
+            (getattr(batch, "vendor_invoice_number", None) or "").strip() or None
+            if batch is not None
+            else None
+        )
+        invoice_date = getattr(batch, "vendor_invoice_date", None) if batch is not None else None
+        line_desc = (getattr(line, "description", None) or "").strip() if line else ""
+        product_code = (getattr(line, "product_code", None) or "").strip() if line else ""
+        description = line_desc or product_code or (fallback_description or None)
+        return {
+            "vendor_name": vendor_name,
+            "payment_terms": (
+                (order.payment_terms or "").strip() or None if order is not None else None
+            ),
+            "vendor_invoice_number": invoice_number,
+            "vendor_invoice_date": invoice_date,
+            "tax_rate": float(getattr(line, "tax_rate", 0) or 0) if line else 0.0,
+            "description": description,
+            "ageing_days": self._inventory_ageing_days(
+                invoice_date=invoice_date,
+                receipt_at=receipt_at,
+            ),
+        }
 
     def repair_wave_grn_batches_into_stock(
         self, ctx: TenantContext, company_id: UUID | None = None
@@ -4454,9 +4551,15 @@ class ScmHandoffService:
                 ctx,
                 list({row.order_line_id for row in stock_rows}),
             )
+            batch_by_id = self._inventory_receipt_batches(
+                ctx,
+                list({row.receipt_batch_id for row in stock_rows if row.receipt_batch_id}),
+            )
+            vendor_name_cache: dict[UUID, str | None] = {}
             for stock in stock_rows:
                 order = order_cache.get(stock.order_header_id)
                 ol = line_by_id.get(stock.order_line_id)
+                batch = batch_by_id.get(stock.receipt_batch_id) if stock.receipt_batch_id else None
                 po_number = (
                     (
                         (order.company_po_number or order.document_number or "").strip()
@@ -4467,8 +4570,16 @@ class ScmHandoffService:
                 )
                 unit_cost = float(getattr(ol, "unit_cost", 0) or 0) if ol else 0.0
                 line_number = int(ol.line_number) if ol else 0
-                product_code = (getattr(ol, "product_code", None) or "").strip() if ol else ""
                 stock_qty = float(getattr(stock, "quantity", None) or 1)
+                commercial = self._inventory_row_commercial_fields(
+                    ctx,
+                    order=order,
+                    line=ol,
+                    batch=batch,
+                    receipt_at=stock.receipt_at,
+                    fallback_description=stock.product_name,
+                    vendor_name_cache=vendor_name_cache,
+                )
                 result.append(
                     {
                         "order_id": order.id if order else stock.order_header_id,
@@ -4486,13 +4597,13 @@ class ScmHandoffService:
                         "received_quantity": stock_qty,
                         "billing_quantity": 0,
                         "unit_cost": unit_cost,
-                        "description": product_code or None,
                         "stock_unit_id": stock.id,
                         "import_line_id": None,
                         "warranty_valid_till": getattr(stock, "warranty_valid_till", None),
                         "owner_employee_id": stock.owner_employee_id,
                         "source_ovf_id": stock.source_ovf_id,
                         "open_for_sale": bool(stock.open_for_sale),
+                        **commercial,
                     }
                 )
         else:
@@ -4546,6 +4657,7 @@ class ScmHandoffService:
                 ctx,
                 list({bl.order_line_id for bl in all_batch_lines}),
             )
+            vendor_name_cache: dict[UUID, str | None] = {}
 
             for batch in batches:
                 if (getattr(batch, "reversal_status", None) or "posted") == "reversed":
@@ -4564,9 +4676,16 @@ class ScmHandoffService:
                     ol = line_by_id.get(bl.order_line_id)
                     if ol is None:
                         continue
-                    bill_qty = float(getattr(bl, "billing_quantity", 0) or 0)
                     unit_cost = float(getattr(ol, "unit_cost", 0) or 0)
-                    product_code = (getattr(ol, "product_code", None) or "").strip()
+                    commercial = self._inventory_row_commercial_fields(
+                        ctx,
+                        order=order,
+                        line=ol,
+                        batch=batch,
+                        receipt_at=batch.receipt_at,
+                        fallback_description=ol.product_name,
+                        vendor_name_cache=vendor_name_cache,
+                    )
                     stock_lots = self._inventory_stock_lots_from_batch_line(bl)
                     for unit_index, serial, lot_qty in stock_lots:
                         result.append(
@@ -4586,10 +4705,10 @@ class ScmHandoffService:
                                 "received_quantity": lot_qty,
                                 "billing_quantity": 0,
                                 "unit_cost": unit_cost,
-                                "description": product_code or None,
                                 "stock_unit_id": None,
                                 "import_line_id": None,
                                 "warranty_valid_till": None,
+                                **commercial,
                             }
                         )
 
@@ -4610,9 +4729,15 @@ class ScmHandoffService:
                 order_cache.update(self._inventory_order_headers(ctx, cid, list(set(missing_order_ids))))
             line_ids = list({row.order_line_id for row in adjustments})
             adj_lines = self._inventory_order_lines(ctx, line_ids)
+            adj_batches = self._inventory_receipt_batches(
+                ctx,
+                list({row.receipt_batch_id for row in adjustments if row.receipt_batch_id}),
+            )
+            vendor_name_cache: dict[UUID, str | None] = {}
             for adj in adjustments:
                 order = order_cache.get(adj.order_header_id)
                 ol = adj_lines.get(adj.order_line_id)
+                batch = adj_batches.get(adj.receipt_batch_id) if adj.receipt_batch_id else None
                 po_number = (
                     (
                         (order.company_po_number or order.document_number or "").strip()
@@ -4623,7 +4748,15 @@ class ScmHandoffService:
                 )
                 unit_cost = float(getattr(ol, "unit_cost", 0) or 0) if ol else 0.0
                 line_number = int(ol.line_number) if ol else 0
-                product_code = (getattr(ol, "product_code", None) or "").strip() if ol else ""
+                commercial = self._inventory_row_commercial_fields(
+                    ctx,
+                    order=order,
+                    line=ol,
+                    batch=batch,
+                    receipt_at=adj.created_at,
+                    fallback_description=adj.product_name,
+                    vendor_name_cache=vendor_name_cache,
+                )
                 result.append(
                     {
                         "order_id": order.id if order else adj.order_header_id,
@@ -4641,10 +4774,10 @@ class ScmHandoffService:
                         "received_quantity": float(adj.quantity or 0),
                         "billing_quantity": 0,
                         "unit_cost": unit_cost,
-                        "description": product_code or None,
                         "stock_unit_id": adj.stock_unit_id,
                         "import_line_id": None,
                         "warranty_valid_till": None,
+                        **commercial,
                     }
                 )
 
@@ -4656,8 +4789,10 @@ class ScmHandoffService:
             if cid is not None:
                 import_q = import_q.filter(ProcInventoryImportLine.company_id == cid)
             imports = import_q.order_by(ProcInventoryImportLine.created_at.desc()).all()
+            vendor_name_cache: dict[UUID, str | None] = {}
             for row in imports:
                 vendor_id = None
+                linked_order = None
                 po_label = (row.company_po_number or "").strip() or "Without PO"
                 if row.order_header_id:
                     linked_order = order_cache.get(row.order_header_id)
@@ -4675,17 +4810,27 @@ class ScmHandoffService:
                         po_label = (
                             linked_order.company_po_number or linked_order.document_number or po_label
                         ).strip()
+                receipt_at = (
+                    datetime.combine(row.received_on, datetime.min.time(), tzinfo=timezone.utc)
+                    if row.received_on
+                    else row.created_at
+                )
+                commercial = self._inventory_row_commercial_fields(
+                    ctx,
+                    order=linked_order,
+                    line=None,
+                    batch=None,
+                    receipt_at=receipt_at,
+                    fallback_description=(getattr(row, "description", None) or row.product_name),
+                    vendor_name_cache=vendor_name_cache,
+                )
                 result.append(
                     {
                         "order_id": row.order_header_id,
                         "order_line_id": None,
                         "receipt_batch_id": None,
                         "grn_number": "Imported",
-                        "receipt_at": (
-                            datetime.combine(row.received_on, datetime.min.time(), tzinfo=timezone.utc)
-                            if row.received_on
-                            else row.created_at
-                        ),
+                        "receipt_at": receipt_at,
                         "company_po_number": po_label,
                         "vendor_id": vendor_id,
                         "product_name": row.product_name,
@@ -4696,13 +4841,13 @@ class ScmHandoffService:
                         "received_quantity": 1,
                         "billing_quantity": 0,
                         "unit_cost": float(row.unit_cost or 0),
-                        "description": (getattr(row, "description", None) or None),
                         "stock_unit_id": None,
                         "import_line_id": row.id,
                         "warranty_valid_till": getattr(row, "warranty_valid_till", None),
                         "owner_employee_id": row.owner_employee_id,
                         "source_ovf_id": row.source_ovf_id,
                         "open_for_sale": bool(row.open_for_sale),
+                        **commercial,
                     }
                 )
 

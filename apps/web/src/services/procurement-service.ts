@@ -1634,6 +1634,10 @@ export type ProcurementInventoryRow = {
   receipt_at: string | null;
   company_po_number: string;
   vendor_id: string | null;
+  vendor_name?: string | null;
+  payment_terms?: string | null;
+  vendor_invoice_number?: string | null;
+  vendor_invoice_date?: string | null;
   product_name: string | null;
   line_number: number;
   unit_index: number;
@@ -1642,11 +1646,14 @@ export type ProcurementInventoryRow = {
   received_quantity?: number;
   billing_quantity?: number;
   unit_cost?: number;
+  tax_rate?: number;
   description?: string | null;
   stock_unit_id?: string | null;
   import_line_id?: string | null;
   /** ISO date (YYYY-MM-DD) when warranty ends; null if not set. */
   warranty_valid_till?: string | null;
+  /** Days since vendor invoice date (or receipt date). */
+  ageing_days?: number | null;
 };
 
 export async function createPoFromInventory(payload: {
