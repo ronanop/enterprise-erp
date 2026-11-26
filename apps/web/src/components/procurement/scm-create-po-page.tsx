@@ -1526,6 +1526,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
         mobile: vendorDraft.mobile,
         contactFirstName: vendorDraft.contactFirstName,
         contactLastName: vendorDraft.contactLastName,
+        documents: vendorDraft.documents,
       });
       setVendors((current) => {
         const without = current.filter((row) => row.id !== created.id);

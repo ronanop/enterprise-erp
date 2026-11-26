@@ -1,6 +1,9 @@
 import type { DeliveryChallanRecord } from "@/utils/delivery-challan-storage";
 import { getDeliveryChallan, listDeliveryChallans } from "@/utils/delivery-challan-storage";
-import { getDeliveryStatus } from "@/utils/delivery-status-storage";
+import {
+  getDeliveryStatus,
+  isDeliveredShipmentStatus,
+} from "@/utils/delivery-status-storage";
 import type { OvfTimelineEvent } from "@/services/procurement-service";
 
 function toIso(value: string | undefined | null, fallback: string): string {
@@ -170,6 +173,27 @@ export function resolveTimelineStatus(
   if (apiStatus === "completed") return "completed";
   if (events.some((event) => event.action === "delivery_completed")) return "completed";
   return apiStatus;
+}
+
+/** List-page helper: mark Completed when local Delivery Status is already Delivered. */
+export function timelineRowHasLocalDeliveryCompleted(
+  companyPoNumbers: readonly string[] | null | undefined,
+): boolean {
+  const poSet = new Set(
+    (companyPoNumbers || [])
+      .map((po) => po.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  if (poSet.size === 0) return false;
+
+  for (const challan of listDeliveryChallans()) {
+    const po = (challan.purchaseOrderNumber || "").trim().toLowerCase();
+    if (!po || !poSet.has(po)) continue;
+    const status = getDeliveryStatus(challan.id);
+    if (!status) continue;
+    if (isDeliveredShipmentStatus(status.shipmentStatus)) return true;
+  }
+  return false;
 }
 
 export function challanForTimelineSync(challanId: string): DeliveryChallanRecord | null {

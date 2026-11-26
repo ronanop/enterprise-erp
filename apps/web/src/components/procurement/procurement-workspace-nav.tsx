@@ -10,7 +10,6 @@ import {
   FileBarChart,
   FileSpreadsheet,
   History,
-  Hourglass,
   LayoutDashboard,
   MapPinned,
   Mail,
@@ -51,7 +50,6 @@ export const PROCUREMENT_NAV = [
   { title: "Installation", href: "/procurement/installation", icon: Wrench },
   { title: "Vendors", href: "/procurement/vendors", icon: Building2 },
   { title: "Inventory", href: "/procurement/inventory", icon: Boxes },
-  { title: "Stock Aging", href: "/procurement/inventory-aging", icon: Hourglass },
   { title: "Approval", href: "/procurement/approval", icon: BadgeCheck },
 ] as const satisfies ReadonlyArray<ProcurementNavItem>;
 

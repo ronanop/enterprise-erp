@@ -16,6 +16,60 @@ class NotificationRepository(TenantScopedRepository):
     def __init__(self, db: Session) -> None:
         super().__init__(db)
 
+    def _sender_labels_for_events(
+        self,
+        tenant_id: UUID,
+        *,
+        audit_fallback_event_ids: list[UUID],
+        known_user_ids: list[UUID],
+    ) -> tuple[dict[str, str], dict[str, UUID]]:
+        """Resolve display names for mail senders.
+
+        Falls back to audit ``ntf_event`` create ``performed_by`` for older mails
+        that predate ``sent_by_*`` payload fields.
+        """
+        from modules.foundation.models.audit import AuditLog
+        from modules.foundation.models.security import SecUser
+
+        sender_by_event: dict[str, UUID] = {}
+        user_ids: list[UUID] = list(known_user_ids)
+
+        if audit_fallback_event_ids:
+            audit_rows = list(
+                self.db.scalars(
+                    select(AuditLog)
+                    .where(
+                        AuditLog.tenant_id == tenant_id,
+                        AuditLog.entity_name == "ntf_event",
+                        AuditLog.operation == "create",
+                        AuditLog.entity_id.in_(list(dict.fromkeys(audit_fallback_event_ids))),
+                        AuditLog.performed_by.is_not(None),
+                    )
+                    .order_by(AuditLog.performed_at.desc())
+                ).all()
+            )
+            for row in audit_rows:
+                key = str(row.entity_id)
+                if key in sender_by_event or row.performed_by is None:
+                    continue
+                sender_by_event[key] = row.performed_by
+                user_ids.append(row.performed_by)
+
+        names: dict[str, str] = {}
+        uniq_users = list(dict.fromkeys(user_ids))
+        if uniq_users:
+            for user in self.db.scalars(
+                select(SecUser).where(
+                    SecUser.tenant_id == tenant_id,
+                    SecUser.id.in_(uniq_users),
+                    SecUser.is_deleted.is_(False),
+                )
+            ).all():
+                label = (user.display_name or user.email or "").strip()
+                if label:
+                    names[str(user.id)] = label
+        return names, sender_by_event
+
     def list_templates(
         self, tenant_id: UUID, *, channel: str | None = None
     ) -> list[NotificationTemplateEntity]:
@@ -238,10 +292,37 @@ class NotificationRepository(TenantScopedRepository):
             .limit(limit)
         )
         rows = list(self.db.scalars(stmt).unique().all())
+        known_user_ids: list[UUID] = []
+        audit_fallback_event_ids: list[UUID] = []
+        for d in rows:
+            event = d.event
+            payload = event.payload_json if event and isinstance(event.payload_json, dict) else {}
+            raw_sender = payload.get("sent_by_user_id")
+            if raw_sender:
+                try:
+                    known_user_ids.append(UUID(str(raw_sender)))
+                    continue
+                except (TypeError, ValueError):
+                    pass
+            if not (payload.get("sent_by_name") or "").strip():
+                audit_fallback_event_ids.append(d.event_id)
+        sender_names, sender_by_event = self._sender_labels_for_events(
+            tenant_id,
+            audit_fallback_event_ids=audit_fallback_event_ids,
+            known_user_ids=known_user_ids,
+        )
         result: list[dict] = []
         for d in rows:
             event = d.event
             payload = event.payload_json if event and isinstance(event.payload_json, dict) else {}
+            sent_by_user_id = payload.get("sent_by_user_id")
+            sent_by_name = (payload.get("sent_by_name") or "").strip() or None
+            if not sent_by_user_id:
+                audit_sender = sender_by_event.get(str(d.event_id))
+                if audit_sender is not None:
+                    sent_by_user_id = str(audit_sender)
+            if not sent_by_name and sent_by_user_id:
+                sent_by_name = sender_names.get(str(sent_by_user_id))
             result.append(
                 {
                     "id": str(d.id),
@@ -259,6 +340,8 @@ class NotificationRepository(TenantScopedRepository):
                     "order_id": payload.get("order_id"),
                     "company_po_number": payload.get("company_po_number"),
                     "kind": payload.get("kind"),
+                    "sent_by_user_id": sent_by_user_id,
+                    "sent_by_name": sent_by_name,
                 }
             )
         return result
@@ -320,6 +403,26 @@ class NotificationRepository(TenantScopedRepository):
                 if po:
                     po_by_order[str(order.id)] = po
 
+        known_user_ids: list[UUID] = []
+        audit_fallback_event_ids: list[UUID] = []
+        for d in rows:
+            event = d.event
+            payload = event.payload_json if event and isinstance(event.payload_json, dict) else {}
+            raw_sender = payload.get("sent_by_user_id")
+            if raw_sender:
+                try:
+                    known_user_ids.append(UUID(str(raw_sender)))
+                    continue
+                except (TypeError, ValueError):
+                    pass
+            if not (payload.get("sent_by_name") or "").strip():
+                audit_fallback_event_ids.append(d.event_id)
+        sender_names, sender_by_event = self._sender_labels_for_events(
+            tenant_id,
+            audit_fallback_event_ids=audit_fallback_event_ids,
+            known_user_ids=known_user_ids,
+        )
+
         result: list[dict] = []
         for d in rows:
             event = d.event
@@ -337,6 +440,14 @@ class NotificationRepository(TenantScopedRepository):
                     if event.event_type.startswith(prefix)
                     else event.event_type
                 )
+            sent_by_user_id = payload.get("sent_by_user_id")
+            sent_by_name = (payload.get("sent_by_name") or "").strip() or None
+            if not sent_by_user_id:
+                audit_sender = sender_by_event.get(str(d.event_id))
+                if audit_sender is not None:
+                    sent_by_user_id = str(audit_sender)
+            if not sent_by_name and sent_by_user_id:
+                sent_by_name = sender_names.get(str(sent_by_user_id))
             result.append(
                 {
                     "id": str(d.id),
@@ -354,6 +465,8 @@ class NotificationRepository(TenantScopedRepository):
                     "order_id": order_id,
                     "company_po_number": company_po,
                     "kind": kind,
+                    "sent_by_user_id": sent_by_user_id,
+                    "sent_by_name": sent_by_name,
                 }
             )
         return result

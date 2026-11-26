@@ -110,6 +110,9 @@ export function ProcurementInventoryListPage() {
         row.vendor_name ?? "",
         row.vendor_invoice_number ?? "",
         row.payment_terms ?? "",
+        row.part_no ?? "",
+        row.customer_name ?? "",
+        row.sales_spoc ?? "",
         vendors[row.vendor_id || ""]?.label ?? "",
       ];
       return tokens.every((token) =>
@@ -174,6 +177,16 @@ export function ProcurementInventoryListPage() {
       serial_number: string;
       order_id: string | null;
       warranty_valid_till: string | null;
+      vendor_name?: string | null;
+      vendor_invoice_number?: string | null;
+      vendor_invoice_date?: string | null;
+      part_no?: string | null;
+      unit_cost?: number | null;
+      customer_name?: string | null;
+      sales_spoc?: string | null;
+      payment_terms?: string | null;
+      payment_due_date?: string | null;
+      received_on?: string | null;
     }>,
   ) {
     setAddBusy(true);
@@ -319,37 +332,43 @@ export function ProcurementInventoryListPage() {
                   <table
                     className={cn(
                       procurementUi.table,
-                      "w-full min-w-[1180px] table-fixed border-separate border-spacing-0",
+                      "w-full min-w-[1480px] table-fixed border-separate border-spacing-0",
                     )}
                   >
                     <colgroup>
-                      <col className="w-[4%]" />
-                      <col className="w-[18%]" />
-                      <col className="w-[12%]" />
-                      <col className="w-[9%]" />
+                      <col className="w-[14%]" />
                       <col className="w-[10%]" />
-                      <col className="w-[9%]" />
-                      <col className="w-[6%]" />
+                      <col className="w-[7%]" />
+                      <col className="w-[7%]" />
+                      <col className="w-[7%]" />
+                      <col className="w-[5%]" />
+                      <col className="w-[7%]" />
+                      <col className="w-[8%]" />
+                      <col className="w-[5%]" />
                       <col className="w-[10%]" />
-                      <col className="w-[12%]" />
-                      <col className="w-[10%]" />
+                      <col className="w-[8%]" />
+                      <col className="w-[7%]" />
+                      <col className="w-[7%]" />
                     </colgroup>
                     <thead className={procurementUi.thead}>
                       <tr>
-                        <th className={cn(procurementUi.th, "px-2 text-right")}>S.No</th>
-                        <th className={cn(procurementUi.th, "px-3")}>Item description</th>
-                        <th className={cn(procurementUi.th, "px-3")}>Vendor name</th>
-                        <th className={cn(procurementUi.th, "px-3")}>Invoice date</th>
-                        <th className={cn(procurementUi.th, "px-3")}>Invoice number</th>
-                        <th className={cn(procurementUi.th, "px-3")}>Payterms</th>
+                        <th className={cn(procurementUi.th, "px-3")}>Item Description</th>
+                        <th className={cn(procurementUi.th, "px-3")}>Vendor Name</th>
+                        <th className={cn(procurementUi.th, "px-3")}>Invoice No.</th>
+                        <th className={cn(procurementUi.th, "px-3")}>Invoice Date</th>
+                        <th className={cn(procurementUi.th, "px-3")}>Part No.</th>
                         <th className={cn(procurementUi.th, "px-3 text-right")}>Qty</th>
-                        <th className={cn(procurementUi.th, "px-3 text-right")}>Unit rate</th>
-                        <th className={cn(procurementUi.th, "px-3 text-right")}>Total (w/)</th>
-                        <th className={cn(procurementUi.th, "px-3 text-right")}>Ageing days</th>
+                        <th className={cn(procurementUi.th, "px-3 text-right")}>Unit Price</th>
+                        <th className={cn(procurementUi.th, "px-3 text-right")}>Amount</th>
+                        <th className={cn(procurementUi.th, "px-3 text-right")}>Aging</th>
+                        <th className={cn(procurementUi.th, "px-3")}>Customer Name</th>
+                        <th className={cn(procurementUi.th, "px-3")}>Sales SPOC</th>
+                        <th className={cn(procurementUi.th, "px-3")}>Payment Terms</th>
+                        <th className={cn(procurementUi.th, "px-3")}>Payment Due Date</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {stockLedgerRows.map((line, index) => (
+                      {stockLedgerRows.map((line) => (
                         <tr
                           key={line.rowKey}
                           className={cn(
@@ -358,14 +377,6 @@ export function ProcurementInventoryListPage() {
                               "bg-destructive/5 hover:bg-destructive/10",
                           )}
                         >
-                          <td
-                            className={cn(
-                              procurementUi.tdNumeric,
-                              "px-2 text-right font-mono tabular-nums text-muted-foreground",
-                            )}
-                          >
-                            {index + 1}
-                          </td>
                           <td className={cn(procurementUi.td, "px-3")}>
                             <button
                               type="button"
@@ -389,14 +400,6 @@ export function ProcurementInventoryListPage() {
                           <td
                             className={cn(
                               procurementUi.td,
-                              "px-3 whitespace-nowrap text-xs text-muted-foreground",
-                            )}
-                          >
-                            {formatInventoryDateAdded(line.invoiceDate)}
-                          </td>
-                          <td
-                            className={cn(
-                              procurementUi.td,
                               "px-3 font-mono text-xs tabular-nums",
                             )}
                             title={line.invoiceNumber}
@@ -408,11 +411,19 @@ export function ProcurementInventoryListPage() {
                           <td
                             className={cn(
                               procurementUi.td,
-                              "px-3 text-xs text-muted-foreground",
+                              "px-3 whitespace-nowrap text-xs text-muted-foreground",
                             )}
-                            title={line.paymentTerms}
                           >
-                            <span className="line-clamp-2">{line.paymentTerms}</span>
+                            {formatInventoryDateAdded(line.invoiceDate)}
+                          </td>
+                          <td
+                            className={cn(
+                              procurementUi.td,
+                              "px-3 font-mono text-xs text-muted-foreground",
+                            )}
+                            title={line.partNo}
+                          >
+                            <span className="line-clamp-2 break-all">{line.partNo}</span>
                           </td>
                           <td
                             className={cn(
@@ -429,20 +440,15 @@ export function ProcurementInventoryListPage() {
                               "px-3 text-right font-mono tabular-nums",
                             )}
                           >
-                            {formatInr(line.unitRate)}
+                            {formatInr(line.unitPrice)}
                           </td>
                           <td
                             className={cn(
                               procurementUi.tdNumeric,
                               "px-3 text-right font-mono tabular-nums font-medium",
                             )}
-                            title={
-                              line.taxRate > 0
-                                ? `Includes ${line.taxRate}% tax`
-                                : "Qty × unit rate"
-                            }
                           >
-                            {formatInr(line.totalWithTax)}
+                            {formatInr(line.amount)}
                           </td>
                           <td
                             className={cn(
@@ -456,6 +462,35 @@ export function ProcurementInventoryListPage() {
                             {line.ageingDays == null
                               ? "-"
                               : line.ageingDays.toLocaleString("en-IN")}
+                          </td>
+                          <td
+                            className={cn(procurementUi.td, "px-3")}
+                            title={line.customerName}
+                          >
+                            <span className="line-clamp-2">{line.customerName}</span>
+                          </td>
+                          <td
+                            className={cn(procurementUi.td, "px-3")}
+                            title={line.salesSpoc}
+                          >
+                            <span className="line-clamp-2">{line.salesSpoc}</span>
+                          </td>
+                          <td
+                            className={cn(
+                              procurementUi.td,
+                              "px-3 text-xs text-muted-foreground",
+                            )}
+                            title={line.paymentTerms}
+                          >
+                            <span className="line-clamp-2">{line.paymentTerms}</span>
+                          </td>
+                          <td
+                            className={cn(
+                              procurementUi.td,
+                              "px-3 whitespace-nowrap text-xs text-muted-foreground",
+                            )}
+                          >
+                            {formatInventoryDateAdded(line.paymentDueDate)}
                           </td>
                         </tr>
                       ))}

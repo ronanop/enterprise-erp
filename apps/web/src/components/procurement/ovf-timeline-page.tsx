@@ -36,6 +36,7 @@ import {
   buildLocalDeliveryTimelineEvents,
   mergeOvfTimelineEvents,
   resolveTimelineStatus,
+  timelineRowHasLocalDeliveryCompleted,
 } from "@/utils/ovf-timeline-delivery-events";
 import { formatUniquePoList } from "@/utils/format-po-labels";
 
@@ -96,8 +97,23 @@ function eventTone(event: OvfTimelineEvent): string {
   return "border-border bg-muted text-muted-foreground";
 }
 
+function isTechnicalTimelineText(value: string | null | undefined): boolean {
+  const text = (value || "").trim();
+  if (!text) return true;
+  if (/^proc_[a-z0-9_]+$/i.test(text)) return true;
+  if (/^[a-z]+(_[a-z0-9]+)+$/i.test(text) && !/\s/.test(text)) return true;
+  return false;
+}
+
 function TimelineEventCard({ event }: { event: OvfTimelineEvent }) {
   const Icon = eventIcon(event);
+  const entityLabel =
+    event.entity_label && !isTechnicalTimelineText(event.entity_label)
+      ? event.entity_label.trim()
+      : null;
+  const summary =
+    event.summary && !isTechnicalTimelineText(event.summary) ? event.summary.trim() : null;
+  const showSummary = Boolean(summary && summary !== entityLabel && summary !== event.title);
   return (
     <li className="relative pl-8">
       <span
@@ -113,8 +129,8 @@ function TimelineEventCard({ event }: { event: OvfTimelineEvent }) {
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="text-[13px] font-medium text-foreground">{event.title}</p>
-            {event.entity_label ? (
-              <p className="mt-0.5 text-[11px] text-muted-foreground">{event.entity_label}</p>
+            {entityLabel ? (
+              <p className="mt-0.5 text-[11px] text-muted-foreground">{entityLabel}</p>
             ) : null}
           </div>
           <time
@@ -124,22 +140,14 @@ function TimelineEventCard({ event }: { event: OvfTimelineEvent }) {
             {formatWhen(event.occurred_at)}
           </time>
         </div>
-        {event.summary ? (
-          <p className="mt-1.5 text-[12px] leading-relaxed text-foreground/85">{event.summary}</p>
+        {showSummary ? (
+          <p className="mt-1.5 text-[12px] leading-relaxed text-foreground/85">{summary}</p>
         ) : null}
         <dl className="mt-2 grid gap-1 text-[11px] text-muted-foreground">
           {event.actor_name ? (
             <div className="flex gap-1.5">
               <dt className="shrink-0 font-medium text-foreground/70">By</dt>
               <dd>{event.actor_name}</dd>
-            </div>
-          ) : null}
-          {event.from_state || event.to_state ? (
-            <div className="flex gap-1.5">
-              <dt className="shrink-0 font-medium text-foreground/70">State</dt>
-              <dd className="font-mono">
-                {[event.from_state, event.to_state].filter(Boolean).join(" → ")}
-              </dd>
             </div>
           ) : null}
           {event.remark && event.remark !== event.summary ? (
@@ -199,24 +207,41 @@ export function ProcurementTimelineListPage() {
     return () => window.clearInterval(timer);
   }, [load]);
 
+  const withPo = useMemo(
+    () =>
+      rows
+        .filter((row) =>
+          (row.company_po_numbers || []).some((po) => Boolean(po?.trim())),
+        )
+        .map((row) => ({
+          ...row,
+          timeline_status:
+            row.timeline_status === "completed" ||
+            timelineRowHasLocalDeliveryCompleted(row.company_po_numbers)
+              ? "completed"
+              : row.timeline_status,
+        })),
+    [rows],
+  );
+
   const filtered = useMemo(() => {
     const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    if (tokens.length === 0) return rows;
-    return rows.filter((row) => {
-      const haystack = [
+    if (tokens.length === 0) return withPo;
+    return withPo.filter((row) => {
+      const fields = [
         row.ovf_no,
         row.customer_name,
         row.quote_name,
         row.account_name,
         row.blueprint_state,
         row.timeline_status,
+        ...(row.company_po_numbers || []),
       ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return tokens.every((token) => haystack.includes(token));
+        .map((value) => String(value || "").trim().toLowerCase())
+        .filter(Boolean);
+      return tokens.every((token) => fields.some((field) => field.includes(token)));
     });
-  }, [query, rows]);
+  }, [query, withPo]);
 
   return (
     <ProcurementPage>
@@ -256,9 +281,9 @@ export function ProcurementTimelineListPage() {
           <table className="w-full min-w-[980px] text-left text-sm">
             <thead className="border-b border-border bg-muted/40 text-xs font-bold uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-3 py-2 font-bold">OVF no.</th>
-                <th className="px-3 py-2 font-bold">Customer</th>
                 <th className="px-3 py-2 font-bold">PO number</th>
+                <th className="px-3 py-2 font-bold">Customer</th>
+                <th className="px-3 py-2 font-bold">OVF number</th>
                 <th className="px-3 py-2 font-bold">Status</th>
                 <th className="px-3 py-2 font-bold">Updated</th>
               </tr>
@@ -274,7 +299,9 @@ export function ProcurementTimelineListPage() {
               {!loading && filtered.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
-                    No OVFs in the timeline yet.
+                    {query.trim()
+                      ? "No timeline rows match your search."
+                      : "No OVFs with a generated PO number yet."}
                   </td>
                 </tr>
               ) : null}
@@ -292,11 +319,11 @@ export function ProcurementTimelineListPage() {
                   }}
                   className="cursor-pointer border-b border-border/70 transition-colors duration-150 hover:bg-muted/30"
                 >
-                  <td className="px-3 py-2 font-medium tabular-nums">{row.ovf_no}</td>
-                  <td className="px-3 py-2">{row.customer_name || row.account_name || "-"}</td>
-                  <td className="max-w-[220px] px-3 py-2 text-muted-foreground">
+                  <td className="max-w-[220px] px-3 py-2 font-medium tabular-nums">
                     {formatUniquePoList(row.company_po_numbers)}
                   </td>
+                  <td className="px-3 py-2">{row.customer_name || row.account_name || "-"}</td>
+                  <td className="px-3 py-2 tabular-nums text-muted-foreground">{row.ovf_no}</td>
                   <td className="px-3 py-2">
                     <StatusBadge status={row.timeline_status} />
                   </td>

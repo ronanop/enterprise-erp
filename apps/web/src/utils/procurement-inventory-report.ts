@@ -47,29 +47,30 @@ export type GrnStockByProductRow = {
   lines: ProcurementInventoryRow[];
 };
 
-/** Stock ledger row for Inventory list (invoice / commercial columns). */
+/** Stock ledger row for Inventory list (Excel-aligned commercial columns). */
 export type InventoryStockLedgerRow = {
   rowKey: string;
   productKey: string;
   productName: string;
-  invoiceDate: string | null;
-  invoiceNumber: string;
-  vendorName: string;
-  paymentTerms: string;
   itemDescription: string;
+  vendorName: string;
+  invoiceNumber: string;
+  invoiceDate: string | null;
+  partNo: string;
   stockQty: number;
-  unitRate: number;
-  taxRate: number;
-  totalWithTax: number;
+  unitPrice: number;
+  amount: number;
   ageingDays: number | null;
+  customerName: string;
+  salesSpoc: string;
+  paymentTerms: string;
+  paymentDueDate: string | null;
   warrantyExpired: boolean;
   lines: ProcurementInventoryRow[];
 };
 
-export function inventoryTotalWithTax(qty: number, unitRate: number, taxRate: number): number {
-  const base = qty * unitRate;
-  const rate = Number.isFinite(taxRate) && taxRate > 0 ? taxRate : 0;
-  return Math.round(base * (1 + rate / 100) * 100) / 100;
+export function inventoryLineAmount(qty: number, unitPrice: number): number {
+  return Math.round(qty * unitPrice * 100) / 100;
 }
 
 function pickMostCommon(values: string[]): string {
@@ -122,16 +123,16 @@ export function groupInventoryStockLedgerRows(
         0,
       );
       const roundedQty = Math.round(stockQty * 1e6) / 1e6;
-      const unitRate = roundedQty > 0 ? stockValue / roundedQty : 0;
-      const taxRates = lines
-        .map((row) => Number(row.tax_rate))
-        .filter((n) => Number.isFinite(n) && n >= 0);
-      const taxRate = taxRates.length > 0 ? taxRates[0]! : 0;
+      const unitPrice = roundedQty > 0 ? stockValue / roundedQty : 0;
       const descriptions = lines
         .map((row) => (row.description || row.product_name || "").trim())
         .filter(Boolean);
       const invoiceDates = lines
         .map((row) => (row.vendor_invoice_date || "").trim().slice(0, 10))
+        .filter(Boolean)
+        .sort();
+      const dueDates = lines
+        .map((row) => (row.payment_due_date || "").trim().slice(0, 10))
         .filter(Boolean)
         .sort();
       const ageingValues = lines
@@ -150,22 +151,34 @@ export function groupInventoryStockLedgerRows(
         rowKey,
         productKey: inventoryProductKey(lines[0]?.product_name),
         productName: productLabel(lines[0]!),
-        invoiceDate: invoiceDates[0] || null,
+        itemDescription: pickMostCommon(descriptions) || productLabel(lines[0]!),
+        vendorName,
         invoiceNumber:
           pickMostCommon(
             lines.map((row) => (row.vendor_invoice_number || "").trim()).filter(Boolean),
           ) || "-",
-        vendorName,
+        invoiceDate: invoiceDates[0] || null,
+        partNo:
+          pickMostCommon(
+            lines.map((row) => (row.part_no || "").trim()).filter(Boolean),
+          ) || "-",
+        stockQty: roundedQty,
+        unitPrice,
+        amount: inventoryLineAmount(roundedQty, unitPrice),
+        ageingDays: ageingValues.length > 0 ? Math.max(...ageingValues) : null,
+        customerName:
+          pickMostCommon(
+            lines.map((row) => (row.customer_name || "").trim()).filter(Boolean),
+          ) || "-",
+        salesSpoc:
+          pickMostCommon(
+            lines.map((row) => (row.sales_spoc || "").trim()).filter(Boolean),
+          ) || "-",
         paymentTerms:
           pickMostCommon(
             lines.map((row) => (row.payment_terms || "").trim()).filter(Boolean),
           ) || "-",
-        itemDescription: pickMostCommon(descriptions) || productLabel(lines[0]!),
-        stockQty: roundedQty,
-        unitRate,
-        taxRate,
-        totalWithTax: inventoryTotalWithTax(roundedQty, unitRate, taxRate),
-        ageingDays: ageingValues.length > 0 ? Math.max(...ageingValues) : null,
+        paymentDueDate: dueDates[0] || null,
         warrantyExpired: warranty.warrantyExpired,
         lines,
       };

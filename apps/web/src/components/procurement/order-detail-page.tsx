@@ -1822,9 +1822,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           orderId={order.id}
           poLabel={order.company_po_number?.trim() || order.document_number}
           pdfContext={grnPdfContext}
-          canReverse={canReceipt}
           onClose={() => setGrnPdfPickOpen(false)}
-          onReversed={() => void load()}
         />
       ) : null}
 

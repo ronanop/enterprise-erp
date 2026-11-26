@@ -436,12 +436,21 @@ class ScmDeliveryNotificationService:
         # Wrap plain paragraphs if template forgot outer styling.
         if "<" not in body_html:
             body_html = _html([body_html])
+        sent_by_name = None
+        if ctx.user_id is not None:
+            from modules.foundation.models.security import SecUser
+
+            sender = self._db.get(SecUser, ctx.user_id)
+            if sender is not None and sender.tenant_id == ctx.tenant_id:
+                sent_by_name = (sender.display_name or sender.email or "").strip() or None
         event_payload: dict[str, Any] = {
+            **payload,
             "order_id": str(order.id),
             "company_po_number": order.company_po_number,
             "kind": kind,
             "company_account_id": str(company_account_id) if company_account_id else None,
-            **payload,
+            "sent_by_user_id": str(ctx.user_id) if ctx.user_id else None,
+            "sent_by_name": sent_by_name,
         }
         if attachments:
             event_payload["_attachments"] = attachments

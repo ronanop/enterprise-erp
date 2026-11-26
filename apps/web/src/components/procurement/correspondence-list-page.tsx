@@ -137,24 +137,31 @@ export function CorrespondenceListPage() {
   }, [load]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const tokens = query
+      .trim()
+      .toLowerCase()
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 2);
     return rows.filter((row) => {
       const kind = resolveKind(row);
       if (kindFilter !== "all" && kind !== kindFilter) return false;
       if (statusFilter !== "all" && statusBucket(row.status) !== statusFilter) return false;
-      if (!q) return true;
-      const hay = [
+      if (tokens.length === 0) {
+        // Empty search = all rows; 1-char queries intentionally match nothing.
+        return !query.trim();
+      }
+      const fields = [
         row.company_po_number,
         row.recipient_address,
         row.subject,
         kindLabel(row.kind, row.event_type),
-        row.status,
+        row.sent_by_name,
         row.order_id,
       ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return hay.includes(q);
+        .map((value) => String(value || "").trim().toLowerCase())
+        .filter(Boolean);
+      return tokens.every((token) => fields.some((field) => field.includes(token)));
     });
   }, [rows, query, kindFilter, statusFilter]);
 
@@ -341,11 +348,12 @@ export function CorrespondenceListPage() {
 
                 {!isCollapsed ? (
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[880px] text-left text-xs">
+                    <table className="w-full min-w-[980px] text-left text-xs">
                       <thead className="border-b border-border/60 bg-muted/20 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
                         <tr>
                           <th className="px-3 py-2.5">Mail type</th>
                           <th className="px-3 py-2.5">Sent to</th>
+                          <th className="px-3 py-2.5">Sent by</th>
                           <th className="px-3 py-2.5">Subject</th>
                           <th className="px-3 py-2.5">Sent</th>
                           <th className="px-3 py-2.5">Status</th>
@@ -363,6 +371,11 @@ export function CorrespondenceListPage() {
                             <td className="px-3 py-2.5">
                               <span className="font-medium text-foreground">
                                 {row.recipient_address || "—"}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <span className="font-medium text-foreground">
+                                {row.sent_by_name?.trim() || "—"}
                               </span>
                             </td>
                             <td

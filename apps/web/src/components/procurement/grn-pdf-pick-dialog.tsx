@@ -2,15 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { ExternalLink, FileDown, FileText, RotateCcw, X } from "lucide-react";
+import { ExternalLink, FileDown, FileText, X } from "lucide-react";
 
-import { ReverseGrnConfirmDialog } from "@/components/procurement/reverse-grn-confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { formatApiError } from "@/services/api-client";
 import {
   listOrderReceiptBatches,
   openReceiptBatchAttachment,
-  reverseReceiptBatch,
   type ReceiptBatchAttachment,
   type ScmReceiptBatch,
 } from "@/services/procurement-service";
@@ -51,9 +49,7 @@ type GrnPdfPickDialogProps = {
   orderId: string;
   poLabel: string;
   pdfContext: GrnReceiptPdfContext;
-  canReverse?: boolean;
   onClose: () => void;
-  onReversed?: () => void;
 };
 
 export function GrnPdfPickDialog({
@@ -61,9 +57,7 @@ export function GrnPdfPickDialog({
   orderId,
   poLabel,
   pdfContext,
-  canReverse = false,
   onClose,
-  onReversed,
 }: GrnPdfPickDialogProps) {
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -72,9 +66,6 @@ export function GrnPdfPickDialog({
   const [rows, setRows] = useState<BatchRow[]>([]);
   const [selectedKey, setSelectedKey] = useState<string>("");
   const [openingId, setOpeningId] = useState<string | null>(null);
-  const [reverseTarget, setReverseTarget] = useState<ScmReceiptBatch | null>(null);
-  const [reverseReason, setReverseReason] = useState("");
-  const [reversing, setReversing] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
@@ -97,8 +88,6 @@ export function GrnPdfPickDialog({
     setError(null);
     setRows([]);
     setSelectedKey("");
-    setReverseTarget(null);
-    setReverseReason("");
     setSuccess(null);
     void (async () => {
       try {
@@ -131,27 +120,7 @@ export function GrnPdfPickDialog({
   if (!open || !mounted) return null;
 
   const downloading = downloadingKey !== null;
-  const busy = downloading || reversing;
-
-  async function reloadBatches(preferKey?: string) {
-    const batches = await listOrderReceiptBatches(orderId);
-    const printable = batches.filter((b) => batchUnits(b) > 0);
-    const sorted = [...printable].sort((a, b) => b.sequence - a.sequence);
-    const loaded = sorted.map((batch) => ({
-      batch,
-      attachments: batch.attachments ?? [],
-    }));
-    setRows(loaded);
-    if (loaded.length === 0) {
-      setSelectedKey("");
-      return;
-    }
-    const next =
-      (preferKey && loaded.find((row) => batchKey(row.batch) === preferKey)
-        ? preferKey
-        : null) || batchKey(loaded[0].batch);
-    setSelectedKey(next);
-  }
+  const busy = downloading;
 
   async function onDownloadBatch(batch: ScmReceiptBatch) {
     const key = batchKey(batch);
@@ -168,29 +137,7 @@ export function GrnPdfPickDialog({
     }
   }
 
-  async function onConfirmReverse() {
-    const batch = reverseTarget;
-    const batchId = batch?.id?.trim();
-    const reason = reverseReason.trim();
-    if (!batch || !batchId || !reason || reversing) return;
-    setReversing(true);
-    setError(null);
-    try {
-      await reverseReceiptBatch(batchId, reason);
-      setReverseTarget(null);
-      setReverseReason("");
-      setSuccess(`GRN ${batch.grn_number} reversed.`);
-      await reloadBatches(batchKey(batch));
-      onReversed?.();
-    } catch (err) {
-      setError(formatApiError(err, "Failed to reverse GRN"));
-    } finally {
-      setReversing(false);
-    }
-  }
-
   return createPortal(
-    <>
     <div
       className="fixed inset-0 z-[200] flex items-center justify-center bg-foreground/40 p-4"
       role="presentation"
@@ -297,29 +244,12 @@ export function GrnPdfPickDialog({
                           {units} unit{units === 1 ? "" : "s"} in this GRN
                         </span>
                       </label>
-                      {canReverse && !reversed && batch.id ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-8 w-8 shrink-0 cursor-pointer border-border p-0 text-destructive transition-colors duration-200 hover:bg-destructive/10 hover:text-destructive"
-                          disabled={busy}
-                          title={`Reverse GRN ${batch.grn_number}`}
-                          aria-label={`Reverse GRN ${batch.grn_number}`}
-                          onClick={() => {
-                            setReverseTarget(batch);
-                            setReverseReason("");
-                          }}
-                        >
-                          <RotateCcw className="size-4 stroke-[2]" />
-                        </Button>
-                      ) : null}
                       <Button
                         type="button"
                         size="sm"
                         variant="outline"
                         className="h-8 w-8 shrink-0 cursor-pointer border-border p-0 text-[#0369A1] transition-colors duration-200 hover:bg-sky-50 hover:text-[#0369A1]"
-                        disabled={units <= 0 || downloadingKey === key || reversing}
+                        disabled={units <= 0 || downloadingKey === key}
                         title={`Download GRN PDF for ${batch.grn_number}`}
                         aria-label={`Download GRN PDF for ${batch.grn_number}`}
                         onClick={() => void onDownloadBatch(batch)}
@@ -468,22 +398,7 @@ export function GrnPdfPickDialog({
           ) : null}
         </div>
       </div>
-    </div>
-    <ReverseGrnConfirmDialog
-      batch={reverseTarget}
-      reason={reverseReason}
-      reversing={reversing}
-      error={reverseTarget ? error : null}
-      onReasonChange={setReverseReason}
-      onCancel={() => {
-        if (!reversing) {
-          setReverseTarget(null);
-          setReverseReason("");
-        }
-      }}
-      onConfirm={() => void onConfirmReverse()}
-    />
-    </>,
+    </div>,
     document.body,
   );
 }

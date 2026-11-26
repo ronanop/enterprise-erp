@@ -252,6 +252,8 @@ class OvfService:
                 "ovf_no": row.ovf_no,
                 "po_number": row.po_number,
                 "customer_name": row.customer_name,
+                "owner_name": row.owner_name,
+                "account_name": row.account_name,
                 "po_date": self._resolve_customer_po_display_date(ctx, row),
                 "customer_payment_days": int(row.customer_payment_days or 0),
                 "vendor_payment_days": int(row.vendor_payment_days or 0),

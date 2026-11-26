@@ -4290,6 +4290,10 @@ class ScmHandoffService:
                 ProcOrderHeader.company_po_number,
                 ProcOrderHeader.document_number,
                 ProcOrderHeader.payment_terms,
+                ProcOrderHeader.approved_by_name,
+                ProcOrderHeader.source_module,
+                ProcOrderHeader.source_document_type,
+                ProcOrderHeader.source_document_id,
                 ProcOrderHeader.tenant_id,
                 ProcOrderHeader.company_id,
                 ProcOrderHeader.branch_id,
@@ -4355,6 +4359,20 @@ class ScmHandoffService:
         )
         return {row.id: row for row in rows}
 
+    def _inventory_ovf_meta_for_orders(
+        self,
+        ctx: TenantContext,
+        orders: dict[UUID, ProcOrderHeader],
+    ) -> dict:
+        ovf_ids = [
+            order.source_document_id
+            for order in orders.values()
+            if self._is_ovf_sourced(order) and order.source_document_id is not None
+        ]
+        if not ovf_ids:
+            return {}
+        return self._crm.get_ovf_display_meta(ctx, list(set(ovf_ids)))
+
     @staticmethod
     def _inventory_ageing_days(
         *,
@@ -4368,6 +4386,21 @@ class ScmHandoffService:
             return None
         return max(0, (date.today() - anchor).days)
 
+    @staticmethod
+    def _payment_terms_net_days(payment_terms: str | None, fallback_days: int | None = None) -> int | None:
+        text = (payment_terms or "").strip()
+        if text:
+            import re
+
+            match = re.search(r"(\d{1,4})", text)
+            if match:
+                days = int(match.group(1))
+                if 0 < days <= 3650:
+                    return days
+        if fallback_days is not None and fallback_days > 0:
+            return int(fallback_days)
+        return None
+
     def _inventory_row_commercial_fields(
         self,
         ctx: TenantContext,
@@ -4378,6 +4411,7 @@ class ScmHandoffService:
         receipt_at: datetime | None,
         fallback_description: str | None = None,
         vendor_name_cache: dict[UUID, str | None] | None = None,
+        ovf_meta: dict | None = None,
     ) -> dict:
         vendor_id = order.vendor_id if order else None
         vendor_name = None
@@ -4396,16 +4430,54 @@ class ScmHandoffService:
         invoice_date = getattr(batch, "vendor_invoice_date", None) if batch is not None else None
         line_desc = (getattr(line, "description", None) or "").strip() if line else ""
         product_code = (getattr(line, "product_code", None) or "").strip() if line else ""
-        description = line_desc or product_code or (fallback_description or None)
+        product_name = (getattr(line, "product_name", None) or "").strip() if line else ""
+        description = (
+            line_desc
+            or product_name
+            or (fallback_description or None)
+        )
+        meta = None
+        if (
+            order is not None
+            and ovf_meta is not None
+            and self._is_ovf_sourced(order)
+            and order.source_document_id is not None
+        ):
+            meta = ovf_meta.get(order.source_document_id) or {}
+        customer_name = None
+        sales_spoc = None
+        vendor_payment_days = None
+        if meta:
+            customer_name = (
+                (meta.get("customer_name") or meta.get("account_name") or "")
+            )
+            customer_name = str(customer_name).strip() or None
+            sales_spoc = (str(meta.get("owner_name") or "").strip() or None)
+            raw_days = meta.get("vendor_payment_days")
+            try:
+                vendor_payment_days = int(raw_days) if raw_days is not None else None
+            except (TypeError, ValueError):
+                vendor_payment_days = None
+        if not sales_spoc and order is not None:
+            sales_spoc = (getattr(order, "approved_by_name", None) or "").strip() or None
+        payment_terms = (
+            (order.payment_terms or "").strip() or None if order is not None else None
+        )
+        net_days = self._payment_terms_net_days(payment_terms, vendor_payment_days)
+        payment_due_date = None
+        if invoice_date is not None and net_days is not None:
+            payment_due_date = invoice_date + timedelta(days=net_days)
         return {
             "vendor_name": vendor_name,
-            "payment_terms": (
-                (order.payment_terms or "").strip() or None if order is not None else None
-            ),
+            "payment_terms": payment_terms,
+            "payment_due_date": payment_due_date,
             "vendor_invoice_number": invoice_number,
             "vendor_invoice_date": invoice_date,
             "tax_rate": float(getattr(line, "tax_rate", 0) or 0) if line else 0.0,
             "description": description,
+            "part_no": product_code or None,
+            "customer_name": customer_name,
+            "sales_spoc": sales_spoc,
             "ageing_days": self._inventory_ageing_days(
                 invoice_date=invoice_date,
                 receipt_at=receipt_at,
@@ -4555,6 +4627,7 @@ class ScmHandoffService:
                 ctx,
                 list({row.receipt_batch_id for row in stock_rows if row.receipt_batch_id}),
             )
+            ovf_meta = self._inventory_ovf_meta_for_orders(ctx, order_cache)
             vendor_name_cache: dict[UUID, str | None] = {}
             for stock in stock_rows:
                 order = order_cache.get(stock.order_header_id)
@@ -4579,6 +4652,7 @@ class ScmHandoffService:
                     receipt_at=stock.receipt_at,
                     fallback_description=stock.product_name,
                     vendor_name_cache=vendor_name_cache,
+                    ovf_meta=ovf_meta,
                 )
                 result.append(
                     {
@@ -4657,6 +4731,7 @@ class ScmHandoffService:
                 ctx,
                 list({bl.order_line_id for bl in all_batch_lines}),
             )
+            ovf_meta = self._inventory_ovf_meta_for_orders(ctx, order_cache)
             vendor_name_cache: dict[UUID, str | None] = {}
 
             for batch in batches:
@@ -4685,6 +4760,7 @@ class ScmHandoffService:
                         receipt_at=batch.receipt_at,
                         fallback_description=ol.product_name,
                         vendor_name_cache=vendor_name_cache,
+                        ovf_meta=ovf_meta,
                     )
                     stock_lots = self._inventory_stock_lots_from_batch_line(bl)
                     for unit_index, serial, lot_qty in stock_lots:
@@ -4733,6 +4809,7 @@ class ScmHandoffService:
                 ctx,
                 list({row.receipt_batch_id for row in adjustments if row.receipt_batch_id}),
             )
+            ovf_meta = self._inventory_ovf_meta_for_orders(ctx, order_cache)
             vendor_name_cache: dict[UUID, str | None] = {}
             for adj in adjustments:
                 order = order_cache.get(adj.order_header_id)
@@ -4756,6 +4833,7 @@ class ScmHandoffService:
                     receipt_at=adj.created_at,
                     fallback_description=adj.product_name,
                     vendor_name_cache=vendor_name_cache,
+                    ovf_meta=ovf_meta,
                 )
                 result.append(
                     {
@@ -4815,6 +4893,13 @@ class ScmHandoffService:
                     if row.received_on
                     else row.created_at
                 )
+                # Lazy ovf meta for imports linked to a PO (usually empty).
+                import_ovf_meta = (
+                    self._inventory_ovf_meta_for_orders(
+                        ctx,
+                        {linked_order.id: linked_order} if linked_order is not None else {},
+                    )
+                )
                 commercial = self._inventory_row_commercial_fields(
                     ctx,
                     order=linked_order,
@@ -4823,7 +4908,38 @@ class ScmHandoffService:
                     receipt_at=receipt_at,
                     fallback_description=(getattr(row, "description", None) or row.product_name),
                     vendor_name_cache=vendor_name_cache,
+                    ovf_meta=import_ovf_meta,
                 )
+                stored_invoice_date = getattr(row, "vendor_invoice_date", None)
+                stored_payment_due = getattr(row, "payment_due_date", None)
+                stored_vendor = (getattr(row, "vendor_name", None) or "").strip() or None
+                stored_invoice_no = (
+                    getattr(row, "vendor_invoice_number", None) or ""
+                ).strip() or None
+                stored_part = (getattr(row, "part_no", None) or "").strip() or None
+                stored_customer = (getattr(row, "customer_name", None) or "").strip() or None
+                stored_spoc = (getattr(row, "sales_spoc", None) or "").strip() or None
+                stored_terms = (getattr(row, "payment_terms", None) or "").strip() or None
+                if stored_vendor:
+                    commercial["vendor_name"] = stored_vendor
+                if stored_invoice_no:
+                    commercial["vendor_invoice_number"] = stored_invoice_no
+                if stored_invoice_date is not None:
+                    commercial["vendor_invoice_date"] = stored_invoice_date
+                    commercial["ageing_days"] = self._inventory_ageing_days(
+                        invoice_date=stored_invoice_date,
+                        receipt_at=receipt_at,
+                    )
+                if stored_part:
+                    commercial["part_no"] = stored_part
+                if stored_customer:
+                    commercial["customer_name"] = stored_customer
+                if stored_spoc:
+                    commercial["sales_spoc"] = stored_spoc
+                if stored_terms:
+                    commercial["payment_terms"] = stored_terms
+                if stored_payment_due is not None:
+                    commercial["payment_due_date"] = stored_payment_due
                 result.append(
                     {
                         "order_id": row.order_header_id,
@@ -4894,12 +5010,22 @@ class ScmHandoffService:
                 continue
             from datetime import date as date_cls
 
-            received_raw = raw.get("received_on")
-            received_on = None
-            if isinstance(received_raw, date_cls):
-                received_on = received_raw
-            elif received_raw and str(received_raw).strip():
-                received_on = date_cls.fromisoformat(str(received_raw).strip()[:10])
+            def _parse_optional_date(value) -> date_cls | None:
+                if isinstance(value, date_cls):
+                    return value
+                if value and str(value).strip():
+                    return date_cls.fromisoformat(str(value).strip()[:10])
+                return None
+
+            def _optional_text(value, *, limit: int) -> str | None:
+                text = str(value or "").strip()
+                return text[:limit] if text else None
+
+            received_on = _parse_optional_date(raw.get("received_on"))
+            vendor_invoice_date = _parse_optional_date(raw.get("vendor_invoice_date"))
+            payment_due_date = _parse_optional_date(raw.get("payment_due_date"))
+            if received_on is None and vendor_invoice_date is not None:
+                received_on = vendor_invoice_date
             unit_cost_raw = raw.get("unit_cost")
             unit_cost = float(unit_cost_raw) if unit_cost_raw not in (None, "") else None
             if unit_cost is not None and unit_cost < 0:
@@ -4923,6 +5049,16 @@ class ScmHandoffService:
                 company_po_number=po_number,
                 unit_cost=unit_cost,
                 received_on=received_on,
+                vendor_name=_optional_text(raw.get("vendor_name"), limit=255),
+                vendor_invoice_number=_optional_text(
+                    raw.get("vendor_invoice_number"), limit=120
+                ),
+                vendor_invoice_date=vendor_invoice_date,
+                part_no=_optional_text(raw.get("part_no"), limit=120),
+                customer_name=_optional_text(raw.get("customer_name"), limit=255),
+                sales_spoc=_optional_text(raw.get("sales_spoc"), limit=255),
+                payment_terms=_optional_text(raw.get("payment_terms"), limit=120),
+                payment_due_date=payment_due_date,
                 owner_employee_id=owner_employee_id,
                 owner_assigned_at=utcnow() if owner_employee_id else None,
                 open_for_sale=owner_employee_id is None,

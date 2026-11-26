@@ -31,6 +31,15 @@ class ProcInventoryImportLine(Base, *ProcTransactionMixin):
     # Legacy stock migration: purchase cost and original receipt date drive aging.
     unit_cost: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     received_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Manual / Excel commercial columns (aligned with inventory ledger headings).
+    vendor_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    vendor_invoice_number: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    vendor_invoice_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    part_no: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    customer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    sales_spoc: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    payment_terms: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    payment_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     owner_employee_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("master.master_employee.id", ondelete="SET NULL"),

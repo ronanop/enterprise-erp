@@ -1191,6 +1191,8 @@ export type ScmCorrespondenceDelivery = {
   order_id: string | null;
   company_po_number: string | null;
   kind: string | null;
+  sent_by_user_id?: string | null;
+  sent_by_name?: string | null;
 };
 
 export type ScmCorrespondenceTemplate = {
@@ -1636,9 +1638,13 @@ export type ProcurementInventoryRow = {
   vendor_id: string | null;
   vendor_name?: string | null;
   payment_terms?: string | null;
+  payment_due_date?: string | null;
   vendor_invoice_number?: string | null;
   vendor_invoice_date?: string | null;
   product_name: string | null;
+  part_no?: string | null;
+  customer_name?: string | null;
+  sales_spoc?: string | null;
   line_number: number;
   unit_index: number;
   serial_number: string;
@@ -1774,6 +1780,16 @@ export async function importProcurementInventory(
     description?: string | null;
     order_id?: string | null;
     warranty_valid_till?: string | null;
+    unit_cost?: number | null;
+    received_on?: string | null;
+    vendor_name?: string | null;
+    vendor_invoice_number?: string | null;
+    vendor_invoice_date?: string | null;
+    part_no?: string | null;
+    customer_name?: string | null;
+    sales_spoc?: string | null;
+    payment_terms?: string | null;
+    payment_due_date?: string | null;
   }>,
 ): Promise<{ imported: number }> {
   const body = {
@@ -1783,6 +1799,16 @@ export async function importProcurementInventory(
       description: line.description?.trim() || null,
       order_id: line.order_id || null,
       warranty_valid_till: line.warranty_valid_till?.trim() || null,
+      unit_cost: line.unit_cost ?? null,
+      received_on: line.received_on?.trim() || null,
+      vendor_name: line.vendor_name?.trim() || null,
+      vendor_invoice_number: line.vendor_invoice_number?.trim() || null,
+      vendor_invoice_date: line.vendor_invoice_date?.trim() || null,
+      part_no: line.part_no?.trim() || null,
+      customer_name: line.customer_name?.trim() || null,
+      sales_spoc: line.sales_spoc?.trim() || null,
+      payment_terms: line.payment_terms?.trim() || null,
+      payment_due_date: line.payment_due_date?.trim() || null,
     })),
   };
   const res = await apiClient<{ imported: number }>(`${SCM_API}/inventory/import`, {
@@ -2324,6 +2350,13 @@ export type VendorAddressEntry = {
   shipping?: VendorPostalAddress;
 };
 
+export type VendorDocument = {
+  doc_type: string;
+  file_name: string;
+  mime_type?: string | null;
+  content_base64?: string | null;
+};
+
 export type VendorOption = {
   id: string;
   label: string;
@@ -2344,6 +2377,7 @@ export type VendorOption = {
   mobile?: string;
   contactFirstName?: string;
   contactLastName?: string;
+  documents?: VendorDocument[];
 };
 
 export function emptyPostalAddress(
@@ -2492,6 +2526,7 @@ export function buildVendorAddressJson(
   extras?: {
     contactFirstName?: string;
     contactLastName?: string;
+    documents?: VendorDocument[];
   },
 ): Record<string, unknown> | null {
   const entries = addresses
@@ -2504,6 +2539,14 @@ export function buildVendorAddressJson(
   if (entries.length === 0) return null;
   const primary = entries[0];
   const billing = primary.billing || emptyPostalAddress({ street: primary.address });
+  const documents = (extras?.documents || [])
+    .map((doc) => ({
+      doc_type: (doc.doc_type || "").trim(),
+      file_name: (doc.file_name || "").trim(),
+      mime_type: (doc.mime_type || "").trim() || null,
+      content_base64: (doc.content_base64 || "").trim() || null,
+    }))
+    .filter((doc) => doc.file_name);
   return {
     line1: billing.street || primary.address,
     city: billing.city || "",
@@ -2514,6 +2557,7 @@ export function buildVendorAddressJson(
       first_name: extras?.contactFirstName?.trim() || null,
       last_name: extras?.contactLastName?.trim() || null,
     },
+    documents,
     billing: {
       country: billing.country,
       street: billing.street,
@@ -2569,6 +2613,7 @@ function toVendorOption(
     mobile?: string;
     contactFirstName?: string;
     contactLastName?: string;
+    documents?: VendorDocument[];
   },
 ): VendorOption {
   const id = String(row.id ?? "");
@@ -2590,6 +2635,22 @@ function toVendorOption(
     addrJson.contact && typeof addrJson.contact === "object"
       ? (addrJson.contact as Record<string, unknown>)
       : {};
+  const rawDocs = Array.isArray(addrJson.documents) ? addrJson.documents : [];
+  const documentsFromRow: VendorDocument[] = rawDocs
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const doc = item as Record<string, unknown>;
+      const fileName = typeof doc.file_name === "string" ? doc.file_name.trim() : "";
+      if (!fileName) return null;
+      return {
+        doc_type: typeof doc.doc_type === "string" ? doc.doc_type : "Other",
+        file_name: fileName,
+        mime_type: typeof doc.mime_type === "string" ? doc.mime_type : null,
+        content_base64:
+          typeof doc.content_base64 === "string" ? doc.content_base64 : null,
+      } satisfies VendorDocument;
+    })
+    .filter((doc): doc is VendorDocument => Boolean(doc));
   return {
     id,
     label: String(row.vendor_name ?? fallback?.vendor_name ?? id).trim(),
@@ -2624,6 +2685,8 @@ function toVendorOption(
       (typeof contact.last_name === "string" && contact.last_name) ||
       fallback?.contactLastName ||
       undefined,
+    documents:
+      documentsFromRow.length > 0 ? documentsFromRow : fallback?.documents || [],
   };
 }
 
@@ -2651,6 +2714,7 @@ export async function createVendorOption(input: {
   contactFirstName?: string;
   contactLastName?: string;
   tax_number?: string | null;
+  documents?: VendorDocument[];
 }): Promise<VendorOption> {
   const addressEntries =
     input.addressEntries?.filter((e) => e.address.trim()) ||
@@ -2666,6 +2730,7 @@ export async function createVendorOption(input: {
     address_json: buildVendorAddressJson(addressEntries, {
       contactFirstName: input.contactFirstName,
       contactLastName: input.contactLastName,
+      documents: input.documents,
     }),
   };
   const res = await resourceService.create<Record<string, unknown>>("/vendors", body);
@@ -2681,6 +2746,7 @@ export async function createVendorOption(input: {
     mobile: input.mobile || undefined,
     contactFirstName: input.contactFirstName,
     contactLastName: input.contactLastName,
+    documents: input.documents,
   });
 }
 
@@ -2720,6 +2786,7 @@ export async function updateVendorOption(input: {
   mobile?: string | null;
   contactFirstName?: string;
   contactLastName?: string;
+  documents?: VendorDocument[];
 }): Promise<VendorOption> {
   const addressEntries =
     input.addressEntries?.filter((e) => e.address.trim()) ||
@@ -2739,6 +2806,7 @@ export async function updateVendorOption(input: {
       address_json: buildVendorAddressJson(addressEntries, {
         contactFirstName: input.contactFirstName,
         contactLastName: input.contactLastName,
+        documents: input.documents,
       }),
     },
   });
@@ -2752,6 +2820,7 @@ export async function updateVendorOption(input: {
     mobile: input.mobile || undefined,
     contactFirstName: input.contactFirstName,
     contactLastName: input.contactLastName,
+    documents: input.documents,
   });
 }
 

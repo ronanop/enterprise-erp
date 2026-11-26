@@ -396,7 +396,6 @@ export function GrnsListPage() {
           vendorLabel={historyOrder.vendorLabel}
           pdfContext={historyOrder.pdfContext}
           onClose={() => setHistoryOrder(null)}
-          onReversed={() => void load(true)}
         />
       ) : null}
     </div>

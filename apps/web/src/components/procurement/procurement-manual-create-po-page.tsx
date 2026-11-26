@@ -550,6 +550,7 @@ export function ProcurementManualCreatePoPage() {
         mobile: vendorDraft.mobile,
         contactFirstName: vendorDraft.contactFirstName,
         contactLastName: vendorDraft.contactLastName,
+        documents: vendorDraft.documents,
       });
       setVendors((current) =>
         [...current.filter((v) => v.id !== created.id), created].sort((a, b) =>

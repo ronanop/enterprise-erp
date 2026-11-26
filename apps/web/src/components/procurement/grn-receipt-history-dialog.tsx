@@ -2,16 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { ExternalLink, FileDown, FileText, Layers, RotateCcw, X } from "lucide-react";
+import { ExternalLink, FileDown, FileText, Layers, X } from "lucide-react";
 
-import { ReverseGrnConfirmDialog } from "@/components/procurement/reverse-grn-confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { formatApiError } from "@/services/api-client";
 import {
   listOrderReceiptBatches,
   listReceiptBatchAttachments,
   openReceiptBatchAttachment,
-  reverseReceiptBatch,
   type ReceiptBatchAttachment,
   type ScmReceiptBatch,
 } from "@/services/procurement-service";
@@ -73,9 +71,7 @@ type GrnReceiptHistoryDialogProps = {
   poLabel: string;
   vendorLabel?: string;
   pdfContext: GrnReceiptPdfContext;
-  canReverse?: boolean;
   onClose: () => void;
-  onReversed?: () => void;
 };
 
 function batchPdfKey(batch: ScmReceiptBatch): string {
@@ -88,9 +84,7 @@ export function GrnReceiptHistoryDialog({
   poLabel,
   vendorLabel,
   pdfContext,
-  canReverse = true,
   onClose,
-  onReversed,
 }: GrnReceiptHistoryDialogProps) {
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -99,9 +93,6 @@ export function GrnReceiptHistoryDialog({
   const [sections, setSections] = useState<BatchSection[]>([]);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [pdfBusyKey, setPdfBusyKey] = useState<string | null>(null);
-  const [reverseTarget, setReverseTarget] = useState<ScmReceiptBatch | null>(null);
-  const [reverseReason, setReverseReason] = useState("");
-  const [reversing, setReversing] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -123,8 +114,6 @@ export function GrnReceiptHistoryDialog({
     setError(null);
     setSuccess(null);
     setSections([]);
-    setReverseTarget(null);
-    setReverseReason("");
     void (async () => {
       try {
         const batches = await listOrderReceiptBatches(orderId);
@@ -155,48 +144,10 @@ export function GrnReceiptHistoryDialog({
 
   if (!open || !mounted) return null;
 
-  const busy = reversing || pdfBusyKey !== null;
-
-  async function reloadSections() {
-    const batches = await listOrderReceiptBatches(orderId);
-    const sorted = [...batches].sort((a, b) => b.sequence - a.sequence);
-    const loaded = await Promise.all(
-      sorted.map(async (batch) => {
-        const id = batch.id?.trim();
-        const attachments =
-          id != null && id.length > 0
-            ? await listReceiptBatchAttachments(id).catch(() => [])
-            : [];
-        return { batch, attachments };
-      }),
-    );
-    setSections(loaded);
-  }
-
-  async function onConfirmReverse() {
-    const batch = reverseTarget;
-    const batchId = batch?.id?.trim();
-    const reason = reverseReason.trim();
-    if (!batch || !batchId || !reason || reversing) return;
-    setReversing(true);
-    setError(null);
-    try {
-      await reverseReceiptBatch(batchId, reason);
-      setReverseTarget(null);
-      setReverseReason("");
-      setSuccess(`GRN ${batch.grn_number} reversed.`);
-      await reloadSections();
-      onReversed?.();
-    } catch (err) {
-      setError(formatApiError(err, "Failed to reverse GRN"));
-    } finally {
-      setReversing(false);
-    }
-  }
+  const busy = pdfBusyKey !== null;
 
   return createPortal(
-    <>
-      <div
+    <div
         className="fixed inset-0 z-[200] flex items-center justify-center bg-foreground/40 p-4"
         role="presentation"
         onClick={() => {
@@ -308,29 +259,12 @@ export function GrnReceiptHistoryDialog({
                             <span className="font-medium text-foreground tabular-nums">{units}</span>
                             {" units in this GRN"}
                           </div>
-                          {canReverse && !reversed && batch.id ? (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="h-8 w-8 cursor-pointer border-border p-0 text-destructive transition-colors duration-200 hover:bg-destructive/10 hover:text-destructive"
-                              disabled={busy}
-                              title={`Reverse GRN ${batch.grn_number}`}
-                              aria-label={`Reverse GRN ${batch.grn_number}`}
-                              onClick={() => {
-                                setReverseTarget(batch);
-                                setReverseReason("");
-                              }}
-                            >
-                              <RotateCcw className="size-4 stroke-[2]" />
-                            </Button>
-                          ) : null}
                           <Button
                             type="button"
                             size="sm"
                             variant="outline"
                             className="h-8 w-8 cursor-pointer border-border p-0 text-[#0369A1] transition-colors duration-200 hover:bg-sky-50 hover:text-[#0369A1]"
-                            disabled={!hasLines || pdfBusyKey === batchPdfKey(batch) || reversing}
+                            disabled={!hasLines || pdfBusyKey === batchPdfKey(batch)}
                             title={
                               hasLines
                                 ? `Download GRN PDF for ${batch.grn_number}`
@@ -495,22 +429,7 @@ export function GrnReceiptHistoryDialog({
             </Button>
           </div>
         </div>
-      </div>
-      <ReverseGrnConfirmDialog
-        batch={reverseTarget}
-        reason={reverseReason}
-        reversing={reversing}
-        error={reverseTarget ? error : null}
-        onReasonChange={setReverseReason}
-        onCancel={() => {
-          if (!reversing) {
-            setReverseTarget(null);
-            setReverseReason("");
-          }
-        }}
-        onConfirm={() => void onConfirmReverse()}
-      />
-    </>,
+      </div>,
     document.body,
   );
 }

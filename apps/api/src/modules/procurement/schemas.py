@@ -1554,9 +1554,13 @@ class ScmProcurementInventoryRowResponse(BaseModel):
     vendor_id: UUID | None = None
     vendor_name: str | None = None
     payment_terms: str | None = None
+    payment_due_date: date | None = None
     vendor_invoice_number: str | None = None
     vendor_invoice_date: date | None = None
     product_name: str | None = None
+    part_no: str | None = None
+    customer_name: str | None = None
+    sales_spoc: str | None = None
     line_number: int = 0
     unit_index: int
     serial_number: str
@@ -1584,6 +1588,14 @@ class ScmInventoryImportLineRequest(BaseModel):
     unit_cost: float | None = Field(default=None, ge=0)
     received_on: date | None = None
     owner_employee_id: UUID | None = None
+    vendor_name: str | None = None
+    vendor_invoice_number: str | None = None
+    vendor_invoice_date: date | None = None
+    part_no: str | None = None
+    customer_name: str | None = None
+    sales_spoc: str | None = None
+    payment_terms: str | None = None
+    payment_due_date: date | None = None
 
     @field_validator("serial_number", "product_name")
     @classmethod
@@ -1592,14 +1604,22 @@ class ScmInventoryImportLineRequest(BaseModel):
 
         return assert_safe_plain_text(value, field="value")
 
-    @field_validator("description")
+    @field_validator(
+        "description",
+        "vendor_name",
+        "vendor_invoice_number",
+        "part_no",
+        "customer_name",
+        "sales_spoc",
+        "payment_terms",
+    )
     @classmethod
-    def reject_description_markup(cls, value: str | None) -> str | None:
+    def reject_optional_text_markup(cls, value: str | None) -> str | None:
         if value is None:
             return None
         from shared.text_safety import assert_safe_plain_text
 
-        return assert_safe_plain_text(value, field="description")
+        return assert_safe_plain_text(value, field="value")
 
 
 class ScmInventoryImportRequest(BaseModel):

@@ -136,14 +136,6 @@ export function VendorsListPage() {
     });
   }, [rows, query]);
 
-  function contactDisplayName(row: VendorOption): string {
-    const name = [row.contactFirstName, row.contactLastName]
-      .map((part) => part?.trim())
-      .filter(Boolean)
-      .join(" ");
-    return name || "-";
-  }
-
   function openAddDialog() {
     setEditing(null);
     setDialogError(null);
@@ -205,6 +197,7 @@ export function VendorsListPage() {
           mobile: draft.mobile,
           contactFirstName: draft.contactFirstName,
           contactLastName: draft.contactLastName,
+          documents: draft.documents,
         });
         upsertRow({
           ...updated,
@@ -230,6 +223,7 @@ export function VendorsListPage() {
           mobile: draft.mobile,
           contactFirstName: draft.contactFirstName,
           contactLastName: draft.contactLastName,
+          documents: draft.documents,
         });
         upsertRow(created);
       }
@@ -295,19 +289,18 @@ export function VendorsListPage() {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by vendor or contact…"
-            aria-label="Search by vendor or contact"
+            placeholder="Search by vendor or email…"
+            aria-label="Search by vendor or email"
             className="h-8 max-w-xs shadow-none"
           />
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1080px] text-left text-sm">
+          <table className="w-full min-w-[980px] text-left text-sm">
             <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="w-10 px-3 py-2 font-medium" />
                 <th className="px-3 py-2 font-medium">S.No</th>
                 <th className="px-3 py-2 font-medium">Vendor name</th>
-                <th className="px-3 py-2 font-medium">Contact</th>
                 <th className="px-3 py-2 font-medium">Type</th>
                 <th className="px-3 py-2 font-medium">Address</th>
                 <th className="px-3 py-2 font-medium">POs</th>
@@ -318,14 +311,14 @@ export function VendorsListPage() {
             <tbody>
               {loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
                     Loading vendors…
                   </td>
                 </tr>
               ) : null}
               {!loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
                     No vendors yet. Use Add vendor to create one.
                   </td>
                 </tr>
@@ -362,7 +355,6 @@ export function VendorsListPage() {
                       </td>
                       <td className="px-3 py-2 tabular-nums text-muted-foreground">{index + 1}</td>
                       <td className="px-3 py-2 font-medium">{row.label}</td>
-                      <td className="px-3 py-2">{contactDisplayName(row)}</td>
                       <td className="px-3 py-2 capitalize">{row.vendorType || "-"}</td>
                       <td className="max-w-[280px] px-3 py-2">
                         <div className="truncate" title={row.addresses.join(" | ") || row.address}>
@@ -403,7 +395,7 @@ export function VendorsListPage() {
                     </tr>
                     {expanded && summary ? (
                       <tr className="border-b border-border/70 bg-muted/20">
-                        <td colSpan={9} className="px-3 py-3">
+                        <td colSpan={8} className="px-3 py-3">
                           <div className="rounded-md border border-border bg-card">
                             <div className="border-b border-border px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                               Purchase orders with {row.label}
@@ -471,8 +463,8 @@ export function VendorsListPage() {
         title={editing ? "Edit vendor" : "Add vendor"}
         description={
           editing
-            ? "Update contact, addresses, GST, and supply details."
-            : "Enter contact and vendor details. Add one or more addresses (billing, shipping, GST, and supply per location)."
+            ? "Update contact, addresses, GST, documents, and supply details."
+            : "Enter contact and vendor details, upload at least one vendor document, and add addresses."
         }
         confirmLabel={editing ? "Save changes" : "Save vendor"}
         busy={dialogBusy}

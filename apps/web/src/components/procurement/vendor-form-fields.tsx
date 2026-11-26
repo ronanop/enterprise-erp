@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
+import { FileUp, Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { FinanceField, FinanceSelect } from "@/components/finance/journals/finance-form-field";
@@ -10,8 +10,19 @@ import {
   composePostalAddress,
   emptyPostalAddress,
   type VendorAddressEntry,
+  type VendorDocument,
   type VendorPostalAddress,
 } from "@/services/procurement-service";
+
+const VENDOR_DOC_TYPES = [
+  "GST certificate",
+  "PAN card",
+  "Cancelled cheque",
+  "MSME certificate",
+  "Other",
+] as const;
+
+const MAX_VENDOR_DOC_BYTES = 2 * 1024 * 1024;
 
 export const INDIAN_STATES = [
   "Andhra Pradesh",
@@ -54,6 +65,7 @@ export type VendorFormDraft = {
   mobile: string;
   vendorType: string;
   addresses: VendorFormAddressBlock[];
+  documents: VendorDocument[];
 };
 
 export function emptyVendorFormAddressBlock(
@@ -105,6 +117,7 @@ export function emptyVendorFormDraft(
     mobile: partial?.mobile || "",
     vendorType: partial?.vendorType || "domestic",
     addresses,
+    documents: partial?.documents ? [...partial.documents] : [],
   };
 }
 
@@ -118,6 +131,7 @@ export function vendorFormFromOption(row: {
   taxNumber?: string;
   addressEntries?: VendorAddressEntry[];
   addresses?: string[];
+  documents?: VendorDocument[];
 }): VendorFormDraft {
   const entries =
     row.addressEntries?.filter((e) => e.address || e.billing || e.gstNumber) || [];
@@ -155,6 +169,7 @@ export function vendorFormFromOption(row: {
     mobile: row.mobile,
     vendorType: row.vendorType || "domestic",
     addresses: addressBlocks,
+    documents: row.documents || [],
   });
 }
 
@@ -217,6 +232,13 @@ export function validateVendorFormDraft(draft: VendorFormDraft): string | null {
   }
   if (!draft.email.trim()) return "Email is required.";
   if (!draft.mobile.trim()) return "Phone is required.";
+  if (draft.documents.length === 0) {
+    return "Upload at least one vendor document (GST / PAN / cheque / other).";
+  }
+  for (const doc of draft.documents) {
+    if (!doc.file_name?.trim()) return "Each vendor document needs a file name.";
+    if (!doc.doc_type?.trim()) return "Select a document type for each upload.";
+  }
   if (draft.addresses.length === 0) return "Add at least one address.";
   for (let i = 0; i < draft.addresses.length; i += 1) {
     const err = validateAddressBlock(draft.addresses[i], i);
@@ -510,6 +532,109 @@ export function VendorFormFields({
             disabled={disabled}
           />
         </FinanceField>
+      </div>
+
+      <div className="space-y-3 rounded-md border border-border bg-muted/20 p-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Vendor documents *
+          </p>
+          <label
+            className={
+              disabled
+                ? "inline-flex cursor-not-allowed items-center gap-1.5 rounded-md border border-dashed border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground opacity-50"
+                : "inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-dashed border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors duration-200 hover:bg-muted"
+            }
+          >
+            <FileUp className="size-3.5" aria-hidden />
+            Upload document
+            <input
+              type="file"
+              className="sr-only"
+              disabled={disabled}
+              accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (!file || disabled) return;
+                if (file.size > MAX_VENDOR_DOC_BYTES) {
+                  window.alert("Document must be 2 MB or smaller.");
+                  return;
+                }
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const result = typeof reader.result === "string" ? reader.result : "";
+                  const comma = result.indexOf(",");
+                  const contentBase64 = comma >= 0 ? result.slice(comma + 1) : result;
+                  if (!contentBase64) return;
+                  onChange({
+                    ...value,
+                    documents: [
+                      ...value.documents,
+                      {
+                        doc_type: VENDOR_DOC_TYPES[0],
+                        file_name: file.name,
+                        mime_type: file.type || "application/octet-stream",
+                        content_base64: contentBase64,
+                      },
+                    ],
+                  });
+                };
+                reader.readAsDataURL(file);
+              }}
+            />
+          </label>
+        </div>
+        {value.documents.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Upload GST certificate, PAN, cancelled cheque, or other vendor KYC file.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {value.documents.map((doc, index) => (
+              <li
+                key={`${doc.file_name}-${index}`}
+                className="flex flex-wrap items-center gap-2 rounded-md border border-border/70 bg-card px-2.5 py-2"
+              >
+                <FinanceSelect
+                  value={doc.doc_type}
+                  disabled={disabled}
+                  className="h-8 min-w-[140px] flex-1"
+                  onChange={(e) => {
+                    const documents = [...value.documents];
+                    documents[index] = { ...doc, doc_type: e.target.value };
+                    onChange({ ...value, documents });
+                  }}
+                >
+                  {VENDOR_DOC_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </FinanceSelect>
+                <span className="min-w-0 flex-1 truncate text-xs font-medium" title={doc.file_name}>
+                  {doc.file_name}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 w-8 cursor-pointer p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  disabled={disabled}
+                  aria-label={`Remove ${doc.file_name}`}
+                  onClick={() =>
+                    onChange({
+                      ...value,
+                      documents: value.documents.filter((_, i) => i !== index),
+                    })
+                  }
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className="space-y-3">

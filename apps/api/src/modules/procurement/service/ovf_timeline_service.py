@@ -444,7 +444,7 @@ class OvfTimelineService:
                     entity_id=row.entity_id,
                     entity_label=entity_label_value,
                     title=title,
-                    summary=" · ".join(summary_parts) if summary_parts else row.entity_name,
+                    summary=" · ".join(summary_parts) if summary_parts else None,
                     action=row.operation,
                     actor_id=row.performed_by,
                     actor_name=user_names.get(row.performed_by) if row.performed_by else None,
