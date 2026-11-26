@@ -24,7 +24,7 @@ import { Input } from "@/components/ui/input";
 import { hrmsPastelSurface } from "@/config/hrms-theme";
 import { cn } from "@/lib/utils";
 import { isAuthenticated } from "@/lib/auth";
-import { ApiClientError } from "@/services/api-client";
+import { ApiClientError, formatApiError } from "@/services/api-client";
 import {
   INBOX_CATEGORY_LABELS,
   loadHrEssInbox,
@@ -108,7 +108,7 @@ export function HrEssInboxPage() {
       if (dir) setLeaveDir(dir);
     } catch (err) {
       toast(
-        err instanceof ApiClientError ? err.message : "Failed to load employee requests",
+        formatApiError(err, "Couldn't load employee requests. Try again."),
         "error",
       );
     } finally {
@@ -204,7 +204,7 @@ export function HrEssInboxPage() {
       setSelected(null);
       await load();
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Action failed", "error");
+      toast(formatApiError(err, "Couldn't complete that action. Try again."), "error");
     } finally {
       setActingId(null);
     }

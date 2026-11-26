@@ -7,7 +7,7 @@ import { CheckCircle2, FileUp, Loader2, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ApiClientError } from "@/services/api-client";
+import { ApiClientError, formatApiError } from "@/services/api-client";
 import {
   clearStoredBgPortalAccess,
   fetchBgPortalMeta,
@@ -160,7 +160,7 @@ export function BgCheckCandidatePortal({ token }: { token: string }) {
       setAuthenticated(false);
       setPortal(null);
     } catch (e) {
-      setMetaError(e instanceof ApiClientError ? e.message : "Could not open BG portal.");
+      setMetaError(formatApiError(e, "Couldn't open the background-check portal. Try again."));
     } finally {
       setLoading(false);
     }
@@ -190,9 +190,7 @@ export function BgCheckCandidatePortal({ token }: { token: string }) {
       setAuthenticated(false);
       setPortal(null);
       setError(
-        e instanceof ApiClientError
-          ? e.message
-          : "Invalid login email or access code.",
+        formatApiError(e, "Invalid login email or access code."),
       );
     } finally {
       setLoggingIn(false);
@@ -324,7 +322,7 @@ export function BgCheckCandidatePortal({ token }: { token: string }) {
       if (i < STEPS.length - 1) setStep(STEPS[i + 1].id);
     } catch (e) {
       if (handleSessionExpired(e)) return;
-      setError(e instanceof ApiClientError ? e.message : "Could not save. Try again.");
+      setError(formatApiError(e, "Couldn't save. Try again."));
     } finally {
       setSaving(false);
     }
@@ -359,7 +357,7 @@ export function BgCheckCandidatePortal({ token }: { token: string }) {
       setPortal(res.portal);
     } catch (e) {
       if (handleSessionExpired(e)) return;
-      setError(e instanceof ApiClientError ? e.message : "Submit failed.");
+      setError(formatApiError(e, "Couldn't submit. Try again."));
     } finally {
       setSaving(false);
     }

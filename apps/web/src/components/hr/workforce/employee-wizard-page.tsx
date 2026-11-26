@@ -1,6 +1,7 @@
 "use client";
 
 import { newUuid } from "@/lib/uuid";
+import { formatApiError } from "@/services/api-client";
 
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import Link from "next/link";
@@ -382,7 +383,7 @@ export function EmployeeWizardPage() {
       toast(`Employee ${created.employeeCode} created`, "success");
       router.push(`/hr/workforce/${created.id}`);
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Create failed", "error");
+      toast(formatApiError(err, "Couldn't create. Try again."), "error");
     } finally {
       setSubmitting(false);
     }
@@ -412,7 +413,7 @@ export function EmployeeWizardPage() {
                     setPreviewCase(null);
                     setOnboardingOpen(true);
                   })
-                  .catch(() => toast("Failed to load onboarding cases", "error"));
+                  .catch(() => toast("Couldn't load onboarding cases. Refresh the page.", "error"));
               }}
             >
               <FolderOpen className="size-3.5" />

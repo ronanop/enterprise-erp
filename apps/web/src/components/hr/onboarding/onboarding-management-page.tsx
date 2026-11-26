@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { formatApiError } from "@/services/api-client";
 import { useRouter } from "next/navigation";
 import {
   Check,
@@ -282,7 +283,7 @@ export function OnboardingManagementPage() {
         prev ? (next.cases.find((c) => c.id === prev.id) ?? null) : null,
       );
     } catch {
-      toast("Failed to load onboarding data", "error");
+      toast("Couldn't load onboarding. Refresh the page.", "error");
     } finally {
       setLoading(false);
     }
@@ -351,7 +352,7 @@ export function OnboardingManagementPage() {
       );
       await load();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Could not start onboarding", "error");
+      toast(formatApiError(e, "Could not start onboarding"), "error");
       throw e;
     }
   }
@@ -380,7 +381,7 @@ export function OnboardingManagementPage() {
         toast("Could not send invitation - save the case and try again", "error");
       }
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Could not send invitation", "error");
+      toast(formatApiError(e, "Could not send invitation"), "error");
     }
   }
 
@@ -895,7 +896,7 @@ export function OnboardingManagementPage() {
                                         "verified",
                                       );
                                       if (!next) {
-                                        toast("Failed to verify document", "error");
+                                        toast("Couldn't verify this document. Refresh and try again.", "error");
                                         return;
                                       }
                                       setDocsCase(next);
@@ -903,9 +904,7 @@ export function OnboardingManagementPage() {
                                       void load();
                                     } catch (e) {
                                       toast(
-                                        e instanceof Error
-                                          ? e.message
-                                          : "Failed to verify document",
+                                        formatApiError(e, "Couldn't verify document. Try again."),
                                         "error",
                                       );
                                     }
@@ -924,7 +923,7 @@ export function OnboardingManagementPage() {
                                         "rejected",
                                       );
                                       if (!next) {
-                                        toast("Failed to reject document", "error");
+                                        toast("Couldn't reject this document. Try again.", "error");
                                         return;
                                       }
                                       setDocsCase(next);
@@ -935,9 +934,7 @@ export function OnboardingManagementPage() {
                                       void load();
                                     } catch (e) {
                                       toast(
-                                        e instanceof Error
-                                          ? e.message
-                                          : "Failed to reject document",
+                                        formatApiError(e, "Couldn't reject document. Try again."),
                                         "error",
                                       );
                                     }
@@ -1097,7 +1094,7 @@ export function OnboardingManagementPage() {
           try {
             const next = await updateOnboardingAssignment(caseId, input);
             if (!next) {
-              toast("Failed to save assignment", "error");
+              toast("Couldn't save the assignment. Try again.", "error");
               return;
             }
             toast("Assignment saved");
@@ -1112,7 +1109,7 @@ export function OnboardingManagementPage() {
             );
             void load();
           } catch (e) {
-            toast(e instanceof Error ? e.message : "Failed to save assignment", "error");
+            toast(formatApiError(e, "Couldn't save assignment. Try again."), "error");
             throw e;
           }
         }}
@@ -1121,7 +1118,7 @@ export function OnboardingManagementPage() {
             try {
               const next = await verifyDocument(caseId, docId, status);
               if (!next) {
-                throw new Error("Failed to update document status");
+                throw new Error("Couldn't update document status. Try again.");
               }
               if (status === "rejected") {
                 setInviteCase(next);
@@ -1168,7 +1165,7 @@ export function OnboardingManagementPage() {
               });
             } catch (e) {
               toast(
-                e instanceof Error ? e.message : "Failed to update document status",
+                formatApiError(e, "Couldn't update document status. Try again."),
                 "error",
               );
               throw e;
@@ -1211,7 +1208,7 @@ export function OnboardingManagementPage() {
             setDetailCase(null);
             void load();
           } catch (e) {
-            toast(e instanceof Error ? e.message : "Activation failed", "error");
+            toast(formatApiError(e, "Couldn't activate the employee. Try again."), "error");
             throw e;
           }
         }}
@@ -1238,7 +1235,7 @@ export function OnboardingManagementPage() {
               void load();
             }
           } catch (e) {
-            toast(e instanceof Error ? e.message : "Activation failed", "error");
+            toast(formatApiError(e, "Couldn't activate the employee. Try again."), "error");
             throw e;
           }
         }}

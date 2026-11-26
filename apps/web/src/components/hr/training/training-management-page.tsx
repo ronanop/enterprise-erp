@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { isAuthenticated } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { ApiClientError } from "@/services/api-client";
+import { ApiClientError, formatApiError } from "@/services/api-client";
 import {
   createTrainingProgram,
   deleteTrainingProgram,
@@ -61,7 +61,7 @@ export function TrainingManagementPage() {
     try {
       setDir(await loadTrainingDirectory());
     } catch {
-      toast("Failed to load training data", "error");
+      toast("Couldn't load training data. Refresh the page.", "error");
     } finally {
       setLoading(false);
     }
@@ -341,7 +341,7 @@ export function TrainingManagementPage() {
               setConfirmDelete(null);
               void load();
             })
-            .catch((e) => toast(e instanceof ApiClientError ? e.message : "Delete failed", "error"))
+            .catch((e) => toast(formatApiError(e, "Couldn't delete. Try again."), "error"))
             .finally(() => setDeleting(false));
         }}
       />
@@ -608,7 +608,7 @@ function TrainingFormDrawer({
                   onClose();
                 })
                 .catch((e) =>
-                  toast(e instanceof ApiClientError ? e.message : program ? "Update failed" : "Create failed", "error"),
+                  toast(formatApiError(e, program ? "Couldn't update. Try again." : "Couldn't create. Try again."), "error"),
                 )
                 .finally(() => setBusy(false));
             }}

@@ -8,7 +8,7 @@ import { HrStatusBadge } from "@/components/hr/hr-primitives";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { ApiClientError } from "@/services/api-client";
+import { ApiClientError, formatApiError } from "@/services/api-client";
 import {
   listPeopleRoles,
   updatePeopleRole,
@@ -94,7 +94,7 @@ export function PeopleRolesPanel() {
     try {
       setRows(await listPeopleRoles());
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Failed to load people roles", "error");
+      toast(formatApiError(err, "Couldn't load people roles. Refresh the page."), "error");
       setRows([]);
     } finally {
       setLoading(false);
@@ -155,7 +155,7 @@ export function PeopleRolesPanel() {
         );
       }
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Could not save role", "error");
+      toast(formatApiError(err, "Couldn't save the role. Try again."), "error");
     } finally {
       setSavingId(null);
     }

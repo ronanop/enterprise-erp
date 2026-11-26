@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { formatApiError } from "@/services/api-client";
 import {
   AlertTriangle,
   BarChart3,
@@ -114,7 +115,7 @@ export function PerformanceManagementPage() {
     try {
       setDir(await loadPerformanceDirectory());
     } catch {
-      toast("Failed to load performance data", "error");
+      toast("Couldn't load performance data. Refresh the page.", "error");
     } finally {
       setLoading(false);
     }
@@ -671,7 +672,7 @@ export function PerformanceManagementPage() {
               toast("Goal assigned");
               void load();
             })
-            .catch((e) => toast(e instanceof Error ? e.message : "Failed", "error"));
+            .catch((e) => toast(formatApiError(e, "Couldn't complete that action. Try again."), "error"));
         }}
       />
       <KpiDrawer
@@ -683,7 +684,7 @@ export function PerformanceManagementPage() {
               toast("KPI created");
               void load();
             })
-            .catch((e) => toast(e instanceof Error ? e.message : "Failed", "error"));
+            .catch((e) => toast(formatApiError(e, "Couldn't complete that action. Try again."), "error"));
         }}
       />
       <OkrDrawer
@@ -695,7 +696,7 @@ export function PerformanceManagementPage() {
               toast("OKR created");
               void load();
             })
-            .catch((e) => toast(e instanceof Error ? e.message : "Failed", "error"));
+            .catch((e) => toast(formatApiError(e, "Couldn't complete that action. Try again."), "error"));
         }}
       />
       <CycleDrawer
@@ -719,7 +720,7 @@ export function PerformanceManagementPage() {
               toast("Review started");
               void load();
             })
-            .catch((e) => toast(e instanceof Error ? e.message : "Failed", "error"));
+            .catch((e) => toast(formatApiError(e, "Couldn't complete that action. Try again."), "error"));
         }}
       />
       <FeedbackDrawer
@@ -772,7 +773,7 @@ export function PerformanceManagementPage() {
               toast("Appraisal started");
               void load();
             })
-            .catch((e) => toast(e instanceof Error ? e.message : "Failed", "error"));
+            .catch((e) => toast(formatApiError(e, "Couldn't complete that action. Try again."), "error"));
         }}
       />
     </div>

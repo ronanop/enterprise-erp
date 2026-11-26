@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Building2 } from "lucide-react";
 
 import { getStoredOrgContext, setStoredOrgContext } from "@/lib/org-context-storage";
-import { ApiClientError, contextService } from "@/services/api-client";
+import { ApiClientError, contextService, formatApiError } from "@/services/api-client";
 import type { OrgCompanyOption } from "@/types/org-context";
 
 const ALL_ENTITIES = "all";
@@ -78,7 +78,7 @@ export function HrEntityHeader() {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof ApiClientError ? err.message : "Could not load entities");
+          setError(formatApiError(err, "Could not load entities"));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -121,7 +121,7 @@ export function HrEntityHeader() {
       }
       window.location.reload();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Could not switch entity");
+      setError(formatApiError(err, "Could not switch entity"));
       setSwitching(false);
     }
   }

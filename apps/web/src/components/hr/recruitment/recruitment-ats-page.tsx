@@ -194,7 +194,7 @@ export function RecruitmentAtsPage() {
     try {
       setDir(await loadAtsDirectory());
     } catch {
-      toast("Failed to load recruitment data", "error");
+      toast("Couldn't load recruitment data. Refresh the page.", "error");
     } finally {
       setLoading(false);
     }
@@ -351,7 +351,7 @@ export function RecruitmentAtsPage() {
       }
       await load();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to save job", "error");
+      toast(formatApiError(e, "Couldn't save job. Try again."), "error");
       throw e;
     }
   }
@@ -362,7 +362,7 @@ export function RecruitmentAtsPage() {
       toast(n === 1 ? "Candidate deleted" : `${n} candidates deleted`);
       await load();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to delete candidates", "error");
+      toast(formatApiError(e, "Couldn't delete candidates. Try again."), "error");
     }
   }
 
@@ -415,7 +415,7 @@ export function RecruitmentAtsPage() {
       }
       await load();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed", "error");
+      toast(formatApiError(e, "Couldn't complete that action. Try again."), "error");
       throw e;
     }
   }
@@ -583,7 +583,7 @@ export function RecruitmentAtsPage() {
                     setPreviewDoc(doc);
                   } catch (e) {
                     toast(
-                      e instanceof Error ? e.message : "Could not open resume",
+                      formatApiError(e, "Could not open resume"),
                       "error",
                     );
                   }
@@ -596,7 +596,7 @@ export function RecruitmentAtsPage() {
                     toast("Accepted — moved to Screening");
                     await load();
                   } catch (e) {
-                    toast(e instanceof Error ? e.message : "Accept failed", "error");
+                    toast(formatApiError(e, "Accept failed"), "error");
                   }
                 })();
               }}
@@ -607,7 +607,7 @@ export function RecruitmentAtsPage() {
                     toast("Applicant rejected");
                     await load();
                   } catch (e) {
-                    toast(e instanceof Error ? e.message : "Reject failed", "error");
+                    toast(formatApiError(e, "Reject failed"), "error");
                   }
                 })();
               }}
@@ -648,7 +648,7 @@ export function RecruitmentAtsPage() {
                   );
                   await load();
                 } catch (e) {
-                  toast(e instanceof Error ? e.message : "Stage update failed", "error");
+                  toast(formatApiError(e, "Stage update failed"), "error");
                 }
               })();
             }}
@@ -758,7 +758,7 @@ export function RecruitmentAtsPage() {
                   }
                   await load();
                 } catch (e) {
-                  toast(e instanceof Error ? e.message : "Advance failed", "error");
+                  toast(formatApiError(e, "Advance failed"), "error");
                 }
               })();
             }}
@@ -769,7 +769,7 @@ export function RecruitmentAtsPage() {
                   toast("Candidate rejected");
                   await load();
                 } catch (e) {
-                  toast(e instanceof Error ? e.message : "Reject failed", "error");
+                  toast(formatApiError(e, "Reject failed"), "error");
                 }
               })();
             }}
@@ -808,7 +808,7 @@ export function RecruitmentAtsPage() {
                   await load();
                 } catch (e) {
                   toast(
-                    e instanceof Error ? e.message : "Could not create BG document portal",
+                    formatApiError(e, "Could not create BG document portal"),
                     "error",
                   );
                 }
@@ -830,7 +830,7 @@ export function RecruitmentAtsPage() {
                   await load();
                 } catch (e) {
                   toast(
-                    e instanceof Error ? e.message : "Could not save BG review",
+                    formatApiError(e, "Could not save BG review"),
                     "error",
                   );
                 }
@@ -867,7 +867,7 @@ export function RecruitmentAtsPage() {
                   setPreviewDoc(doc);
                 } catch (e) {
                   toast(
-                    e instanceof Error ? e.message : "Could not open offer letter",
+                    formatApiError(e, "Could not open offer letter"),
                     "error",
                   );
                 }
@@ -894,7 +894,7 @@ export function RecruitmentAtsPage() {
                   await load();
                 } catch (e) {
                   toast(
-                    e instanceof Error ? e.message : "Failed to mark backed out",
+                    formatApiError(e, "Couldn't mark backed out. Try again."),
                     "error",
                   );
                 }
@@ -929,7 +929,7 @@ export function RecruitmentAtsPage() {
                   await load();
                 } catch (e) {
                   toast(
-                    e instanceof Error ? e.message : "Failed to accept offer",
+                    formatApiError(e, "Couldn't accept offer. Try again."),
                     "error",
                   );
                 }
@@ -994,7 +994,7 @@ export function RecruitmentAtsPage() {
                   setOnboardingOpen(true);
                 } catch (e) {
                   toast(
-                    e instanceof Error ? e.message : "Could not open onboarding",
+                    formatApiError(e, "Could not open onboarding"),
                     "error",
                   );
                 }
@@ -1029,7 +1029,7 @@ export function RecruitmentAtsPage() {
                 }
                 await load();
               } catch (e) {
-                toast(e instanceof Error ? e.message : "Failed to send offer", "error");
+                toast(formatApiError(e, "Couldn't send offer. Try again."), "error");
               }
             })();
           }}
@@ -1043,7 +1043,7 @@ export function RecruitmentAtsPage() {
                   toast(email.error || "Could not resend offer letter", "error");
                 }
               } catch (e) {
-                toast(e instanceof Error ? e.message : "Resend failed", "error");
+                toast(formatApiError(e, "Resend failed"), "error");
               }
             })();
           }}
@@ -1149,7 +1149,7 @@ export function RecruitmentAtsPage() {
                 router.push("/hr/onboarding");
               } catch (e) {
                 toast(
-                  e instanceof Error ? e.message : "Could not start onboarding",
+                  formatApiError(e, "Could not start onboarding"),
                   "error",
                 );
               } finally {
@@ -1219,7 +1219,7 @@ export function RecruitmentAtsPage() {
                 void load();
               } catch (e) {
                 toast(
-                  e instanceof Error ? e.message : "No file content available to view",
+                  formatApiError(e, "No file content available to view"),
                   "error",
                 );
               }
@@ -1283,9 +1283,7 @@ export function RecruitmentAtsPage() {
                 void load();
               } catch (e) {
                 toast(
-                  e instanceof Error
-                    ? e.message
-                    : "No file content available to download",
+                  formatApiError(e, "No file content available to download"),
                   "error",
                 );
               }
@@ -1358,7 +1356,7 @@ export function RecruitmentAtsPage() {
             toast(patch ? "Candidate updated" : "Candidate notes saved");
             await load();
           } catch (e) {
-            toast(e instanceof Error ? e.message : "Failed to save candidate", "error");
+            toast(formatApiError(e, "Couldn't save the candidate. Try again."), "error");
             throw e;
           }
         }}
@@ -1400,7 +1398,7 @@ export function RecruitmentAtsPage() {
             setSchedulePrefill(null);
             await load();
           } catch (e) {
-            toast(e instanceof Error ? e.message : "Failed to schedule interview", "error");
+            toast(formatApiError(e, "Couldn't schedule interview. Try again."), "error");
             throw e;
           }
         }}
@@ -1445,7 +1443,7 @@ export function RecruitmentAtsPage() {
               setOfferPrefill(null);
               await load();
             } catch (e) {
-              toast(e instanceof Error ? e.message : "Failed to save offer", "error");
+              toast(formatApiError(e, "Couldn't save offer. Try again."), "error");
             }
           })();
         }}
@@ -1586,7 +1584,7 @@ export function RecruitmentAtsPage() {
               setOutcomeInterview(null);
               await load();
             } catch (e) {
-              toast(e instanceof Error ? e.message : "Failed to save outcome", "error");
+              toast(formatApiError(e, "Couldn't save outcome. Try again."), "error");
             }
           })();
         }}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { formatApiError } from "@/services/api-client";
 import { useRouter } from "next/navigation";
 import { FileText, Lock, Scale, Unlock, Users } from "lucide-react";
 
@@ -289,7 +290,7 @@ export function PayrollRunDetailPage({ runId }: { runId: string }) {
             setLockAction(null);
             void refresh();
           } catch (e) {
-            toast(e instanceof Error ? e.message : "Failed", "error");
+            toast(formatApiError(e, "Couldn't complete that action. Try again."), "error");
           } finally {
             setLocking(false);
           }

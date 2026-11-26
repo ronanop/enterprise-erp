@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { formatApiError } from "@/services/api-client";
 import { Download, Upload } from "lucide-react";
 
 import {
@@ -67,7 +68,7 @@ export function DownloadManagerRosterDrawer({
       return;
     }
     if (!/^\d{4}-\d{2}$/.test(month)) {
-      toast("Month must be YYYY-MM", "error");
+      toast("Enter the month as YYYY-MM (for example 2026-11).", "error");
       return;
     }
     setDownloading(true);
@@ -77,7 +78,7 @@ export function DownloadManagerRosterDrawer({
         onClose();
       })
       .catch((err) => {
-        toast(err instanceof Error ? err.message : "Download failed", "error");
+        toast(formatApiError(err, "Download failed"), "error");
       })
       .finally(() => setDownloading(false));
   }
@@ -116,7 +117,7 @@ export function DownloadManagerRosterDrawer({
                 downloadTextFile(filename, csv, "text/csv");
                 toast(`Downloaded plain CSV for ${n} employees`, "success");
               } catch (err) {
-                toast(err instanceof Error ? err.message : "CSV failed", "error");
+                toast(formatApiError(err, "CSV failed"), "error");
               }
             }}
           >
@@ -243,7 +244,7 @@ export function UploadManagerRosterDrawer({
       setRaw(matrixToCsv(matrix));
     } catch (err) {
       setRaw("");
-      toast(err instanceof Error ? err.message : "Could not read file", "error");
+      toast(formatApiError(err, "Could not read file"), "error");
     }
   }
 
@@ -254,7 +255,7 @@ export function UploadManagerRosterDrawer({
       return;
     }
     if (!/^\d{4}-\d{2}$/.test(month)) {
-      toast("Month must be YYYY-MM", "error");
+      toast("Enter the month as YYYY-MM (for example 2026-11).", "error");
       return;
     }
     if (!raw.trim()) {
@@ -264,7 +265,7 @@ export function UploadManagerRosterDrawer({
     const result = validateManagerRosterCsv(directory, raw, { managerId, month });
     setValidation(result);
     if (result.errors.length && result.ok === 0) {
-      toast("Validation failed - see errors", "error");
+      toast("Fix the highlighted errors, then try again.", "error");
     } else if (result.errors.length) {
       toast(`Validated with ${result.errors.length} warning(s)`, "info");
     } else {

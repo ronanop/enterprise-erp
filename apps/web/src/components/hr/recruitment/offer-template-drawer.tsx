@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { formatApiError } from "@/services/api-client";
 import { createPortal } from "react-dom";
 import { Expand, FileText, Loader2, Upload, X } from "lucide-react";
 
@@ -177,7 +178,7 @@ export function OfferTemplateDrawer({ open, initial, onClose, onSave }: Props) {
       }),
     )
       .catch((e) => {
-        setError(e instanceof Error ? e.message : "Could not save template.");
+        setError(formatApiError(e, "Could not save template."));
       })
       .finally(() => setSaving(false));
   }

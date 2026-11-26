@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { HrField, HrFormDialog, HrSelect } from "@/components/hr/hr-form-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ApiClientError } from "@/services/api-client";
+import { ApiClientError, formatApiError } from "@/services/api-client";
 import {
   createDesignation,
   listHrBranchOptions,
@@ -56,7 +56,7 @@ export function DesignationFormDialog({ open, onClose, onSaved }: Props) {
       setName("");
       setJobLevel("");
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to create designation");
+      setError(formatApiError(err, "Couldn't create designation. Try again."));
     } finally {
       setSaving(false);
     }

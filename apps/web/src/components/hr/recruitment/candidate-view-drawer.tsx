@@ -10,6 +10,7 @@ import {
   type SelectHTMLAttributes,
 } from "react";
 import { createPortal } from "react-dom";
+import { formatApiError } from "@/services/api-client";
 import {
   Activity,
   Briefcase,
@@ -437,7 +438,7 @@ export function CandidateViewDrawer({
       await onSave?.({ candidateId: candidate!.id, patch, notes });
       setEditing(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save");
+      setError(formatApiError(e, "Couldn't save. Try again."));
     } finally {
       setSaving(false);
     }

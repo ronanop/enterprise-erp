@@ -83,7 +83,7 @@ export function LeaveBalanceImportDrawer({
       setColumnMapping([]);
       setRows([]);
       setWarnings([]);
-      setErrors([err instanceof Error ? err.message : "Could not read file."]);
+      setErrors([formatApiError(err, "Could not read file.")]);
     }
   }
 
@@ -116,7 +116,7 @@ export function LeaveBalanceImportDrawer({
         onImported();
       }
     } catch (err) {
-      toast(formatApiError(err, err instanceof ApiClientError ? err.message : "Import failed"), "error");
+      toast(formatApiError(err, "Couldn't import. Try again."), "error");
     } finally {
       setBusy(false);
     }

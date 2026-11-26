@@ -32,7 +32,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { RowActionsItem, RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { nextCode, type HrSetupTab } from "@/config/hr-setup";
 import { getStoredOrgContext } from "@/lib/org-context-storage";
-import { ApiClientError, resourceService } from "@/services/api-client";
+import { ApiClientError, resourceService, formatApiError } from "@/services/api-client";
 import {
   archiveLocal,
   cell,
@@ -319,7 +319,7 @@ export function SetupEntityPanel({
         setOrgLookups(lookups);
       }
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Failed to load records", "error");
+      toast(formatApiError(err, "Couldn't load records. Refresh the page."), "error");
       setRows([]);
     } finally {
       setLoading(false);
@@ -535,7 +535,7 @@ export function SetupEntityPanel({
       setMode(null);
       await load();
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Save failed", "error");
+      toast(formatApiError(err, "Couldn't save. Try again."), "error");
     } finally {
       setSaving(false);
     }
@@ -575,7 +575,7 @@ export function SetupEntityPanel({
       setConfirm(null);
       await load();
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Action failed", "error");
+      toast(formatApiError(err, "Couldn't complete that action. Try again."), "error");
     } finally {
       setSaving(false);
     }

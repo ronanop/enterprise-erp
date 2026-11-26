@@ -95,7 +95,7 @@ export function LeaveManagementPage() {
     try {
       setDir(await loadLeaveDirectory());
     } catch {
-      toast("Failed to load leave data", "error");
+      toast("Couldn't load leave data. Refresh the page.", "error");
     } finally {
       setLoading(false);
     }

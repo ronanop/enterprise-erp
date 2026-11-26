@@ -1608,7 +1608,7 @@ async function resolveEmploymentForSalaryAssign(input: {
 }): Promise<string> {
   const empId = input.employeeUuid;
   if (!UUID_RE.test(empId)) {
-    throw new Error("Employee UUID required to assign salary");
+    throw new Error("Pick a valid employee from the directory before assigning salary.");
   }
   const listed = await resourceService.list("/hr/employment", {
     employee_id: empId,
@@ -1634,7 +1634,7 @@ async function resolveEmploymentForSalaryAssign(input: {
   });
   const newId = String(created.data?.id ?? "");
   if (!UUID_RE.test(newId)) {
-    throw new Error("Could not create employment record for salary assign");
+    throw new Error("Couldn't set up employment for payroll. Ensure the employee has a branch, then retry.");
   }
   return newId;
 }
@@ -1807,7 +1807,7 @@ export async function assignEmployeeSalary(
       });
       const apiId = String(res.data?.id ?? "");
       if (!UUID_RE.test(apiId)) {
-        throw new Error("Salary assign API did not return an id");
+        throw new Error("Salary wasn't assigned. Refresh and try again.");
       }
       row.id = apiId;
       row.employeeId = employeeUuid;
@@ -2833,14 +2833,14 @@ export function exportPayslipText(slip: PayslipRecord): string {
 
 export async function fetchPayrollRunBankExportCsv(runId: string): Promise<string> {
   if (!UUID_RE.test(runId)) {
-    throw new Error("Payroll run id must be a UUID to export bank file from API");
+    throw new Error("This payroll run isn't ready for bank export yet. Run payroll again, then export.");
   }
   const res = await apiClient<{ csv: string }>(`/payroll/payroll-runs/${runId}/bank-export`, {
     method: "GET",
   });
   const csv = res.data?.csv;
   if (!csv) {
-    throw new Error("Bank export returned no CSV data");
+    throw new Error("Bank file came back empty. Check the run has employees, then retry.");
   }
   return csv;
 }

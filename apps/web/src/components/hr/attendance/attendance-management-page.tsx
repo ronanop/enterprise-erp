@@ -150,7 +150,7 @@ export function AttendanceManagementPage() {
         setTodayRecords(next.records.filter((r) => r.attendanceDate === day));
       }
     } catch {
-      toast("Failed to load attendance", "error");
+      toast("Couldn't load attendance. Refresh the page.", "error");
     } finally {
       if (!opts?.silent) setLoading(false);
     }

@@ -21,7 +21,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { isAuthenticated } from "@/lib/auth";
-import { ApiClientError } from "@/services/api-client";
+import { ApiClientError, formatApiError } from "@/services/api-client";
 import {
   decideMeetingRequest,
   loadTrainingDirectory,
@@ -61,7 +61,7 @@ export function MeetingRoomPage() {
     try {
       setDir(await loadTrainingDirectory());
     } catch {
-      toast("Failed to load meeting room data", "error");
+      toast("Couldn't load meeting room data. Refresh the page.", "error");
     } finally {
       setLoading(false);
     }
@@ -79,7 +79,7 @@ export function MeetingRoomPage() {
         toast(action === "approve" ? "Request approved" : "Request rejected", "success");
         void load();
       } catch (e) {
-        toast(e instanceof ApiClientError ? e.message : "Action failed", "error");
+        toast(formatApiError(e, "Couldn't complete that action. Try again."), "error");
       } finally {
         setDecidingId(null);
       }
@@ -235,7 +235,7 @@ function RequestDetailModal({
       toast(action === "approve" ? "Request approved" : "Request rejected", "success");
       onSaved();
     } catch (e) {
-      toast(e instanceof ApiClientError ? e.message : "Action failed", "error");
+      toast(formatApiError(e, "Couldn't complete that action. Try again."), "error");
     } finally {
       setBusy(false);
     }

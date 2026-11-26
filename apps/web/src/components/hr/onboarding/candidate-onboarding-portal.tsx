@@ -367,9 +367,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
       } catch (e) {
         if (cancelled) return;
         setError(
-          e instanceof ApiClientError
-            ? e.message
-            : "Could not load this onboarding link. Please try again.",
+          formatApiError(e, "Could not load this onboarding link. Please try again."),
         );
         setLoading(false);
       }
@@ -419,7 +417,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
       }
       setCaseRow(updated);
     } catch (e) {
-      const msg = e instanceof ApiClientError ? e.message : "Could not accept terms.";
+      const msg = formatApiError(e, "Couldn't record acceptance. Try again.");
       setStepError(msg);
     } finally {
       setAcceptingTerms(false);
@@ -465,7 +463,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
         const saved = await savePortalProgress(token, next);
         if (!saved) setStepError("Could not save progress. Please try again.");
       } catch (e) {
-        setStepError(e instanceof ApiClientError ? e.message : "Could not save progress.");
+        setStepError(formatApiError(e, "Couldn't save your progress. Try again."));
       }
     })();
   }
@@ -533,7 +531,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
         const saved = await savePortalProgress(token, advanced);
         if (!saved) setStepError("Could not save progress. Please try again.");
       } catch (e) {
-        setStepError(e instanceof ApiClientError ? e.message : "Could not save progress.");
+        setStepError(formatApiError(e, "Couldn't save your progress. Try again."));
       }
     })();
   }
@@ -629,7 +627,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
         return false;
       }
     } catch (e) {
-      setStepError(e instanceof ApiClientError ? e.message : "Could not save the file.");
+      setStepError(formatApiError(e, "Couldn't save the file. Try again."));
       return false;
     }
     return true;
@@ -647,7 +645,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
       const saved = await savePortalProgress(token, nextPortal);
       if (!saved) setStepError("Could not update documents. Please try again.");
     } catch (e) {
-      setStepError(e instanceof ApiClientError ? e.message : "Could not update documents.");
+      setStepError(formatApiError(e, "Couldn't update documents. Try again."));
     }
   }
 
@@ -703,7 +701,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
       const saved = await savePortalProgress(token, p);
       if (!saved) setStepError("Could not save progress. Please try again.");
     } catch (e) {
-      setStepError(e instanceof ApiClientError ? e.message : "Could not save progress.");
+      setStepError(formatApiError(e, "Couldn't save your progress. Try again."));
     } finally {
       setSaving(false);
     }

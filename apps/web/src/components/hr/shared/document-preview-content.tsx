@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { formatApiError } from "@/services/api-client";
 import { FileWarning, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -396,7 +397,7 @@ function DocxPreview({
         setHtml(result.value || "<p><em>Empty document</em></p>");
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Could not open Word document");
+        setError(formatApiError(err, "Could not open Word document"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -533,7 +534,7 @@ function SpreadsheetPreview({
         );
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Could not open spreadsheet");
+        setError(formatApiError(err, "Could not open spreadsheet"));
       } finally {
         if (!cancelled) setLoading(false);
       }

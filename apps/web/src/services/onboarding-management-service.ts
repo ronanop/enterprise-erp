@@ -816,7 +816,7 @@ export async function startOnboarding(input: StartOnboardingInput): Promise<Onbo
   };
 
   const saved = upsertCase(caseRow);
-  if (!saved) throw new Error("Could not save onboarding case locally");
+  if (!saved) throw new Error("Couldn't save this onboarding case. Try again or contact IT.");
   appendOnboardingAudit({
     caseId: saved.id,
     action: "start_onboarding",

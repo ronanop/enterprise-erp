@@ -200,7 +200,7 @@ export function HrExecutiveDashboardPage() {
         setData(full);
         writeDashboardCache(cacheScope, full);
       } catch {
-        if (!silent) toast("Failed to load HR dashboard", "error");
+        if (!silent) toast("Couldn't load the HR dashboard. Refresh the page.", "error");
         // On failure keep whatever was already on screen / in cache.
         const fallback = readDashboardCache(cacheScope);
         if (fallback) setData(fallback);

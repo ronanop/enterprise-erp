@@ -11,28 +11,142 @@ import { clampListPageSize, rewriteHrmsApiPath } from "@/lib/hrms-api";
 import { env, getApiUrl, resolveApiUrl, setApiUrl } from "@/utils/env";
 import type { ApiResponse, ErrorResponse, TokenData, UserProfile } from "@/types/api";
 
+/** Rewrite technical / permission / infra errors into plain language for toasts and forms. */
+export function humanizeUserError(
+  message: string,
+  opts?: { status?: number; fallback?: string },
+): string {
+  const fallback =
+    (opts?.fallback || "").trim() || "Something went wrong. Try again.";
+  const msg = (message || "").trim();
+  if (!msg) return fallback;
+
+  const status = opts?.status;
+  const lower = msg.toLowerCase();
+
+  if (
+    status === 401 ||
+    lower === "unauthorized" ||
+    lower.includes("session expired") ||
+    lower.includes("not authenticated")
+  ) {
+    return "Your session expired. Sign in again.";
+  }
+
+  if (
+    status === 403 ||
+    lower.includes("missing permission") ||
+    lower === "forbidden" ||
+    /^[a-z0-9_.:-]+:[a-z0-9_-]+$/i.test(msg)
+  ) {
+    if (
+      lower.includes("don't have") ||
+      lower.includes("do not have") ||
+      lower.includes("ask an admin")
+    ) {
+      return msg;
+    }
+    return "You don't have permission to do this. Ask an admin to grant access.";
+  }
+
+  if (lower.includes("cannot reach the api") || lower.includes("failed to fetch")) {
+    return "Cannot reach the server. Check your connection and try again.";
+  }
+
+  if (lower.includes("timed out") || lower.includes("timeout")) {
+    return "The request timed out. Try again in a moment.";
+  }
+
+  if (lower.includes("invalid api response") || lower.includes("unexpected response")) {
+    return "The server returned an unexpected response. Try again.";
+  }
+
+  if (lower.includes("internal server error")) {
+    return "Something went wrong on the server. Try again in a moment.";
+  }
+
+  if (lower.includes("database") && lower.includes("unavailable")) {
+    return "The system is temporarily unavailable. Try again in a moment.";
+  }
+
+  if (lower.includes("returned no id") || lower.includes("did not return an id")) {
+    return "Save didn't complete correctly. Refresh and try again.";
+  }
+
+  if (lower.includes("invalid template response") || lower.includes("invalid assign response") || lower.includes("invalid return response")) {
+    return "Save didn't complete correctly. Refresh and try again.";
+  }
+
+  if (lower.includes("data url")) {
+    return "The uploaded file isn't valid. Choose the file again and retry.";
+  }
+
+  if (/\buuid\b/i.test(msg) && /(required|must be)/i.test(msg)) {
+    return "Select a valid record and try again.";
+  }
+
+  if (/(to (the )?database|to storage)\b/i.test(msg)) {
+    return fallback === "Something went wrong. Try again."
+      ? "Couldn't save. Try again."
+      : fallback;
+  }
+
+  if (
+    /^(failed|error|request failed|save failed|action failed|delete failed|create failed|update failed|import failed|submit failed)$/i.test(
+      msg,
+    )
+  ) {
+    return fallback;
+  }
+
+  // Keep already-clear validation / business messages.
+  return msg;
+}
+
 export class ApiClientError extends Error {
+  /** Original server/client message before humanization (for permission matching). */
+  public readonly rawMessage: string;
+
   constructor(
     message: string,
     public readonly status: number,
     public readonly errors: string[] = [],
   ) {
-    super(message);
+    super(humanizeUserError(message, { status }));
     this.name = "ApiClientError";
+    this.rawMessage = message;
   }
 }
 
+/**
+ * User-facing error text for toasts and inline form errors.
+ * Prefer this over raw `err.message` so permission codes and infra jargon never show.
+ */
 export function formatApiError(err: unknown, fallback: string): string {
+  const safeFallback =
+    (fallback || "").trim() || "Something went wrong. Try again.";
+
   if (err instanceof ApiClientError) {
-    if (err.errors.length > 0) {
-      return `${err.message}: ${err.errors.join("; ")}`;
+    const detail =
+      err.errors.length > 0
+        ? err.errors.filter((e) => e && !/missing permission/i.test(e)).join("; ")
+        : "";
+    // Message is already humanized in the constructor; append soft validation detail only when useful.
+    if (detail && detail.length < 180 && !/traceback|sqlalchemy|psycopg/i.test(detail)) {
+      const combined = `${err.message} (${detail})`;
+      return humanizeUserError(combined, { status: err.status, fallback: safeFallback });
     }
-    return err.message;
+    return err.message || safeFallback;
   }
   if (err instanceof Error && err.message.trim()) {
-    return err.message;
+    return humanizeUserError(err.message, { fallback: safeFallback });
   }
-  return fallback;
+  return safeFallback;
+}
+
+/** Alias — use in HR UI catch blocks. */
+export function toUserMessage(err: unknown, fallback: string): string {
+  return formatApiError(err, fallback);
 }
 
 type RequestOptions = Omit<RequestInit, "body"> & {

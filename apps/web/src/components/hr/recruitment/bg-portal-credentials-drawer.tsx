@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { formatApiError } from "@/services/api-client";
 import {
   Download,
   Eye,
@@ -178,7 +179,7 @@ export function BgPortalCredentialsDrawer({
       onResent?.();
       await load();
     } catch (e) {
-      onToast?.(e instanceof Error ? e.message : "Could not resend portal invite", "error");
+      onToast?.(formatApiError(e, "Could not resend portal invite"), "error");
     } finally {
       setResending(false);
     }

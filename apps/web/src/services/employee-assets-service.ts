@@ -83,7 +83,7 @@ export async function assignEmployeeAsset(input: {
   });
   const row = res.data;
   if (!row || typeof row !== "object") {
-    throw new ApiClientError("Invalid assign response", 500);
+    throw new ApiClientError("Asset assign didn't complete. Try again.", 500);
   }
   return mapAsset(row as Record<string, unknown>);
 }
@@ -95,7 +95,7 @@ export async function returnEmployeeAsset(assignmentId: string): Promise<Employe
   );
   const row = res.data;
   if (!row || typeof row !== "object") {
-    throw new ApiClientError("Invalid return response", 500);
+    throw new ApiClientError("Asset return didn't complete. Try again.", 500);
   }
   return mapAsset(row as Record<string, unknown>);
 }

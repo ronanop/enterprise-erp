@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RowActionsItem, RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { nextCode, type HrSetupTab } from "@/config/hr-setup";
-import { ApiClientError, resourceService } from "@/services/api-client";
+import { ApiClientError, resourceService, formatApiError } from "@/services/api-client";
 import {
   listSetupApi,
   loadSetupOrgLookups,
@@ -93,7 +93,7 @@ export function HolidayCalendarPanel({ tab }: { tab: HrSetupTab }) {
       setBranches(lookups.branches);
       setCompanies(lookups.companies);
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Failed to load calendars", "error");
+      toast(formatApiError(err, "Couldn't load calendars. Refresh the page."), "error");
       setRows([]);
     } finally {
       setLoading(false);
@@ -255,7 +255,7 @@ export function HolidayCalendarPanel({ tab }: { tab: HrSetupTab }) {
       setMode(null);
       await load();
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Save failed", "error");
+      toast(formatApiError(err, "Couldn't save. Try again."), "error");
     } finally {
       setSaving(false);
     }
@@ -276,7 +276,7 @@ export function HolidayCalendarPanel({ tab }: { tab: HrSetupTab }) {
       toast(`Calendar ${next}`);
       await load();
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Status update failed", "error");
+      toast(formatApiError(err, "Couldn't update status. Try again."), "error");
     }
   }
 
@@ -287,7 +287,7 @@ export function HolidayCalendarPanel({ tab }: { tab: HrSetupTab }) {
       setConfirmDelete(null);
       await load();
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Delete failed", "error");
+      toast(formatApiError(err, "Couldn't delete. Try again."), "error");
     }
   }
 

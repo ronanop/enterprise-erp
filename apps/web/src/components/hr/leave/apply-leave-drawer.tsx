@@ -11,7 +11,7 @@ import {
 } from "@/components/hr/setup/setup-drawer";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
-import { ApiClientError } from "@/services/api-client";
+import { ApiClientError, formatApiError } from "@/services/api-client";
 import {
   applyLeave,
   validateLeaveApplication,
@@ -86,7 +86,7 @@ export function ApplyLeaveDrawer({
       onSaved();
       onClose();
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : err instanceof Error ? err.message : "Submit failed", "error");
+      toast(formatApiError(err, "Couldn't submit. Try again."), "error");
     } finally {
       setSaving(false);
     }

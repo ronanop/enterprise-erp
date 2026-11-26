@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { isAuthenticated } from "@/lib/auth";
 import { looksLikeManagerRole } from "@/lib/hr/reporting-managers";
 import { cn } from "@/lib/utils";
-import { ApiClientError } from "@/services/api-client";
+import { ApiClientError, formatApiError } from "@/services/api-client";
 import { listPeopleRoles, type PeopleRoleRow } from "@/services/people-role-service";
 
 const ZOOM_MIN = 0.5;
@@ -262,7 +262,7 @@ export function OrgChartPage() {
       if (err instanceof ApiClientError && (err.status === 401 || err.status === 403)) {
         setAuthBlocked(true);
       } else {
-        setError(err instanceof Error ? err.message : "Could not load org chart");
+        setError(formatApiError(err, "Couldn't load the org chart. Refresh the page."));
       }
       setRows([]);
     } finally {

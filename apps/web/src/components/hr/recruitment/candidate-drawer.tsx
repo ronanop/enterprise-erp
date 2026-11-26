@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { formatApiError } from "@/services/api-client";
 import { Plus, X } from "lucide-react";
 
 import {
@@ -306,7 +307,7 @@ export function CandidateDrawer({
       );
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save candidate");
+      setError(formatApiError(e, "Couldn't save the candidate. Try again."));
     } finally {
       setSaving(false);
     }

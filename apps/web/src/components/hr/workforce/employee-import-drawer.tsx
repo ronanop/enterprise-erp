@@ -31,7 +31,7 @@ import {
   invalidateEmployeeDirectoryCache,
 } from "@/services/employee-management-service";
 import { bulkImportEmployees, clearAllEmployees } from "@/services/employee-import-service";
-import { ApiClientError, contextService } from "@/services/api-client";
+import { ApiClientError, contextService, formatApiError } from "@/services/api-client";
 import { cn } from "@/lib/utils";
 
 type EntityOption = { id: string; label: string };
@@ -325,7 +325,7 @@ export function EmployeeImportDrawer({
       setColumnMapping([]);
       setRows([]);
       setWarnings([]);
-      setErrors([err instanceof Error ? err.message : "Could not read file."]);
+      setErrors([formatApiError(err, "Could not read file.")]);
     }
   }
 
@@ -341,7 +341,7 @@ export function EmployeeImportDrawer({
     try {
       await loadSheets(sourceFile, ordered);
     } catch (err) {
-      setErrors([err instanceof Error ? err.message : "Could not read selected sheets."]);
+      setErrors([formatApiError(err, "Could not read selected sheets.")]);
     }
   }
 
@@ -352,7 +352,7 @@ export function EmployeeImportDrawer({
     try {
       await loadSheets(sourceFile, sheetNames);
     } catch (err) {
-      setErrors([err instanceof Error ? err.message : "Could not read selected sheets."]);
+      setErrors([formatApiError(err, "Could not read selected sheets.")]);
     }
   }
 
@@ -391,7 +391,7 @@ export function EmployeeImportDrawer({
       toast(result.message || `Cleared ${result.deleted} employee(s)`, "success");
       onImported();
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Clear failed", "error");
+      toast(formatApiError(err, "Couldn't clear records. Try again."), "error");
     } finally {
       setClearing(false);
     }
@@ -424,12 +424,12 @@ export function EmployeeImportDrawer({
         onImported();
       }
     } catch (err) {
+      const raw =
+        err instanceof ApiClientError ? (err.rawMessage || err.message) : "";
       const msg =
-        err instanceof ApiClientError
-          ? err.message === "Invalid API response"
-            ? "Import failed — API did not return JSON (backend may have crashed or timed out). Retry after API restart."
-            : err.message
-          : "Import failed";
+        /invalid api response/i.test(raw)
+          ? "Import didn't finish (server timed out or returned an unexpected response). Wait a minute and try again."
+          : formatApiError(err, "Couldn't import employees. Try again.");
       toast(msg, "error");
     } finally {
       setBusy(false);

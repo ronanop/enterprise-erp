@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { formatApiError } from "@/services/api-client";
 import {
   Building2,
   Eye,
@@ -238,7 +239,7 @@ export function OffersPanel({
                           })
                           .catch((e) =>
                             onToast?.(
-                              e instanceof Error ? e.message : "Could not delete template",
+                              formatApiError(e, "Could not delete template"),
                               "error",
                             ),
                           );
@@ -447,7 +448,7 @@ export function OffersPanel({
             setEditTemplate(null);
             onToast?.(input.id ? "Template updated" : "Template created");
           } catch (e) {
-            const msg = e instanceof Error ? e.message : "Could not save template";
+            const msg = formatApiError(e, "Couldn't save the offer template. Try again.");
             onToast?.(msg, "error");
             throw e instanceof Error ? e : new Error(msg);
           }

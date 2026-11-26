@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { formatApiError } from "@/services/api-client";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +41,7 @@ export function CandidateOnboardingLogin() {
       });
       window.location.replace(`/onboarding/${token}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not sign in. Please try again.");
+      setError(formatApiError(err, "Could not sign in. Please try again."));
     } finally {
       setLoading(false);
     }

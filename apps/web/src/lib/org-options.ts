@@ -114,24 +114,18 @@ export function isMissingPermissionError(
 ): boolean {
   if (!(err instanceof ApiClientError) || err.status !== 403) return false;
   if (!permissionCode) return true;
-  const msg = (err.message || "").toLowerCase();
-  return msg.includes("missing permission") && msg.includes(permissionCode.toLowerCase());
+  const msg = `${err.rawMessage || err.message || ""}`.toLowerCase();
+  return msg.includes(permissionCode.toLowerCase());
 }
 
 export function employeeDirectoryPermissionMessage(err?: unknown): string {
+  if (err instanceof ApiClientError && err.status === 403) {
+    return "You don't have access to the employee list. Ask an admin to grant employee read access.";
+  }
   if (err instanceof ApiClientError && err.message?.trim()) {
-    if (isMissingPermissionError(err, EMPLOYEE_READ_PERM)) {
-      return (
-        `Missing permission to load employees (${EMPLOYEE_READ_PERM}). ` +
-        "Ask an admin to grant this on your Asset role."
-      );
-    }
     return err.message;
   }
-  return (
-    `Missing permission to load employees (${EMPLOYEE_READ_PERM}). ` +
-    "Ask an admin to grant this on your Asset role."
-  );
+  return "You don't have access to the employee list. Ask an admin to grant employee read access.";
 }
 
 async function listAllResourcePages(apiPath: string): Promise<Record<string, unknown>[]> {
@@ -251,7 +245,7 @@ export async function listDepartmentOptions(
     if (options.throwOnError) {
       if (isMissingPermissionError(err, DEPARTMENT_READ_PERM)) {
         throw new ApiClientError(
-          `Missing permission to load departments (${DEPARTMENT_READ_PERM}). Ask an admin.`,
+          "You don't have access to departments. Ask an admin to grant department read access.",
           403,
         );
       }

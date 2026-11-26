@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Download, FileText, Loader2, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { ApiClientError } from "@/services/api-client";
+import { ApiClientError, formatApiError } from "@/services/api-client";
 import {
   clearStoredBgVendorAccess,
   downloadBgVendorDocument,
@@ -49,7 +49,7 @@ export function BgVendorDownloadPortal({ token }: { token: string }) {
       setDocuments([]);
     } catch (e) {
       setMetaError(
-        e instanceof ApiClientError ? e.message : "Could not open download portal.",
+        formatApiError(e, "Could not open download portal."),
       );
     } finally {
       setLoading(false);
@@ -84,9 +84,7 @@ export function BgVendorDownloadPortal({ token }: { token: string }) {
       setAuthenticated(false);
       setDocuments([]);
       setError(
-        e instanceof ApiClientError
-          ? e.message
-          : "Invalid login email or access code.",
+        formatApiError(e, "Invalid login email or access code."),
       );
     } finally {
       setLoggingIn(false);
@@ -101,7 +99,7 @@ export function BgVendorDownloadPortal({ token }: { token: string }) {
       triggerBase64Download(file.filename, file.content_base64, file.content_type);
     } catch (e) {
       setError(
-        e instanceof ApiClientError ? e.message : "Could not download this file.",
+        formatApiError(e, "Could not download this file."),
       );
     } finally {
       setDownloadingId(null);

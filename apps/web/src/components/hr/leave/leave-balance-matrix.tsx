@@ -501,7 +501,7 @@ function EmployeeLeaveBalanceDrawer({
       toast(okMsg, "success");
       onSaved();
     } catch (e) {
-      toast(formatApiError(e, "Action failed"), "error");
+      toast(formatApiError(e, "Couldn't complete that action. Try again."), "error");
     } finally {
       setBusy(false);
     }

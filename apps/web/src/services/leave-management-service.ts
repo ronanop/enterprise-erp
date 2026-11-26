@@ -787,7 +787,10 @@ export function validateLeaveApplication(
 export async function applyLeave(payload: ApplyLeavePayload, dir: LeaveDirectory): Promise<void> {
   const validation = validateLeaveApplication(payload, dir);
   if (!validation.ok) {
-    throw new Error(validation.messages.find((m) => m.tone === "error")?.text ?? "Validation failed");
+    throw new Error(
+      validation.messages.find((m) => m.tone === "error")?.text
+      ?? "Fix the highlighted leave fields, then try again.",
+    );
   }
   const emp = dir.options.employees.find((e) => e.id === payload.employeeId);
   const lt = dir.leaveTypes.find((t) => t.id === payload.leaveTypeId);

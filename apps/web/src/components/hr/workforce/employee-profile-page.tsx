@@ -70,7 +70,7 @@ import {
   updateEmployeeRecord,
 } from "@/services/employee-management-service";
 import type { BgDocumentDisplay } from "@/services/bg-check-portal-service";
-import { ApiClientError, resourceService } from "@/services/api-client";
+import { ApiClientError, resourceService, formatApiError } from "@/services/api-client";
 import { listSalaryRevisionsForEmployee } from "@/services/payroll-management-service";
 import { formatInr } from "@/services/payroll-service";
 import { listEntityOptions } from "@/services/hr-setup-service";
@@ -589,7 +589,7 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
       setEditOpen(false);
       void load();
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Update failed", "error");
+      toast(formatApiError(err, "Couldn't update. Try again."), "error");
     }
   }
 
@@ -2501,7 +2501,7 @@ function CertificatesTab({
       setFile(null);
       toast("Certificate uploaded", "success");
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Could not upload certificate", "error");
+      toast(formatApiError(err, "Couldn't upload the certificate. Try again."), "error");
     } finally {
       setSaving(false);
     }
@@ -2514,7 +2514,7 @@ function CertificatesTab({
       await persistDocs(nextDocs);
       toast("Certificate removed", "success");
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Could not remove certificate", "error");
+      toast(formatApiError(err, "Couldn't remove the certificate. Try again."), "error");
     } finally {
       setSaving(false);
     }

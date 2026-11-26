@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { formatApiError } from "@/services/api-client";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Loader2, Pencil } from "lucide-react";
@@ -114,7 +115,7 @@ export function SalaryStructureFormPage({
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load structure");
+          setError(formatApiError(err, "Couldn't load this salary structure. Refresh the page."));
         }
       })
       .finally(() => {
@@ -197,7 +198,7 @@ export function SalaryStructureFormPage({
       router.push(LIST_HREF);
       router.refresh();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Save failed";
+      const message = formatApiError(err, "Couldn't save. Try again.");
       setError(message);
       toast(message, "error");
     } finally {

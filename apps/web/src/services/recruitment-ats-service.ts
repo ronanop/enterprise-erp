@@ -1457,7 +1457,7 @@ export async function createJob(input: CreateJobInput): Promise<JobOpening> {
     const apiId = String(res.data?.id ?? "");
     const doc = String(res.data?.document_number ?? row.jobCode);
     if (!apiId) {
-      throw new Error("Job requisition API returned no id");
+      throw new Error("Job opening wasn't saved correctly. Refresh and try again.");
     }
     row.apiId = apiId;
     row.jobCode = doc;
@@ -1669,13 +1669,13 @@ export async function createCandidate(input: CreateCandidateInput): Promise<AtsC
     const apiId = String(res.data?.id ?? "");
     const code = String(res.data?.candidate_code ?? row.candidateCode);
     if (!apiId) {
-      throw new Error("Candidate API returned no id");
+      throw new Error("Candidate wasn't saved correctly. Refresh and try again.");
     }
     row.apiId = apiId;
     row.id = apiId;
     row.candidateCode = code;
   } catch (err) {
-    throw new Error(formatApiError(err, "Failed to save candidate to database"));
+    throw new Error(formatApiError(err, "Couldn't save the candidate. Try again."));
   }
 
   const all = loadCandidates();
@@ -1931,7 +1931,7 @@ export async function applyCandidateToJob(
 
   if (isAuthenticated()) {
     if (!isUuid(candidateId) || !isUuid(jobId)) {
-      throw new Error("Candidate or job is missing a database id — save them first, then apply.");
+      throw new Error("Save the candidate and job first, then apply them together.");
     }
     if (!branchId) {
       throw new Error("Branch context required to link candidate to job. Refresh and try again.");
@@ -1947,7 +1947,7 @@ export async function applyCandidateToJob(
       });
       const apiId = String(res.data?.id ?? "");
       if (!apiId) {
-        throw new Error("Application API returned no id");
+        throw new Error("Application wasn't saved correctly. Refresh and try again.");
       }
       row.id = apiId;
       row.applicationCode = String(res.data?.document_number ?? row.applicationCode);

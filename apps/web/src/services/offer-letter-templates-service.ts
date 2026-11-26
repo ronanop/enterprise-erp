@@ -60,7 +60,7 @@ async function cacheLocal(rows: OfferLetterTemplate[]): Promise<void> {
 
 async function loadFromApi(): Promise<OfferLetterTemplate[]> {
   const listed = await apiClient<Record<string, unknown>[]>(API);
-  const rows = (listed ?? []).map(mapApiRow).filter((r): r is OfferLetterTemplate => !!r);
+  const rows = (listed.data ?? []).map(mapApiRow).filter((r): r is OfferLetterTemplate => !!r);
   // List omits PDF bytes — hydrate each template that needs a letterhead
   const hydrated: OfferLetterTemplate[] = [];
   for (const row of rows) {
@@ -70,7 +70,7 @@ async function loadFromApi(): Promise<OfferLetterTemplate[]> {
     }
     try {
       const full = await apiClient<Record<string, unknown>>(`${API}/${encodeURIComponent(row.id)}`);
-      const mapped = mapApiRow(full ?? {});
+      const mapped = mapApiRow((full.data as Record<string, unknown> | undefined) ?? {});
       hydrated.push(mapped ?? row);
     } catch {
       hydrated.push(row);
@@ -141,15 +141,15 @@ export async function saveOfferLetterTemplate(
         body_content: input.bodyContent,
       },
     });
-    const mapped = mapApiRow(saved ?? {});
-    if (!mapped) throw new Error("Invalid template response");
+    const mapped = mapApiRow((saved.data as Record<string, unknown> | undefined) ?? {});
+    if (!mapped) throw new Error("Offer template didn't save correctly. Try again.");
     await ensureOfferLetterTemplatesLoaded();
     const all = getAllSync().filter((t) => t.id !== mapped.id);
     all.unshift(mapped);
     await cacheLocal(all);
     return mapped;
   } catch (err) {
-    throw new Error(formatApiError(err, "Failed to save offer template to storage"));
+    throw new Error(formatApiError(err, "Couldn't save the offer template. Try again."));
   }
 }
 

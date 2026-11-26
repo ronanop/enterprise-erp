@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { formatApiError } from "@/services/api-client";
 import { IndianRupee } from "lucide-react";
 
 import {
@@ -79,7 +80,7 @@ export function NegotiationSalaryDrawer({
       await onSave(application.id, amount);
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save salary.");
+      setError(formatApiError(e, "Could not save salary."));
     } finally {
       setSaving(false);
     }

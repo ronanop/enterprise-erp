@@ -1,4 +1,4 @@
-import { ApiClientError, resourceService } from "@/services/api-client";
+import { formatApiError, resourceService } from "@/services/api-client";
 import { loadEmployeeDirectory } from "@/services/employee-management-service";
 import type { HrRow } from "@/services/hr-service";
 import { loadOnboardingDirectory } from "@/services/onboarding-management-service";
@@ -313,5 +313,5 @@ export async function declineExitAgreement(
 }
 
 export function isApiError(e: unknown): string {
-  return e instanceof ApiClientError ? e.message : e instanceof Error ? e.message : "Request failed";
+  return formatApiError(e, "Couldn't complete this request. Try again.");
 }

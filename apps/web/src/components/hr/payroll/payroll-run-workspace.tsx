@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { formatApiError } from "@/services/api-client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, FileText, Loader2, Lock, RefreshCw, Unlock } from "lucide-react";
 
@@ -402,7 +403,7 @@ export function PayrollRunWorkspace({
       setOpenRunId(run.id);
       setOpenEmployeeId("");
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed", "error");
+      toast(formatApiError(e, "Couldn't complete that action. Try again."), "error");
     } finally {
       setRunning(false);
     }
@@ -592,7 +593,7 @@ export function PayrollRunWorkspace({
               setConfirmLock(null);
               onRefresh();
             } catch (e) {
-              toast(e instanceof Error ? e.message : "Failed", "error");
+              toast(formatApiError(e, "Couldn't complete that action. Try again."), "error");
             } finally {
               setLocking(false);
             }
@@ -862,7 +863,7 @@ export function PayrollRunWorkspace({
             setConfirmLock(null);
             onRefresh();
           } catch (e) {
-            toast(e instanceof Error ? e.message : "Failed", "error");
+            toast(formatApiError(e, "Couldn't complete that action. Try again."), "error");
           } finally {
             setLocking(false);
           }

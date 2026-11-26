@@ -191,7 +191,7 @@ export function EmployeeManagementPage() {
           /* optional migration */
         });
     } catch {
-      toast("Failed to load employee directory", "error");
+      toast("Couldn't load the employee directory. Refresh or check your access.", "error");
     } finally {
       setLoading(false);
     }
@@ -465,7 +465,7 @@ export function EmployeeManagementPage() {
       const res = await listEmployeesPage(next, EMPLOYEE_LIST_PAGE_SIZE);
       setRecords(res.records);
     } catch {
-      toast("Failed to load employees", "error");
+      toast("Couldn't load employees. Refresh or check your access.", "error");
     }
   }
   const orderedVisibleColumns = useMemo(

@@ -255,7 +255,7 @@ export function EdocManagementPage() {
         prev && merged.some((b) => b.key === prev) ? prev : merged[0]?.key ?? null,
       );
     } catch {
-      toast("Failed to load documents", "error");
+      toast("Couldn't load documents. Refresh or check your access.", "error");
     } finally {
       setLoading(false);
     }

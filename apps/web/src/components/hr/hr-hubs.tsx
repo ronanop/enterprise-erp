@@ -23,7 +23,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { isAuthenticated } from "@/lib/auth";
-import { ApiClientError, downloadApiFile, resourceService } from "@/services/api-client";
+import { ApiClientError, downloadApiFile, resourceService, formatApiError } from "@/services/api-client";
 import {
   countByAttendanceStatus,
   countByStatus,
@@ -625,7 +625,7 @@ export function ReportsHub() {
       );
       toast(`Downloaded ${reportType} CSV`);
     } catch (e) {
-      toast(e instanceof ApiClientError ? e.message : "Export failed", "error");
+      toast(formatApiError(e, "Export failed"), "error");
     } finally {
       setExporting(null);
     }

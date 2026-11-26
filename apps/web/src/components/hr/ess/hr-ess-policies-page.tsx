@@ -9,7 +9,7 @@ import { SetupToastHost, toast } from "@/components/hr/setup/setup-toast";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ApiClientError } from "@/services/api-client";
+import { ApiClientError, formatApiError } from "@/services/api-client";
 import {
   hrEssPoliciesService,
   type HrEssPolicyRow,
@@ -34,7 +34,7 @@ export function HrEssPoliciesPage() {
       setRows(data as HrEssPolicyRow[]);
     } catch (err) {
       toast(
-        err instanceof ApiClientError ? err.message : "Failed to load policies",
+        formatApiError(err, "Couldn't load policies. Refresh the page."),
         "error",
       );
       setRows([]);
@@ -60,7 +60,7 @@ export function HrEssPoliciesPage() {
       setForm({ policy_code: "", title: "", content_markdown: "", is_mandatory: true });
       await load();
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Create failed", "error");
+      toast(formatApiError(err, "Couldn't create. Try again."), "error");
     }
   }
 
@@ -76,7 +76,7 @@ export function HrEssPoliciesPage() {
       setEditing(null);
       await load();
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Update failed", "error");
+      toast(formatApiError(err, "Couldn't update. Try again."), "error");
     }
   }
 
@@ -86,7 +86,7 @@ export function HrEssPoliciesPage() {
       toast("Published - employees must re-ack if version bumped", "success");
       await load();
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Publish failed", "error");
+      toast(formatApiError(err, "Couldn't publish. Try again."), "error");
     }
   }
 

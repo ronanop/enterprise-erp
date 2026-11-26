@@ -44,7 +44,7 @@ import {
   type HrIntegrationCatalog,
 } from "@/services/hr-superadmin-service";
 import type { EmployeeRecord } from "@/types/employee-management";
-import { ApiClientError } from "@/services/api-client";
+import { ApiClientError, formatApiError } from "@/services/api-client";
 
 type TabId = "assign" | "passwords" | "api-keys" | "logs";
 
@@ -227,7 +227,7 @@ export function HrSuperadminPage() {
       setAdmins(adminRows);
       setEntities(entityRows);
     } catch (err) {
-      const message = err instanceof ApiClientError ? err.message : "Failed to load Superadmin data";
+      const message = formatApiError(err, "Couldn't load Superadmin data. Refresh the page.");
       toast(message, "error");
     } finally {
       setLoading(false);
@@ -247,7 +247,7 @@ export function HrSuperadminPage() {
         setSelectedEndpoints([catalog.endpoints[0]!.id]);
       }
     } catch (err) {
-      const message = err instanceof ApiClientError ? err.message : "Failed to load API keys";
+      const message = formatApiError(err, "Couldn't load API keys. Refresh the page.");
       toast(message, "error");
     } finally {
       setApiKeysLoading(false);
@@ -259,7 +259,7 @@ export function HrSuperadminPage() {
     try {
       setLogs(await listHrActivityLogs(200));
     } catch (err) {
-      const message = err instanceof ApiClientError ? err.message : "Failed to load activity logs";
+      const message = formatApiError(err, "Couldn't load activity logs. Refresh the page.");
       toast(message, "error");
     } finally {
       setLogsLoading(false);
@@ -365,7 +365,7 @@ export function HrSuperadminPage() {
       }
       await Promise.all([reload(), reloadLogs()]);
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : next ? "Assign failed" : "Revoke failed", "error");
+      toast(formatApiError(err, next ? "Couldn't update access. Try again." : "Couldn't revoke access. Try again."), "error");
     } finally {
       setBusyId(null);
     }
@@ -390,7 +390,7 @@ export function HrSuperadminPage() {
       );
       await reloadLogs();
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Entity update failed", "error");
+      toast(formatApiError(err, "Couldn't update entity access. Try again."), "error");
     } finally {
       setBusyId(null);
     }
@@ -409,7 +409,7 @@ export function HrSuperadminPage() {
       toast(next ? "Menu shown" : "Menu hidden for that HR Admin");
       await reloadLogs();
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Menu update failed", "error");
+      toast(formatApiError(err, "Couldn't update menu access. Try again."), "error");
     } finally {
       setBusyId(null);
     }
@@ -430,7 +430,7 @@ export function HrSuperadminPage() {
       toast(next ? "Menus shown" : "Menus hidden for that HR Admin");
       await reloadLogs();
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Menu update failed", "error");
+      toast(formatApiError(err, "Couldn't update menu access. Try again."), "error");
     } finally {
       setBusyId(null);
     }
@@ -447,7 +447,7 @@ export function HrSuperadminPage() {
       );
       await reloadLogs();
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Could not email login password", "error");
+      toast(formatApiError(err, "Couldn't email the login password. Try again."), "error");
     } finally {
       setBusyId(null);
     }
@@ -522,7 +522,7 @@ export function HrSuperadminPage() {
       toast("API key created — copy the snippet now");
       await reloadApiKeys();
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Could not create API key", "error");
+      toast(formatApiError(err, "Couldn't create the API key. Try again."), "error");
     } finally {
       setCreatingKey(false);
     }
@@ -539,7 +539,7 @@ export function HrSuperadminPage() {
       }
       await reloadApiKeys();
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Could not revoke API key", "error");
+      toast(formatApiError(err, "Couldn't revoke the API key. Try again."), "error");
     } finally {
       setBusyId(null);
     }

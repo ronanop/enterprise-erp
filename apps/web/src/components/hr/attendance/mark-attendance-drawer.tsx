@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { SetupDrawer, SetupField, SetupInput, SetupSelect, SetupTextarea, toApiTimeValue } from "@/components/hr/setup/setup-drawer";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
-import { ApiClientError } from "@/services/api-client";
+import { ApiClientError, formatApiError } from "@/services/api-client";
 import { markAttendance, type AttendanceDirectory, type RegularizeKind } from "@/services/attendance-management-service";
 import { getAssignedShiftId } from "@/services/hr-master-connector";
 import type { AttendanceSource, AttendanceStatusCode } from "@/types/attendance-management";
@@ -105,7 +105,7 @@ export function MarkAttendanceDrawer({
       onSaved();
       onClose();
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Save failed", "error");
+      toast(formatApiError(err, "Couldn't save. Try again."), "error");
     } finally {
       setSaving(false);
     }

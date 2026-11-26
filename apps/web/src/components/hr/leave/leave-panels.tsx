@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { formatApiError } from "@/services/api-client";
 import { Pencil, Trash2, X } from "lucide-react";
 
 import { LeaveStatusBadge } from "@/components/hr/leave/leave-status-badge";
@@ -193,7 +194,7 @@ export function LeaveTypeEditDrawer({
                   toast("Leave type policy updated", "success");
                   onSaved();
                 })
-                .catch((e) => toast(e instanceof Error ? e.message : "Update failed", "error"))
+                .catch((e) => toast(formatApiError(e, "Couldn't update. Try again."), "error"))
                 .finally(() => setBusy(false));
             }}
           >
@@ -310,7 +311,7 @@ export function LeaveTypeEditDrawer({
             setConfirmDelete(false);
             onSaved();
           })
-          .catch((e) => toast(e instanceof Error ? e.message : "Delete failed", "error"))
+          .catch((e) => toast(formatApiError(e, "Couldn't delete. Try again."), "error"))
           .finally(() => setDeleting(false));
       }}
     />
@@ -570,7 +571,7 @@ export function LeaveReportsPanel({ directory }: { directory: LeaveDirectory }) 
                   toast(`Carry forward: ${rows.length} balance(s)`, "success"),
                 )
                 .catch((err) =>
-                  toast(err instanceof Error ? err.message : "Carry forward failed", "error"),
+                  toast(formatApiError(err, "Carry forward failed"), "error"),
                 );
             }}
           >
@@ -653,7 +654,7 @@ export function CompOffEncashDrawers({
                   setCompOpen(false);
                   onDone();
                 })
-                .catch((e) => toast(e instanceof Error ? e.message : "Failed", "error"));
+                .catch((e) => toast(formatApiError(e, "Couldn't complete that action. Try again."), "error"));
             }}
           >
             Save
@@ -708,7 +709,7 @@ export function CompOffEncashDrawers({
                   setEncOpen(false);
                   onDone();
                 })
-                .catch((e) => toast(e instanceof Error ? e.message : "Failed", "error"));
+                .catch((e) => toast(formatApiError(e, "Couldn't complete that action. Try again."), "error"));
             }}
           >
             Submit

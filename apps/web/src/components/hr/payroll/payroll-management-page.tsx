@@ -53,7 +53,7 @@ import {
   type PayrollDirectory,
 } from "@/services/payroll-management-service";
 import { PayslipLetterhead } from "@/components/hr/payroll/payslip-letterhead";
-import { resourceService } from "@/services/api-client";
+import { resourceService, formatApiError } from "@/services/api-client";
 import {
   downloadPayslipPdf,
   downloadPayslipsPdf,
@@ -183,7 +183,7 @@ export function PayrollManagementPage() {
       const rows = Array.isArray(entities?.data) ? entities.data : [];
       setPayslipCompanies(rows.map((row) => payslipCompanyFromApi(row)));
     } catch {
-      toast("Failed to load payroll data", "error");
+      toast("Couldn't load payroll data. Refresh the page.", "error");
     } finally {
       setLoading(false);
     }
@@ -352,7 +352,7 @@ export function PayrollManagementPage() {
       );
       refresh();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed", "error");
+      toast(formatApiError(e, "Couldn't complete that action. Try again."), "error");
     } finally {
       setGenerating(false);
     }
@@ -492,7 +492,7 @@ export function PayrollManagementPage() {
                       toast(`Created ${rows.length} Excel CTC templates`);
                       refresh();
                     } catch (err) {
-                      toast(err instanceof Error ? err.message : "Failed to load templates", "error");
+                      toast(formatApiError(err, "Couldn't load templates. Refresh the page."), "error");
                     }
                   }}
                 >
@@ -552,7 +552,7 @@ export function PayrollManagementPage() {
                         refresh();
                       }
                     } catch (err) {
-                      toast(err instanceof Error ? err.message : "Import failed", "error");
+                      toast(formatApiError(err, "Couldn't import. Try again."), "error");
                     }
                     e.target.value = "";
                   }}
@@ -991,7 +991,7 @@ export function PayrollManagementPage() {
             refresh();
             goSection("revised-salary");
           } catch (e) {
-            toast(e instanceof Error ? e.message : "Failed", "error");
+            toast(formatApiError(e, "Couldn't complete that action. Try again."), "error");
           }
         }}
       />
@@ -1032,7 +1032,7 @@ export function PayrollManagementPage() {
             });
             refresh();
           } catch (e) {
-            toast(e instanceof Error ? e.message : "Salary assign failed", "error");
+            toast(formatApiError(e, "Salary assign failed"), "error");
             throw e;
           }
         }}
@@ -1115,7 +1115,7 @@ export function PayrollManagementPage() {
               toast("Incentive added");
               refresh();
             })
-            .catch((e) => toast(e instanceof Error ? e.message : "Failed", "error"));
+            .catch((e) => toast(formatApiError(e, "Couldn't complete that action. Try again."), "error"));
         }}
       />
       <AdjustmentDrawer
@@ -1128,7 +1128,7 @@ export function PayrollManagementPage() {
               toast("Adjustment applied");
               refresh();
             })
-            .catch((e) => toast(e instanceof Error ? e.message : "Failed", "error"));
+            .catch((e) => toast(formatApiError(e, "Couldn't complete that action. Try again."), "error"));
         }}
       />
       <SetupConfirmDialog
@@ -1152,7 +1152,7 @@ export function PayrollManagementPage() {
               setConfirmDelete(null);
               refresh();
             })
-            .catch((e) => toast(e instanceof Error ? e.message : "Delete failed", "error"))
+            .catch((e) => toast(formatApiError(e, "Couldn't delete. Try again."), "error"))
             .finally(() => setDeleting(false));
         }}
       />
@@ -1183,7 +1183,7 @@ export function PayrollManagementPage() {
               setConfirmDeleteAssignment(null);
               refresh();
             })
-            .catch((e) => toast(e instanceof Error ? e.message : "Delete failed", "error"))
+            .catch((e) => toast(formatApiError(e, "Couldn't delete. Try again."), "error"))
             .finally(() => setDeleting(false));
         }}
       />

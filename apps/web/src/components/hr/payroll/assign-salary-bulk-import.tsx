@@ -89,7 +89,7 @@ export function AssignSalaryBulkImportDrawer({
       setColumnMapping([]);
       setRows([]);
       setWarnings([]);
-      setErrors([err instanceof Error ? err.message : "Could not read file."]);
+      setErrors([formatApiError(err, "Could not read file.")]);
     }
   }
 

@@ -173,7 +173,7 @@ export function PayrollPolicyPanel() {
       await loadResolvedPayrollPfPolicy().catch(() => null);
       await load();
     } catch (err) {
-      toast(formatApiError(err, "Save failed"), "error");
+      toast(formatApiError(err, "Couldn't save. Try again."), "error");
     } finally {
       setSaving(false);
     }

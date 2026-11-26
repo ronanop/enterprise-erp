@@ -14,7 +14,7 @@ import {
 import { HrStatusBadge } from "@/components/hr/hr-primitives";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
-import { ApiClientError } from "@/services/api-client";
+import { ApiClientError, formatApiError } from "@/services/api-client";
 import {
   formatAssetDate,
   isActiveAssignment,
@@ -115,7 +115,7 @@ export function EmployeeAssetsTab({ employee }: { employee: EmployeeRecord }) {
       const data = await loadEmployeeAssets(employee.id);
       setRows(data.length ? data : demoAssetsFor(employee));
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Failed to load assets", "error");
+      toast(formatApiError(err, "Couldn't load assets. Try again."), "error");
       setRows(demoAssetsFor(employee));
     } finally {
       setLoading(false);

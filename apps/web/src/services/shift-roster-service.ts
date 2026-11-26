@@ -692,7 +692,7 @@ export async function createShift(payload: CreateShiftPayload): Promise<void> {
   });
   const id = String((res.data as HrRow | null | undefined)?.id ?? "");
   if (!id) {
-    throw new Error("Shift API returned no id");
+    throw new Error("Shift wasn't saved correctly. Refresh and try again.");
   }
   writeJson(EXT_KEY, { ...readJson(EXT_KEY, {}), [id]: payload.extension });
   appendShiftAudit({ action: "shift_created", detail: `${payload.shiftName} (${code})`, actor: actor() });
@@ -764,7 +764,7 @@ export async function assignShift(payload: AssignShiftPayload): Promise<void> {
   });
   const id = String((res.data as HrRow)?.id ?? "");
   if (!id) {
-    throw new Error("Shift assignment API returned no id");
+    throw new Error("Shift assignment wasn't saved correctly. Refresh and try again.");
   }
   await publishAssignment(id);
   writeAssignmentExt(id, payload);
@@ -1162,7 +1162,7 @@ export function buildManagerRosterExportData(
   if (!team.length) throw new Error("No employees report to this manager");
 
   const days = daysInMonth(month);
-  if (!days.length) throw new Error("Invalid month (use YYYY-MM)");
+  if (!days.length) throw new Error("Enter the month as YYYY-MM (for example 2026-11).");
 
   const dayHeaders = days.map(formatRosterDayHeader);
   const activeShifts = dir.shifts.filter((s) => s.status !== "inactive");

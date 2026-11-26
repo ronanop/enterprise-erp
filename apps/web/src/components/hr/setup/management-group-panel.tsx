@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RowActionsItem, RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { nextCode, type HrSetupTab } from "@/config/hr-setup";
-import { ApiClientError, resourceService } from "@/services/api-client";
+import { ApiClientError, resourceService, formatApiError } from "@/services/api-client";
 import {
   createManagementGroup,
   deleteManagementGroup,
@@ -96,7 +96,7 @@ export function ManagementGroupPanel({ tab }: { tab: HrSetupTab }) {
       setRows(groups);
       if (!catalog.length) setCatalog(cat);
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Failed to load management groups", "error");
+      toast(formatApiError(err, "Couldn't load management groups. Try again."), "error");
     } finally {
       setLoading(false);
     }
@@ -207,7 +207,7 @@ export function ManagementGroupPanel({ tab }: { tab: HrSetupTab }) {
       setMode(null);
       await load();
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Save failed", "error");
+      toast(formatApiError(err, "Couldn't save. Try again."), "error");
     } finally {
       setSaving(false);
     }
@@ -484,7 +484,7 @@ export function ManagementGroupPanel({ tab }: { tab: HrSetupTab }) {
             setConfirmDelete(null);
             await load();
           } catch (err) {
-            toast(err instanceof ApiClientError ? err.message : "Delete failed", "error");
+            toast(formatApiError(err, "Couldn't delete. Try again."), "error");
           }
         }}
         onCancel={() => setConfirmDelete(null)}

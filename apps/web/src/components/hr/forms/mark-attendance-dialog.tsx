@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { HrField, HrFormDialog, HrSelect } from "@/components/hr/hr-form-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ApiClientError } from "@/services/api-client";
+import { ApiClientError, formatApiError } from "@/services/api-client";
 import {
   createAttendance,
   listHrBranchOptions,
@@ -70,7 +70,7 @@ export function MarkAttendanceDialog({ open, onClose, onSaved }: Props) {
       onSaved();
       onClose();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to mark attendance");
+      setError(formatApiError(err, "Couldn't mark attendance. Try again."));
     } finally {
       setSaving(false);
     }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { formatApiError } from "@/services/api-client";
 import { Download, Upload } from "lucide-react";
 
 import {
@@ -144,7 +145,7 @@ export function AttendanceImportDrawer({
       setColumnMapping([]);
       setRows([]);
       setWarnings([]);
-      setErrors([err instanceof Error ? err.message : "Could not read file."]);
+      setErrors([formatApiError(err, "Could not read file.")]);
     }
   }
 
@@ -431,7 +432,7 @@ export function AttendanceCorrectionDrawer({
                   onSaved();
                   onClose();
                 })
-                .catch((e) => toast(e instanceof Error ? e.message : "Regularization failed", "error"))
+                .catch((e) => toast(formatApiError(e, "Couldn't regularize attendance. Try again."), "error"))
                 .finally(() => setBusy(false));
             }}
           >

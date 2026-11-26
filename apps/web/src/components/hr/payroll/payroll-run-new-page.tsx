@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { formatApiError } from "@/services/api-client";
 import { useRouter } from "next/navigation";
 import { Loader2, Search } from "lucide-react";
 
@@ -93,7 +94,7 @@ export function PayrollRunNewPage() {
                   toast(`Payroll updated for ${monthLabel(month)}`);
                   router.push(`/hr/payroll/runs/${run.id}`);
                 })
-                .catch((e) => toast(e instanceof Error ? e.message : "Failed", "error"))
+                .catch((e) => toast(formatApiError(e, "Couldn't complete that action. Try again."), "error"))
                 .finally(() => setRunning(false));
             }}
           >

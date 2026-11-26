@@ -91,7 +91,7 @@ export function ShiftRosterManagementPage() {
       setDir(await loadShiftRosterDirectory());
     } catch (err) {
       console.error("loadShiftRosterDirectory failed", err);
-      toast("Failed to load shift data", "error");
+      toast("Couldn't load shift data. Refresh the page.", "error");
     } finally {
       setLoading(false);
     }
@@ -469,7 +469,7 @@ export function ShiftRosterManagementPage() {
                                   toast("Assignment removed", "success");
                                   await load();
                                 } catch (err) {
-                                  toast(formatApiError(err, "Delete failed"), "error");
+                                  toast(formatApiError(err, "Couldn't delete. Try again."), "error");
                                 } finally {
                                   setAssignmentBusyId(null);
                                 }
@@ -534,7 +534,7 @@ export function ShiftRosterManagementPage() {
                     const ab = r.absent_created ?? 0;
                     toast(`Backfill done: ${wo} week off, ${ab} absent`, "success");
                   })
-                  .catch(() => toast("Backfill failed - check permissions / API", "error"))
+                  .catch(() => toast("Couldn't backfill the roster. You may need access — ask an admin.", "error"))
                   .finally(() => setJobBusy(false));
               }}
             >
