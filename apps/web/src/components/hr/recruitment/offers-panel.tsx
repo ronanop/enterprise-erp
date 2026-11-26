@@ -18,6 +18,7 @@ import {
   OfferTemplateDrawer,
   PdfBodyOverlayPreview,
 } from "@/components/hr/recruitment/offer-template-drawer";
+import { SetupConfirmDialog } from "@/components/hr/setup/setup-confirm";
 import { EmsPagination } from "@/components/hr/workforce/ems-primitives";
 import { Button } from "@/components/ui/button";
 import { FilterSelect } from "@/components/ui/filter-select";
@@ -102,6 +103,8 @@ export function OffersPanel({
   const [page, setPage] = useState(1);
   const [templates, setTemplates] = useState<OfferLetterTemplate[]>([]);
   const [templateOpen, setTemplateOpen] = useState(false);
+  const [confirmDeleteTemplate, setConfirmDeleteTemplate] = useState<OfferLetterTemplate | null>(null);
+  const [deletingTemplate, setDeletingTemplate] = useState(false);
   const [editTemplate, setEditTemplate] = useState<OfferLetterTemplate | null>(null);
   const [previewTemplate, setPreviewTemplate] = useState<OfferLetterTemplate | null>(null);
 
@@ -230,20 +233,7 @@ export function OffersPanel({
                       size="sm"
                       variant="outline"
                       className="h-7 cursor-pointer text-destructive hover:bg-destructive/10"
-                      onClick={() => {
-                        if (!window.confirm(`Delete template “${t.name}”?`)) return;
-                        void deleteOfferLetterTemplate(t.id)
-                          .then(() => {
-                            reloadTemplates();
-                            onToast?.("Template deleted");
-                          })
-                          .catch((e) =>
-                            onToast?.(
-                              formatApiError(e, "Could not delete template"),
-                              "error",
-                            ),
-                          );
-                      }}
+                      onClick={() => setConfirmDeleteTemplate(t)}
                     >
                       <Trash2 className="size-3.5" />
                     </Button>
@@ -487,6 +477,34 @@ export function OffersPanel({
           </div>
         </div>
       ) : null}
+
+      <SetupConfirmDialog
+        open={Boolean(confirmDeleteTemplate)}
+        title="Delete offer template"
+        message={
+          confirmDeleteTemplate
+            ? `Delete “${confirmDeleteTemplate.name}”? This cannot be undone from the UI.`
+            : ""
+        }
+        confirmLabel="Delete"
+        destructive
+        loading={deletingTemplate}
+        onCancel={() => setConfirmDeleteTemplate(null)}
+        onConfirm={() => {
+          if (!confirmDeleteTemplate) return;
+          setDeletingTemplate(true);
+          void deleteOfferLetterTemplate(confirmDeleteTemplate.id)
+            .then(() => {
+              reloadTemplates();
+              setConfirmDeleteTemplate(null);
+              onToast?.("Template deleted");
+            })
+            .catch((e) =>
+              onToast?.(formatApiError(e, "Could not delete template"), "error"),
+            )
+            .finally(() => setDeletingTemplate(false));
+        }}
+      />
     </div>
   );
 }

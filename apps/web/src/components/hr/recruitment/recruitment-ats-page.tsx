@@ -48,6 +48,7 @@ import {
   HrUnderlineTabs,
   type HrTabItem,
 } from "@/components/hr/hr-primitives";
+import { SetupConfirmDialog } from "@/components/hr/setup/setup-confirm";
 import { SetupDrawer, SetupField, SetupTextarea } from "@/components/hr/setup/setup-drawer";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { EmsPagination, EmsSkeleton } from "@/components/hr/workforce/ems-primitives";
@@ -188,6 +189,11 @@ export function RecruitmentAtsPage() {
   const [bgPortalStatusByAppId, setBgPortalStatusByAppId] = useState<
     Record<string, string>
   >({});
+  const [backOutTarget, setBackOutTarget] = useState<{
+    app: PipelineApplication;
+    cand: AtsCandidate;
+  } | null>(null);
+  const [backOutSaving, setBackOutSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -873,33 +879,7 @@ export function RecruitmentAtsPage() {
                 }
               })();
             }}
-            onBackOut={(app, cand) => {
-              void (async () => {
-                try {
-                  const reason =
-                    window.prompt(
-                      `Backed out reason for ${cand.fullName}?`,
-                      "Candidate backed out after offer",
-                    ) || "";
-                  if (!reason.trim()) {
-                    toast("Backed out reason is required", "error");
-                    return;
-                  }
-                  const updated = await markApplicationBackedOut(app.id, reason.trim());
-                  if (!updated) {
-                    toast("Could not mark backed out", "error");
-                    return;
-                  }
-                  toast(`${cand.fullName} marked backed out`);
-                  await load();
-                } catch (e) {
-                  toast(
-                    formatApiError(e, "Couldn't mark backed out. Try again."),
-                    "error",
-                  );
-                }
-              })();
-            }}
+            onBackOut={(app, cand) => setBackOutTarget({ app, cand })}
             onAcceptOffer={(app, cand) => {
               void (async () => {
                 try {
@@ -1681,6 +1661,54 @@ export function RecruitmentAtsPage() {
           onClose={() => setPreviewDoc(null)}
         />
       ) : null}
+
+      <SetupConfirmDialog
+        open={Boolean(backOutTarget)}
+        title="Mark candidate backed out"
+        message={
+          backOutTarget
+            ? `Record why ${backOutTarget.cand.fullName} backed out after the offer.`
+            : ""
+        }
+        confirmLabel="Mark backed out"
+        destructive
+        loading={backOutSaving}
+        prompt={{
+          label: "Reason",
+          defaultValue: "Candidate backed out after offer",
+          placeholder: "Enter reason",
+          required: true,
+        }}
+        onCancel={() => {
+          if (!backOutSaving) setBackOutTarget(null);
+        }}
+        onConfirm={(reason) => {
+          if (!backOutTarget) return;
+          const trimmed = (reason || "").trim();
+          if (!trimmed) {
+            toast("Backed out reason is required", "error");
+            return;
+          }
+          const { app, cand } = backOutTarget;
+          setBackOutSaving(true);
+          void (async () => {
+            try {
+              const updated = await markApplicationBackedOut(app.id, trimmed);
+              if (!updated) {
+                toast("Could not mark backed out", "error");
+                return;
+              }
+              toast(`${cand.fullName} marked backed out`);
+              setBackOutTarget(null);
+              await load();
+            } catch (e) {
+              toast(formatApiError(e, "Couldn't mark backed out. Try again."), "error");
+            } finally {
+              setBackOutSaving(false);
+            }
+          })();
+        }}
+      />
     </div>
   );
 }

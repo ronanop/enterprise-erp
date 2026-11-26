@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, Wand2 } from "lucide-react";
 
+import { SetupConfirmDialog } from "@/components/hr/setup/setup-confirm";
 import { SetupDrawer, SetupField, SetupInput, SetupSelect, SetupTextarea } from "@/components/hr/setup/setup-drawer";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
@@ -446,6 +447,7 @@ function EmployeeLeaveBalanceDrawer({
   const [adjustBaselineLeft, setAdjustBaselineLeft] = useState<number | null>(null);
   const [adjustReason, setAdjustReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState<{ id: string; name: string } | null>(null);
 
   const adjustBalance = adjustTypeId ? balanceByType.get(adjustTypeId) ?? null : null;
 
@@ -630,10 +632,7 @@ function EmployeeLeaveBalanceDrawer({
                             className="cursor-pointer h-7 text-destructive hover:text-destructive"
                             disabled={busy || bal.used > 0}
                             title={bal.used > 0 ? "Cannot remove while used > 0" : "Remove leave type"}
-                            onClick={() => {
-                              if (!window.confirm(`Remove ${t.name} from this employee?`)) return;
-                              void run(() => removeEmployeeLeaveBalance(bal.id), "Leave type removed");
-                            }}
+                            onClick={() => setConfirmRemove({ id: bal.id, name: t.name })}
                           >
                             <Trash2 className="size-3.5" />
                           </Button>
@@ -761,6 +760,26 @@ function EmployeeLeaveBalanceDrawer({
           </section>
         </div>
       )}
+
+      <SetupConfirmDialog
+        open={Boolean(confirmRemove)}
+        title="Remove leave type"
+        message={
+          confirmRemove
+            ? `Remove ${confirmRemove.name} from this employee?`
+            : ""
+        }
+        confirmLabel="Remove"
+        destructive
+        loading={busy}
+        onCancel={() => setConfirmRemove(null)}
+        onConfirm={() => {
+          if (!confirmRemove) return;
+          void run(() => removeEmployeeLeaveBalance(confirmRemove.id), "Leave type removed").then(
+            () => setConfirmRemove(null),
+          );
+        }}
+      />
     </SetupDrawer>
   );
 }

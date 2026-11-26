@@ -9,6 +9,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, Eye, FolderOpen } from "lucide-react";
 
 import { EmsFormGrid, EmsStepper } from "@/components/hr/workforce/ems-primitives";
+import { SetupConfirmDialog } from "@/components/hr/setup/setup-confirm";
 import { SetupDrawer, SetupField, SetupInput, SetupSelect, SetupTextarea } from "@/components/hr/setup/setup-drawer";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { PageHeader } from "@/components/layout/page-header";
@@ -100,6 +101,13 @@ export function EmployeeWizardPage() {
   const [onboardingCases, setOnboardingCases] = useState<OnboardingCase[]>([]);
   const [previewCase, setPreviewCase] = useState<OnboardingCase | null>(null);
   const [entityOptions, setEntityOptions] = useState<SetupMasterOption[]>([]);
+  const [pendingMgChange, setPendingMgChange] = useState<{
+    managementGroupId: string;
+    managementGroupName: string;
+    employmentType: string;
+    shiftId: string;
+    shiftName: string;
+  } | null>(null);
 
   const load = useCallback(async () => {
     const [{ records: rows, options: opts }, ents] = await Promise.all([
@@ -980,23 +988,22 @@ export function EmployeeWizardPage() {
                     const id = e.target.value;
                     const grp = options?.managementGroups.find((g) => g.id === id);
                     const shiftLabel = options?.shifts.find((s) => s.id === grp?.shiftId)?.label ?? "";
-                    if (
-                      draft.employment.shiftId &&
-                      grp?.shiftId &&
-                      draft.employment.shiftId !== grp.shiftId &&
-                      !window.confirm(
-                        "Changing management group will update the default attendance shift. Continue?",
-                      )
-                    ) {
-                      return;
-                    }
-                    patchEmployment({
+                    const next = {
                       managementGroupId: id,
                       managementGroupName: grp?.label ?? "",
                       employmentType: grp?.employmentType ?? draft.employment.employmentType,
                       shiftId: grp?.shiftId ?? draft.employment.shiftId,
                       shiftName: shiftLabel,
-                    });
+                    };
+                    if (
+                      draft.employment.shiftId &&
+                      grp?.shiftId &&
+                      draft.employment.shiftId !== grp.shiftId
+                    ) {
+                      setPendingMgChange(next);
+                      return;
+                    }
+                    patchEmployment(next);
                   }}
                 >
                   <option value="">Select group…</option>
@@ -1174,6 +1181,19 @@ export function EmployeeWizardPage() {
           </Button>
         )}
       </div>
+
+      <SetupConfirmDialog
+        open={Boolean(pendingMgChange)}
+        title="Update attendance shift?"
+        message="Changing management group will update the default attendance shift. Continue?"
+        confirmLabel="Continue"
+        onCancel={() => setPendingMgChange(null)}
+        onConfirm={() => {
+          if (!pendingMgChange) return;
+          patchEmployment(pendingMgChange);
+          setPendingMgChange(null);
+        }}
+      />
     </div>
   );
 }

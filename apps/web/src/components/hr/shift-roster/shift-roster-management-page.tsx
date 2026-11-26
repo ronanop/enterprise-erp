@@ -31,6 +31,7 @@ import {
   HrUnderlineTabs,
   type HrTabItem,
 } from "@/components/hr/hr-primitives";
+import { SetupConfirmDialog } from "@/components/hr/setup/setup-confirm";
 import { SetupDrawer, SetupField, SetupInput, SetupSelect } from "@/components/hr/setup/setup-drawer";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { EmsPagination, EmsSkeleton } from "@/components/hr/workforce/ems-primitives";
@@ -79,6 +80,8 @@ export function ShiftRosterManagementPage() {
   const [assignOpen, setAssignOpen] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState<ShiftAssignmentRecord | null>(null);
   const [assignmentBusyId, setAssignmentBusyId] = useState<string | null>(null);
+  const [confirmDeleteAssignment, setConfirmDeleteAssignment] =
+    useState<ShiftAssignmentRecord | null>(null);
   const [rotationOpen, setRotationOpen] = useState(false);
   const [downloadManagerOpen, setDownloadManagerOpen] = useState(false);
   const [uploadManagerOpen, setUploadManagerOpen] = useState(false);
@@ -460,21 +463,7 @@ export function ShiftRosterManagementPage() {
                             variant="outline"
                             className="h-7 cursor-pointer text-destructive transition-colors duration-200 hover:bg-destructive/10"
                             disabled={assignmentBusyId === a.id}
-                            onClick={() => {
-                              if (!window.confirm(`Remove assignment for ${a.employeeName}?`)) return;
-                              void (async () => {
-                                setAssignmentBusyId(a.id);
-                                try {
-                                  await deleteShiftAssignment(a.id);
-                                  toast("Assignment removed", "success");
-                                  await load();
-                                } catch (err) {
-                                  toast(formatApiError(err, "Couldn't delete. Try again."), "error");
-                                } finally {
-                                  setAssignmentBusyId(null);
-                                }
-                              })();
-                            }}
+                            onClick={() => setConfirmDeleteAssignment(a)}
                           >
                             <Trash2 className="size-3.5" />
                             Delete
@@ -625,6 +614,39 @@ export function ShiftRosterManagementPage() {
       />
 
       <SwapRequestDrawer open={swapOpen} directory={dir} onClose={() => { setSwapOpen(false); void load(); }} />
+
+      <SetupConfirmDialog
+        open={Boolean(confirmDeleteAssignment)}
+        title="Remove shift assignment"
+        message={
+          confirmDeleteAssignment
+            ? `Remove assignment for ${confirmDeleteAssignment.employeeName}?`
+            : ""
+        }
+        confirmLabel="Delete"
+        destructive
+        loading={Boolean(
+          confirmDeleteAssignment && assignmentBusyId === confirmDeleteAssignment.id,
+        )}
+        onCancel={() => setConfirmDeleteAssignment(null)}
+        onConfirm={() => {
+          if (!confirmDeleteAssignment) return;
+          const a = confirmDeleteAssignment;
+          void (async () => {
+            setAssignmentBusyId(a.id);
+            try {
+              await deleteShiftAssignment(a.id);
+              toast("Assignment removed", "success");
+              setConfirmDeleteAssignment(null);
+              await load();
+            } catch (err) {
+              toast(formatApiError(err, "Couldn't delete. Try again."), "error");
+            } finally {
+              setAssignmentBusyId(null);
+            }
+          })();
+        }}
+      />
 
       <p className="text-[10px] text-muted-foreground">RBAC: hr.shift:* and hr.shift_assignment:* enforced by API.</p>
     </div>

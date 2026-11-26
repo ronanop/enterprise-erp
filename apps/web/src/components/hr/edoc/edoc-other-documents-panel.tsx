@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 
+import { SetupConfirmDialog } from "@/components/hr/setup/setup-confirm";
 import {
   SetupDrawer,
   SetupField,
@@ -94,6 +95,7 @@ export function EdocOtherDocumentsPanel() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [previewFile, setPreviewFile] = useState<OrgDocAttachment | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<OrgDocument | null>(null);
 
   const reload = useCallback(() => {
     setRows(listOrgDocuments());
@@ -249,10 +251,7 @@ export function EdocOtherDocumentsPanel() {
   }
 
   function removeDoc(row: OrgDocument) {
-    if (!window.confirm(`Delete “${row.title}”?`)) return;
-    deleteOrgDocument(row.id);
-    toast("Document deleted");
-    reload();
+    setConfirmDelete(row);
   }
 
   function doSend() {
@@ -851,6 +850,22 @@ export function EdocOtherDocumentsPanel() {
           </div>
         </div>
       ) : null}
+
+      <SetupConfirmDialog
+        open={Boolean(confirmDelete)}
+        title="Delete document"
+        message={confirmDelete ? `Delete “${confirmDelete.title}”?` : ""}
+        confirmLabel="Delete"
+        destructive
+        onCancel={() => setConfirmDelete(null)}
+        onConfirm={() => {
+          if (!confirmDelete) return;
+          deleteOrgDocument(confirmDelete.id);
+          toast("Document deleted");
+          setConfirmDelete(null);
+          reload();
+        }}
+      />
     </div>
   );
 }

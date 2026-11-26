@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
+import { SetupConfirmDialog } from "@/components/hr/setup/setup-confirm";
 import {
   SetupDrawer,
   SetupField,
@@ -184,6 +185,7 @@ export default function BiometricDevicesPage() {
   const [feedError, setFeedError] = useState<string | null>(null);
   const [feedLoading, setFeedLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteDevice, setConfirmDeleteDevice] = useState<Device | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const downloadingLock = useRef(false);
   const [connById, setConnById] = useState<Record<string, ConnStatus>>({});
@@ -514,16 +516,18 @@ export default function BiometricDevicesPage() {
     }
   }
 
+  function requestRemoveDevice(device: Device) {
+    if (deletingId) return;
+    setConfirmDeleteDevice(device);
+  }
+
   async function removeDevice(device: Device) {
     if (deletingId) return;
-    const ok = window.confirm(
-      `Remove ${device.device_code} (${device.device_name})? Attendance already saved stays in place.`,
-    );
-    if (!ok) return;
     setDeletingId(device.id);
     try {
       await resourceService.delete("/hr/biometric-devices", device.id);
       toast("Device removed", "success");
+      setConfirmDeleteDevice(null);
       if (feedDevice?.id === device.id) closeDeviceFeed();
       await load();
     } catch (err) {
@@ -749,7 +753,7 @@ export default function BiometricDevicesPage() {
                           aria-label={`Remove ${r.device_code}`}
                           onClick={(event) => {
                             event.stopPropagation();
-                            void removeDevice(r);
+                            requestRemoveDevice(r);
                           }}
                         >
                           {deletingId === r.id ? (
@@ -1085,6 +1089,25 @@ export default function BiometricDevicesPage() {
           </div>
         )}
       </SetupDrawer>
+
+      <SetupConfirmDialog
+        open={Boolean(confirmDeleteDevice)}
+        title="Remove biometric device"
+        message={
+          confirmDeleteDevice
+            ? `Remove ${confirmDeleteDevice.device_code} (${confirmDeleteDevice.device_name})? Attendance already saved stays in place.`
+            : ""
+        }
+        confirmLabel="Remove"
+        destructive
+        loading={Boolean(confirmDeleteDevice && deletingId === confirmDeleteDevice.id)}
+        onCancel={() => {
+          if (!deletingId) setConfirmDeleteDevice(null);
+        }}
+        onConfirm={() => {
+          if (confirmDeleteDevice) void removeDevice(confirmDeleteDevice);
+        }}
+      />
     </div>
   );
 }

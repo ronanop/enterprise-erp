@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Eye, FileText, Pencil, Plus, Trash2, X } from "lucide-react";
 
 import { DocumentPreviewContent } from "@/components/hr/shared/document-preview-content";
+import { SetupConfirmDialog } from "@/components/hr/setup/setup-confirm";
 import {
   SetupDrawer,
   SetupField,
@@ -47,6 +48,8 @@ export function OnboardingPoliciesPanel() {
   const [uploading, setUploading] = useState(false);
   const [entities, setEntities] = useState<SetupMasterOption[]>([]);
   const [entityFilter, setEntityFilter] = useState(FILTER_ALL);
+  const [confirmDelete, setConfirmDelete] = useState<OnboardingPolicyDoc | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const reload = useCallback(() => {
     setRows(listOnboardingPolicies(true));
@@ -179,14 +182,22 @@ export function OnboardingPoliciesPanel() {
     }
   }
 
-  async function remove(row: OnboardingPolicyDoc) {
-    if (!window.confirm(`Delete “${row.title}”? Candidates will no longer see it.`)) return;
+  function remove(row: OnboardingPolicyDoc) {
+    setConfirmDelete(row);
+  }
+
+  async function confirmRemove() {
+    if (!confirmDelete) return;
+    setDeleting(true);
     try {
-      await deleteOnboardingPolicy(row.id);
+      await deleteOnboardingPolicy(confirmDelete.id);
       toast("Policy deleted", "success");
+      setConfirmDelete(null);
       reload();
     } catch {
       toast("Could not delete policy", "error");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -437,6 +448,25 @@ export function OnboardingPoliciesPanel() {
           </SetupField>
         </div>
       </SetupDrawer>
+
+      <SetupConfirmDialog
+        open={Boolean(confirmDelete)}
+        title="Delete onboarding policy"
+        message={
+          confirmDelete
+            ? `Delete “${confirmDelete.title}”? Candidates will no longer see it.`
+            : ""
+        }
+        confirmLabel="Delete"
+        destructive
+        loading={deleting}
+        onCancel={() => {
+          if (!deleting) setConfirmDelete(null);
+        }}
+        onConfirm={() => {
+          void confirmRemove();
+        }}
+      />
     </div>
   );
 }

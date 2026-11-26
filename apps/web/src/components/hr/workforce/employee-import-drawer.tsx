@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Download, Trash2, Upload } from "lucide-react";
 
+import { SetupConfirmDialog } from "@/components/hr/setup/setup-confirm";
 import { SetupDrawer, SetupField, SetupSelect } from "@/components/hr/setup/setup-drawer";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/hr/setup/setup-toast";
@@ -202,6 +203,7 @@ export function EmployeeImportDrawer({
   const [warnings, setWarnings] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [resultSummary, setResultSummary] = useState<string | null>(null);
   const [entities, setEntities] = useState<EntityOption[]>([]);
   const [companyId, setCompanyId] = useState("");
@@ -368,16 +370,11 @@ export function EmployeeImportDrawer({
     applyMapping(next, matrix, headerIdx);
   }
 
+  function requestClearAll() {
+    setConfirmClearAll(true);
+  }
+
   async function runClearAll() {
-    const ok = window.confirm(
-      "Delete ALL employees in the current company?\n\nThis soft-deletes them and frees Emp Codes so you can re-import from Excel. This cannot be undone from the UI.",
-    );
-    if (!ok) return;
-    const typed = window.prompt('Type DELETE to confirm clearing all employees:');
-    if (typed !== "DELETE") {
-      toast("Clear cancelled", "error");
-      return;
-    }
     setClearing(true);
     try {
       const result = await clearAllEmployees();
@@ -389,6 +386,7 @@ export function EmployeeImportDrawer({
       await clearAllEmployeeExtensions();
       invalidateEmployeeDirectoryCache();
       toast(result.message || `Cleared ${result.deleted} employee(s)`, "success");
+      setConfirmClearAll(false);
       onImported();
     } catch (err) {
       toast(formatApiError(err, "Couldn't clear records. Try again."), "error");
@@ -522,7 +520,7 @@ export function EmployeeImportDrawer({
                 size="sm"
                 className="cursor-pointer text-destructive transition-colors duration-200 hover:bg-destructive/10"
                 disabled={clearing}
-                onClick={() => void runClearAll()}
+                onClick={requestClearAll}
               >
                 <Trash2 className="size-3.5" />
                 {clearing ? "Clearing…" : "Clear all employees"}
@@ -714,5 +712,23 @@ export function EmployeeImportDrawer({
         ) : null}
       </div>
     </SetupDrawer>
+
+    <SetupConfirmDialog
+      open={confirmClearAll}
+      title="Clear all employees"
+      message={
+        "Delete ALL employees in the current company?\n\nThis soft-deletes them and frees Emp Codes so you can re-import from Excel. This cannot be undone from the UI."
+      }
+      confirmLabel="Clear all"
+      destructive
+      loading={clearing}
+      typedConfirm="DELETE"
+      onCancel={() => {
+        if (!clearing) setConfirmClearAll(false);
+      }}
+      onConfirm={() => {
+        void runClearAll();
+      }}
+    />
   );
 }

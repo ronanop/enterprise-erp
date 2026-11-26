@@ -48,6 +48,7 @@ export function ManagementGroupPanel({ tab }: { tab: HrSetupTab }) {
   const [active, setActive] = useState<ManagementGroup | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<ManagementGroup | null>(null);
+  const [confirmSaveImpact, setConfirmSaveImpact] = useState(false);
   const [menuId, setMenuId] = useState<string | null>(null);
 
   const [groupCode, setGroupCode] = useState("");
@@ -166,7 +167,7 @@ export function ManagementGroupPanel({ tab }: { tab: HrSetupTab }) {
     });
   }
 
-  async function save() {
+  function save() {
     if (!groupName.trim() || !groupCode.trim()) {
       toast("Group name and code are required", "error");
       return;
@@ -175,6 +176,14 @@ export function ManagementGroupPanel({ tab }: { tab: HrSetupTab }) {
       toast("Default attendance shift group is required", "error");
       return;
     }
+    if (mode === "edit" && active && (active.employee_count ?? 0) > 0) {
+      setConfirmSaveImpact(true);
+      return;
+    }
+    void performSave();
+  }
+
+  async function performSave() {
     const body = {
       group_code: groupCode.trim(),
       group_name: groupName.trim(),
@@ -191,19 +200,13 @@ export function ManagementGroupPanel({ tab }: { tab: HrSetupTab }) {
     setSaving(true);
     try {
       if (mode === "edit" && active) {
-        const warn =
-          (active.employee_count ?? 0) > 0
-            ? window.confirm(
-                `This group is assigned to ${active.employee_count} employee(s). Saving may change shift and feature access. Continue?`,
-              )
-            : true;
-        if (!warn) return;
         await updateManagementGroup(active.id, { ...body, version: active.version });
         toast("Management group updated", "success");
       } else {
         await createManagementGroup(body);
         toast("Management group created", "success");
       }
+      setConfirmSaveImpact(false);
       setMode(null);
       await load();
     } catch (err) {
@@ -488,6 +491,24 @@ export function ManagementGroupPanel({ tab }: { tab: HrSetupTab }) {
           }
         }}
         onCancel={() => setConfirmDelete(null)}
+      />
+
+      <SetupConfirmDialog
+        open={confirmSaveImpact}
+        title="Update assigned management group?"
+        message={
+          active
+            ? `This group is assigned to ${active.employee_count} employee(s). Saving may change shift and feature access. Continue?`
+            : ""
+        }
+        confirmLabel="Save changes"
+        loading={saving}
+        onCancel={() => {
+          if (!saving) setConfirmSaveImpact(false);
+        }}
+        onConfirm={() => {
+          void performSave();
+        }}
       />
     </div>
   );
