@@ -1,5 +1,7 @@
 "use client";
 
+import { newUuid } from "@/lib/uuid";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, ChevronLeft, ChevronRight, Eye, FileText, LogOut, Upload, X } from "lucide-react";
 
@@ -558,9 +560,9 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
       return false;
     }
     const storedTypeCode =
-      options?.append && typeCode ? `${typeCode}-${crypto.randomUUID().slice(0, 8)}` : typeCode;
+      options?.append && typeCode ? `${typeCode}-${newUuid().slice(0, 8)}` : typeCode;
     const doc: OnboardingDocument = {
-      id: crypto.randomUUID(),
+      id: newUuid(),
       kind,
       typeCode: storedTypeCode,
       fileName: file.name,

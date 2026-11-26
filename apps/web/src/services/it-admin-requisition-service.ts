@@ -1,3 +1,4 @@
+import { newUuid } from "@/lib/uuid";
 /**
  * IT & Admin - requisitions (ID card, visiting card, t-shirts, gifts).
  * Local PWA store until a dedicated API exists.
@@ -90,7 +91,7 @@ function readAll(): AdminRequisition[] {
 
 function normalizeRow(row: Partial<AdminRequisition>): AdminRequisition {
   return {
-    id: String(row.id || crypto.randomUUID()),
+    id: String(row.id || newUuid()),
     itemType: (row.itemType as RequisitionItemType) || "id_card",
     quantity: Math.max(1, Number(row.quantity) || 1),
     notes: String(row.notes || ""),
@@ -149,7 +150,7 @@ export type CreateRequisitionInput = {
 export function createRequisition(input: CreateRequisitionInput): AdminRequisition {
   const all = readAll();
   const row = normalizeRow({
-    id: crypto.randomUUID(),
+    id: newUuid(),
     itemType: input.itemType,
     quantity: Math.max(1, Math.floor(input.quantity ?? 1) || 1),
     notes: (input.notes || "").trim(),

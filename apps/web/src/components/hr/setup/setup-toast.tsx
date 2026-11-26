@@ -1,5 +1,7 @@
 "use client";
 
+import { newUuid } from "@/lib/uuid";
+
 import { useEffect, useState } from "react";
 import { CheckCircle2, Info, X, XCircle } from "lucide-react";
 
@@ -20,7 +22,7 @@ export function SetupToastHost() {
 
   useEffect(() => {
     pushToast = (message, tone = "success") => {
-      const id = crypto.randomUUID();
+      const id = newUuid();
       setItems((prev) => [...prev, { id, message, tone }]);
       window.setTimeout(() => {
         setItems((prev) => prev.filter((t) => t.id !== id));

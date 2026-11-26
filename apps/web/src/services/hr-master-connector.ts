@@ -3,6 +3,7 @@
  * salary structures, departments, and branches across HRMS modules.
  */
 
+import { newUuid } from "@/lib/uuid";
 import {
   loadEmployeeDirectory,
   type EmployeeDirectoryOptions,
@@ -130,7 +131,7 @@ export function registerLocalEmployee(
 ): EmployeeRecord {
   const seq = consumeEmployeeSequence();
   const code = input.employeeCode || formatEmployeeCode(seq);
-  const id = crypto.randomUUID();
+  const id = newUuid();
   const displayName = [input.firstName, input.lastName].filter(Boolean).join(" ").trim();
 
   const personal = emptyPersonal();

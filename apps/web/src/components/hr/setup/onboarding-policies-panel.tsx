@@ -1,5 +1,7 @@
 "use client";
 
+import { newUuid } from "@/lib/uuid";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Eye, FileText, Pencil, Plus, Trash2, X } from "lucide-react";
 
@@ -145,7 +147,7 @@ export function OnboardingPoliciesPanel() {
       toast("Add written policy content or upload a PDF", "error");
       return;
     }
-    const id = editing?.id ?? crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+    const id = editing?.id ?? newUuid().replace(/-/g, "").slice(0, 12);
     if (!entityId) {
       toast("Select an entity for this policy", "error");
       return;

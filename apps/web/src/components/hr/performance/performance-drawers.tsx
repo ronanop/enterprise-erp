@@ -1,5 +1,7 @@
 "use client";
 
+import { newUuid } from "@/lib/uuid";
+
 import { useState } from "react";
 
 import { EmployeeSelect } from "@/components/hr/shared/employee-select";
@@ -312,7 +314,7 @@ export function OkrDrawer({
             const keyResults = [
               kr1
                 ? {
-                    id: crypto.randomUUID(),
+                    id: newUuid(),
                     title: kr1,
                     progressPct: Number(kr1p) || 0,
                     weightage: 50,
@@ -320,7 +322,7 @@ export function OkrDrawer({
                 : null,
               kr2
                 ? {
-                    id: crypto.randomUUID(),
+                    id: newUuid(),
                     title: kr2,
                     progressPct: Number(kr2p) || 0,
                     weightage: 50,

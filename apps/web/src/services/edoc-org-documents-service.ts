@@ -3,6 +3,7 @@
  * HR creates & sends; employees accept in ESS (PWA). Stored locally for now.
  */
 
+import { newUuid } from "@/lib/uuid";
 import { getStoredOrgContext } from "@/lib/org-context-storage";
 
 export type OrgDocKind = "policy" | "handbook" | "contract" | "notice" | "other";
@@ -111,7 +112,7 @@ export function createOrgDocument(input: {
 }): OrgDocument {
   const all = readAll();
   const row: OrgDocument = {
-    id: crypto.randomUUID(),
+    id: newUuid(),
     code: nextCode(all),
     title: input.title.trim(),
     kind: input.kind,

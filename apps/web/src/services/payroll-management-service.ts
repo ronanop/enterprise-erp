@@ -2,6 +2,7 @@
  * Enterprise Payroll Management service - local rich store + payroll API merge.
  */
 
+import { newUuid } from "@/lib/uuid";
 import { getStoredOrgContext } from "@/lib/org-context-storage";
 import { payrollTargetCompanyIds } from "@/lib/payroll-company";
 import { formatInr, listAllPayrollRows, loadPayrollOverview } from "@/services/payroll-service";
@@ -212,7 +213,7 @@ function mapApiEmployeeSalary(
   );
   const status = String(e.status ?? "active").toLowerCase();
   return {
-    id: String(e.id ?? crypto.randomUUID()),
+    id: String(e.id ?? newUuid()),
     employeeId,
     employeeCode: code || undefined,
     employeeName: employeeName || code || employeeId,
@@ -388,7 +389,7 @@ function nextCode(kind: keyof Seq, prefix: string): string {
 
 export function appendPayrollAudit(entry: Omit<PayrollAudit, "id" | "at">): void {
   const all = readJson<PayrollAudit[]>(K.audit, []);
-  all.unshift({ ...entry, id: crypto.randomUUID(), at: nowIso() });
+  all.unshift({ ...entry, id: newUuid(), at: nowIso() });
   writeJson(K.audit, all.slice(0, 5000));
 }
 
@@ -881,7 +882,7 @@ function payslipRecordFromApi(row: Record<string, unknown>, monthFallback = ""):
   const employer = Number(summary.employer_contribution ?? json.employer_contribution ?? json.pf_employer ?? 0);
   const payableRaw = att.payable_days ?? att.paid_days ?? json.paid_days;
   return {
-    id: String(row.id ?? crypto.randomUUID()),
+    id: String(row.id ?? newUuid()),
     payslipCode: String(row.document_number ?? nextCode("slip", "PSL")),
     runId: String(row.payroll_run_id ?? ""),
     employeeId: String(row.employee_id ?? emp.id ?? ""),
@@ -917,7 +918,7 @@ function payslipRecordFromApi(row: Record<string, unknown>, monthFallback = ""):
 function payslipsFromRunLines(run: PayrollRun, lines: PayrollRunEmployeeLine[]): PayslipRecord[] {
   const month = run.month.slice(0, 7);
   return lines.map((line) => ({
-    id: crypto.randomUUID(),
+    id: newUuid(),
     payslipCode: nextCode("slip", "PSL"),
     runId: run.id,
     employeeId: line.employeeId,
@@ -1137,7 +1138,7 @@ function mapApiStructure(
   i: number,
   previous?: SalaryStructure[],
 ): SalaryStructure {
-  const id = String(s.id ?? crypto.randomUUID());
+  const id = String(s.id ?? newUuid());
   const name = String(s.structure_name ?? s.name ?? `Structure ${i + 1}`);
   const code = String(s.structure_code ?? s.code ?? "");
   const prev = previous?.find((p) => p.id === id || p.name === name);
@@ -1260,7 +1261,7 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
               }
             : buildPayrollCycle(ym, readPayrollCutoverDay());
         return normalizePayrollRun({
-          id: String(r.id ?? crypto.randomUUID()),
+          id: String(r.id ?? newUuid()),
           runCode: String(r.document_number ?? `PAY-${String(i + 1).padStart(6, "0")}`),
           month: ym,
           monthLabel: `${cycle.label}`,
@@ -1311,7 +1312,7 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
 
     if (bonuses.length === 0 && overview.bonuses.length) {
       bonuses = overview.bonuses.map((b) => ({
-        id: String(b.id ?? crypto.randomUUID()),
+        id: String(b.id ?? newUuid()),
         employeeName: String(b.employee_name ?? "Employee"),
         bonusType: "performance",
         amount: Number(b.amount ?? 0),
@@ -1323,7 +1324,7 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
 
     if (reimbursements.length === 0 && overview.reimbursements.length) {
       reimbursements = overview.reimbursements.map((r) => ({
-        id: String(r.id ?? crypto.randomUUID()),
+        id: String(r.id ?? newUuid()),
         employeeName: String(r.employee_name ?? "Employee"),
         reimbType: "travel",
         amount: Number(r.amount ?? 0),
@@ -1335,7 +1336,7 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
 
     if (loans.length === 0 && overview.loans.length) {
       loans = overview.loans.map((l) => ({
-        id: String(l.id ?? crypto.randomUUID()),
+        id: String(l.id ?? newUuid()),
         employeeName: String(l.employee_name ?? "Employee"),
         loanAmount: Number(l.loan_amount ?? l.amount ?? 0),
         installments: Number(l.installments ?? 12),
@@ -1735,7 +1736,7 @@ export async function assignEmployeeSalary(
     ) ??
     (input.id ? all.find((s) => s.id === input.id) : undefined);
 
-  const id = input.id || existing?.id || crypto.randomUUID();
+  const id = input.id || existing?.id || newUuid();
   const row: EmployeeSalary = {
     employeeId: employeeUuid,
     employeeName: input.employeeName,
@@ -2096,7 +2097,7 @@ export async function runPayroll(month: string, cutoverDay?: number): Promise<Pa
   }
 
   const row: PayrollRun = {
-    id: crypto.randomUUID(),
+    id: newUuid(),
     runCode: nextCode("run", "PAY"),
     month,
     monthLabel: cycle.label,
@@ -2277,7 +2278,7 @@ export function lockPayrollMonth(month: string, reason: string): MonthLock {
   const existing = load<MonthLock>(K.locks).find((l) => l.month === month && l.status === "locked");
   if (existing) return existing;
   const row: MonthLock = {
-    id: crypto.randomUUID(),
+    id: newUuid(),
     month,
     monthLabel: monthLabel(month),
     reason,
@@ -2344,7 +2345,7 @@ export function createRevision(
   if (isMonthLocked(month)) {
     throw new Error("Cannot revise salary for a locked payroll month");
   }
-  const row: SalaryRevision = { ...input, id: crypto.randomUUID(), createdAt: nowIso() };
+  const row: SalaryRevision = { ...input, id: newUuid(), createdAt: nowIso() };
   const all = load<SalaryRevision>(K.revisions);
   all.unshift(row);
   save(K.revisions, all);
@@ -2372,7 +2373,7 @@ export function createRevision(
 }
 
 export async function addBonus(input: Omit<BonusRecord, "id" | "createdAt">): Promise<BonusRecord> {
-  const row: BonusRecord = { ...input, id: crypto.randomUUID(), createdAt: nowIso() };
+  const row: BonusRecord = { ...input, id: newUuid(), createdAt: nowIso() };
   try {
     const ctx = readJson<{ branchId?: string }>(PAY_CTX_KEY, {});
     const employeeId = input.employeeId && UUID_RE.test(input.employeeId) ? input.employeeId : undefined;
@@ -2423,7 +2424,7 @@ export async function addPayrollAdjustment(
 ): Promise<PayrollAdjustmentRecord> {
   const row: PayrollAdjustmentRecord = {
     ...input,
-    id: crypto.randomUUID(),
+    id: newUuid(),
     status: input.status ?? "draft",
     createdAt: nowIso(),
   };
@@ -2477,7 +2478,7 @@ export async function addPayrollAdjustment(
 export async function addReimbursement(
   input: Omit<ReimbursementRecord, "id" | "createdAt"> & { employeeId?: string },
 ): Promise<ReimbursementRecord> {
-  const row: ReimbursementRecord = { ...input, id: crypto.randomUUID(), createdAt: nowIso() };
+  const row: ReimbursementRecord = { ...input, id: newUuid(), createdAt: nowIso() };
   const ctx = readJson<{ branchId?: string }>(PAY_CTX_KEY, {});
   const employeeId = (input as { employeeId?: string }).employeeId;
   if (ctx.branchId && employeeId && UUID_RE.test(employeeId)) {
@@ -2526,7 +2527,7 @@ export function approveReimbursement(id: string, status: ReimbursementRecord["st
 export async function addLoan(
   input: Omit<LoanRecord, "id" | "createdAt"> & { employeeId?: string },
 ): Promise<LoanRecord> {
-  const row: LoanRecord = { ...input, id: crypto.randomUUID(), createdAt: nowIso() };
+  const row: LoanRecord = { ...input, id: newUuid(), createdAt: nowIso() };
   const ctx = readJson<{ branchId?: string }>(PAY_CTX_KEY, {});
   const employeeId = (input as { employeeId?: string }).employeeId;
   if (ctx.branchId && employeeId && UUID_RE.test(employeeId)) {
@@ -2757,7 +2758,7 @@ export async function generatePayslips(runId: string): Promise<PayslipRecord[]> 
       ];
       const totalDeductions = scaledDeductions.reduce((s, d) => s + d.amount, 0);
       return {
-        id: crypto.randomUUID(),
+        id: newUuid(),
         payslipCode: nextCode("slip", "PSL"),
         runId,
         employeeId: sal.employeeId,

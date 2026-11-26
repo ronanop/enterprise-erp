@@ -1,3 +1,4 @@
+import { newUuid } from "@/lib/uuid";
 import { apiClient, resourceService } from "@/services/api-client";
 import { loadEmployeeDirectory } from "@/services/employee-management-service";
 import type { HrRow } from "@/services/hr-service";
@@ -184,7 +185,7 @@ function resolveLeaveEntityName(
 
 export function appendLeaveAudit(entry: Omit<LeaveAuditEntry, "id" | "at">): void {
   const all = readJson<LeaveAuditEntry[]>(AUDIT_KEY, []);
-  all.unshift({ ...entry, id: crypto.randomUUID(), at: new Date().toISOString() });
+  all.unshift({ ...entry, id: newUuid(), at: new Date().toISOString() });
   writeJson(AUDIT_KEY, all.slice(0, 500));
 }
 
@@ -825,7 +826,7 @@ export async function applyLeave(payload: ApplyLeavePayload, dir: LeaveDirectory
     color: lt?.color ?? "#059669",
     approvalHistory: [
       {
-        id: crypto.randomUUID(),
+        id: newUuid(),
         stage: "employee",
         action: "applied",
         comment: payload.reason || "Leave applied",
@@ -878,7 +879,7 @@ export async function advanceLeaveApproval(
   ext.approvalHistory = [
     ...(ext.approvalHistory ?? []),
     {
-      id: crypto.randomUUID(),
+      id: newUuid(),
       stage: ext.approvalStage,
       action,
       comment,
@@ -900,7 +901,7 @@ export async function advanceLeaveApproval(
 
 export async function saveCompOff(record: Omit<CompOffRecord, "id"> & { id?: string }): Promise<void> {
   const all = readJson<CompOffRecord[]>(COMP_OFF_KEY, []);
-  const item: CompOffRecord = { ...record, id: record.id ?? crypto.randomUUID() };
+  const item: CompOffRecord = { ...record, id: record.id ?? newUuid() };
   try {
     const UUID_RE =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -948,7 +949,7 @@ export async function saveEncashment(
   const all = readJson<EncashmentRecord[]>(ENCASH_KEY, []);
   const item: EncashmentRecord = {
     ...record,
-    id: record.id ?? crypto.randomUUID(),
+    id: record.id ?? newUuid(),
     createdAt: new Date().toISOString(),
   };
   try {
@@ -1036,7 +1037,7 @@ export async function generateCarryForward(
     const empById = new Map(dir.options.employees.map((e) => [e.id, e]));
     const typeById = new Map(dir.leaveTypes.map((t) => [t.id, t]));
     const generated: CarryForwardRecord[] = items.map((it) => ({
-      id: crypto.randomUUID(),
+      id: newUuid(),
       employeeId: it.employee_id,
       employeeName: empById.get(it.employee_id)?.label ?? it.employee_id.slice(0, 8),
       leaveTypeName: typeById.get(it.leave_type_id)?.name ?? "-",
@@ -1064,7 +1065,7 @@ export async function generateCarryForward(
       const unused = b.available;
       const carried = Math.min(unused, maxCarry);
       return {
-        id: crypto.randomUUID(),
+        id: newUuid(),
         employeeId: b.employeeId,
         employeeName: b.employeeName,
         leaveTypeName: b.leaveTypeName,

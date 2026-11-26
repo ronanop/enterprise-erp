@@ -1,5 +1,7 @@
 "use client";
 
+import { newUuid } from "@/lib/uuid";
+
 import { useEffect, useState } from "react";
 
 import { EmployeeIdModeFields } from "@/components/hr/onboarding/employee-id-mode-fields";
@@ -110,7 +112,7 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit, initial = null 
       return raw || "permanent";
     })();
 
-    setCandidateId(initial?.candidateId || crypto.randomUUID());
+    setCandidateId(initial?.candidateId || newUuid());
     setCandidateName(initial?.candidateName || "");
     setCandidateEmail(initial?.candidateEmail || "");
     setCandidatePhone(digitsOnly(initial?.candidatePhone || "").slice(0, 10));
@@ -242,7 +244,7 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit, initial = null 
     setSaving(true);
     try {
       await onSubmit({
-        candidateId: candidateId || crypto.randomUUID(),
+        candidateId: candidateId || newUuid(),
         candidateName: name,
         candidateEmail: email,
         candidatePhone: phone,

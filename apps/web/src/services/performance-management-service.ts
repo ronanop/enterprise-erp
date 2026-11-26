@@ -2,6 +2,7 @@
  * Enterprise Performance Management service - local rich store + HR API merge.
  */
 
+import { newUuid } from "@/lib/uuid";
 import { loadHrOverview } from "@/services/hr-service";
 import { loadHrMasterDirectory, type HrMasterOption } from "@/services/hr-master-connector";
 import { resourceService } from "@/services/api-client";
@@ -99,7 +100,7 @@ function nextCode(kind: keyof Seq, prefix: string): string {
 
 export function appendPmsAudit(entry: Omit<PerformanceAudit, "id" | "at">): void {
   const all = readJson<PerformanceAudit[]>(KEYS.audit, []);
-  all.unshift({ ...entry, id: crypto.randomUUID(), at: nowIso() });
+  all.unshift({ ...entry, id: newUuid(), at: nowIso() });
   writeJson(KEYS.audit, all.slice(0, 5000));
 }
 
@@ -166,7 +167,7 @@ export async function loadPerformanceDirectory(): Promise<PerformanceDirectory> 
       const localOnly = goals.filter((g) => !UUID_RE.test(g.id));
       goals = [
         ...overview.goals.map((g, i) => ({
-        id: String(g.id ?? crypto.randomUUID()),
+        id: String(g.id ?? newUuid()),
         goalCode: String(g.document_number ?? g.goal_code ?? `GOL-${String(i + 1).padStart(6, "0")}`),
         title: String(g.goal_title ?? g.title ?? "Goal"),
         description: String(g.description ?? ""),
@@ -197,7 +198,7 @@ export async function loadPerformanceDirectory(): Promise<PerformanceDirectory> 
       const localOnly = reviews.filter((r) => !UUID_RE.test(r.id));
       reviews = [
         ...overview.reviews.map((r, i) => ({
-        id: String(r.id ?? crypto.randomUUID()),
+        id: String(r.id ?? newUuid()),
         reviewCode: String(r.document_number ?? `REV-${String(i + 1).padStart(6, "0")}`),
         cycleId: "",
         employeeName: String(r.employee_name ?? r.employee_id ?? "Employee"),
@@ -227,7 +228,7 @@ export async function loadPerformanceDirectory(): Promise<PerformanceDirectory> 
       const localOnly = appraisals.filter((a) => !UUID_RE.test(a.id));
       appraisals = [
         ...overview.appraisals.map((a, i) => ({
-        id: String(a.id ?? crypto.randomUUID()),
+        id: String(a.id ?? newUuid()),
         appraisalCode: String(a.document_number ?? `APR-${String(i + 1).padStart(6, "0")}`),
         employeeName: String(a.employee_name ?? a.employee_id ?? "Employee"),
         cycleName: String(a.cycle_name ?? "Annual"),
@@ -293,7 +294,7 @@ export async function loadPerformanceDirectory(): Promise<PerformanceDirectory> 
           progressPct: Number(o.progress_pct ?? 0),
           keyResults: (Array.isArray(o.key_results) ? o.key_results : []).map(
             (kr: Record<string, unknown>) => ({
-              id: String(kr.id ?? crypto.randomUUID()),
+              id: String(kr.id ?? newUuid()),
               title: String(kr.title ?? ""),
               progressPct: Number(kr.progress_pct ?? 0),
               weightage: Number(kr.weightage ?? 1),
@@ -359,7 +360,7 @@ export async function createGoal(
 ): Promise<PerformanceGoal> {
   const row: PerformanceGoal = {
     ...input,
-    id: crypto.randomUUID(),
+    id: newUuid(),
     goalCode: nextCode("goal", "GOL"),
     createdAt: nowIso(),
     updatedAt: nowIso(),
@@ -467,7 +468,7 @@ export function updateGoalProgress(id: string, progress: number, status?: Perfor
 export async function createKpi(
   input: Omit<KpiDefinition, "id" | "createdAt">,
 ): Promise<KpiDefinition> {
-  const row: KpiDefinition = { ...input, id: crypto.randomUUID(), createdAt: nowIso() };
+  const row: KpiDefinition = { ...input, id: newUuid(), createdAt: nowIso() };
   try {
     const branchId = readBranchId();
     if (branchId) {
@@ -516,7 +517,7 @@ export async function createOkr(
         );
   const row: OkrObjective = {
     ...input,
-    id: crypto.randomUUID(),
+    id: newUuid(),
     progressPct: progress,
     createdAt: nowIso(),
   };
@@ -544,7 +545,7 @@ export async function createOkr(
         const apiKrs = Array.isArray(res.data?.key_results) ? res.data.key_results : [];
         if (apiKrs.length) {
           row.keyResults = apiKrs.map((kr: Record<string, unknown>) => ({
-            id: String(kr.id ?? crypto.randomUUID()),
+            id: String(kr.id ?? newUuid()),
             title: String(kr.title ?? ""),
             progressPct: Number(kr.progress_pct ?? 0),
             weightage: Number(kr.weightage ?? 1),
@@ -564,7 +565,7 @@ export async function createOkr(
 }
 
 export function createCycle(input: Omit<ReviewCycle, "id" | "createdAt">): ReviewCycle {
-  const row: ReviewCycle = { ...input, id: crypto.randomUUID(), createdAt: nowIso() };
+  const row: ReviewCycle = { ...input, id: newUuid(), createdAt: nowIso() };
   const all = load<ReviewCycle>(KEYS.cycles);
   all.unshift(row);
   save(KEYS.cycles, all);
@@ -577,7 +578,7 @@ export async function createReview(
 ): Promise<PerformanceReview> {
   const row: PerformanceReview = {
     ...input,
-    id: crypto.randomUUID(),
+    id: newUuid(),
     reviewCode: nextCode("review", "REV"),
     createdAt: nowIso(),
     updatedAt: nowIso(),
@@ -643,7 +644,7 @@ export function updateReview(id: string, patch: Partial<PerformanceReview>) {
 }
 
 export function giveFeedback(input: Omit<ContinuousFeedback, "id" | "createdAt">): ContinuousFeedback {
-  const row: ContinuousFeedback = { ...input, id: crypto.randomUUID(), createdAt: nowIso() };
+  const row: ContinuousFeedback = { ...input, id: newUuid(), createdAt: nowIso() };
   const all = load<ContinuousFeedback>(KEYS.feedback);
   all.unshift(row);
   save(KEYS.feedback, all);
@@ -656,7 +657,7 @@ export function giveFeedback(input: Omit<ContinuousFeedback, "id" | "createdAt">
 }
 
 export function scheduleOneOnOne(input: Omit<OneOnOneMeeting, "id" | "createdAt">): OneOnOneMeeting {
-  const row: OneOnOneMeeting = { ...input, id: crypto.randomUUID(), createdAt: nowIso() };
+  const row: OneOnOneMeeting = { ...input, id: newUuid(), createdAt: nowIso() };
   const all = load<OneOnOneMeeting>(KEYS.meetings);
   all.unshift(row);
   save(KEYS.meetings, all);
@@ -669,7 +670,7 @@ export function scheduleOneOnOne(input: Omit<OneOnOneMeeting, "id" | "createdAt"
 }
 
 export function createProbation(input: Omit<ProbationCase, "id" | "createdAt">): ProbationCase {
-  const row: ProbationCase = { ...input, id: crypto.randomUUID(), createdAt: nowIso() };
+  const row: ProbationCase = { ...input, id: newUuid(), createdAt: nowIso() };
   const all = load<ProbationCase>(KEYS.probation);
   all.unshift(row);
   save(KEYS.probation, all);
@@ -686,7 +687,7 @@ export function updateProbation(id: string, patch: Partial<ProbationCase>) {
 }
 
 export function startPip(input: Omit<PipPlan, "id" | "createdAt">): PipPlan {
-  const row: PipPlan = { ...input, id: crypto.randomUUID(), createdAt: nowIso() };
+  const row: PipPlan = { ...input, id: newUuid(), createdAt: nowIso() };
   const all = load<PipPlan>(KEYS.pips);
   all.unshift(row);
   save(KEYS.pips, all);
@@ -699,7 +700,7 @@ export async function createAppraisal(
 ): Promise<AppraisalRecord> {
   const row: AppraisalRecord = {
     ...input,
-    id: crypto.randomUUID(),
+    id: newUuid(),
     appraisalCode: nextCode("appraisal", "APR"),
     createdAt: nowIso(),
     updatedAt: nowIso(),

@@ -1,5 +1,7 @@
 "use client";
 
+import { newUuid } from "@/lib/uuid";
+
 import { useEffect, useState } from "react";
 import { Package, Plus } from "lucide-react";
 
@@ -52,7 +54,7 @@ export function ItAdminStocksPage() {
       return;
     }
     const next: StockItem = {
-      id: crypto.randomUUID(),
+      id: newUuid(),
       name: name.trim(),
       sku: sku.trim() || `SKU-${Date.now().toString().slice(-6)}`,
       quantity: Math.max(0, Number(quantity) || 0),

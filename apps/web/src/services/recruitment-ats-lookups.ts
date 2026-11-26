@@ -4,6 +4,7 @@
  * falls back to sensible local defaults so forms always work.
  */
 
+import { newUuid } from "@/lib/uuid";
 import { buildReportingManagerOptions } from "@/lib/hr/reporting-managers";
 import { resourceService } from "@/services/api-client";
 import { formatInr as formatInrBase } from "@/services/recruitment-service";
@@ -65,7 +66,7 @@ function namedFromEmployee(row: Record<string, unknown>): NamedOption {
     row.is_hiring_manager === true ||
     row.isManager === true;
   return {
-    id: String(row.id ?? crypto.randomUUID()),
+    id: String(row.id ?? newUuid()),
     name: code && !name.includes(code) ? `${name} (${code})` : name,
     ...(email ? { email } : {}),
     ...(departmentId ? { departmentId } : {}),
@@ -264,7 +265,7 @@ export async function loadAtsLookups(): Promise<{
     const brRows = normalizeList(brRes.data);
     if (brRows.length) {
       branches = brRows.map((r) => ({
-        id: String(r.id ?? crypto.randomUUID()),
+        id: String(r.id ?? newUuid()),
         name: String(r.branch_name ?? r.name ?? r.code ?? "Branch"),
         companyId: r.company_id ? String(r.company_id) : undefined,
       }));
@@ -281,7 +282,7 @@ export async function loadAtsLookups(): Promise<{
     });
     if (recRows.length) {
       recruiters = recRows.map((r) => ({
-        id: String(r.employee_id ?? r.id ?? crypto.randomUUID()),
+        id: String(r.employee_id ?? r.id ?? newUuid()),
         name: rowName(r),
       }));
       recruiterSource = "live";

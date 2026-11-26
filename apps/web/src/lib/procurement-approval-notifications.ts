@@ -1,3 +1,4 @@
+import { newUuid } from "@/lib/uuid";
 /** Local demo notifications for PO approval decisions (admin → SCM user). */
 
 export type PoApprovalDecisionNotification = {
@@ -86,7 +87,7 @@ export function pushPoApprovalDecisionNotification(input: {
         ? `Admin accepted ${poLabel}. The purchase order is issued in Procurement - not sent to Projects.`
         : `Admin rejected ${poLabel}. Edit and resubmit for approval if needed.`;
   const row: PoApprovalDecisionNotification = {
-    id: crypto.randomUUID(),
+    id: newUuid(),
     approvalId: input.approvalId,
     orderId: input.orderId,
     companyPoNumber: input.companyPoNumber ?? null,

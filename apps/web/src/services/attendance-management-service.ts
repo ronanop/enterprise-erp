@@ -1,3 +1,4 @@
+import { newUuid } from "@/lib/uuid";
 import {
   mapMachineAttendanceStatus,
   normalizeAttendanceDate,
@@ -163,7 +164,7 @@ function saveExtension(id: string, ext: AttendanceExtension): void {
 
 export function appendAttendanceAudit(entry: Omit<AttendanceAuditEntry, "id" | "at">): void {
   const all = readJson<AttendanceAuditEntry[]>(AUDIT_KEY, []);
-  all.unshift({ ...entry, id: crypto.randomUUID(), at: new Date().toISOString() });
+  all.unshift({ ...entry, id: newUuid(), at: new Date().toISOString() });
   writeJson(AUDIT_KEY, all.slice(0, 5000));
 }
 
@@ -201,7 +202,7 @@ export async function submitCorrection(
 ): Promise<AttendanceCorrection> {
   const item: AttendanceCorrection = {
     ...payload,
-    id: crypto.randomUUID(),
+    id: newUuid(),
     workflowStage: "manager",
     createdBy: actorLabel(),
     createdAt: new Date().toISOString(),

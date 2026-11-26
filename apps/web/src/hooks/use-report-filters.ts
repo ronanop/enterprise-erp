@@ -1,5 +1,7 @@
 "use client";
 
+import { newUuid } from "@/lib/uuid";
+
 import { useCallback, useEffect, useState } from "react";
 
 const STORAGE_KEY = "erp.finance.reportFilters.v1";
@@ -101,7 +103,7 @@ export function useReportFilters(initial?: Partial<ReportFilters>) {
   const saveBookmark = useCallback(
     (name: string) => {
       const bookmark: ReportBookmark = {
-        id: crypto.randomUUID(),
+        id: newUuid(),
         name: name.trim() || `Filter ${bookmarks.length + 1}`,
         filters: { ...filters },
         createdAt: new Date().toISOString(),

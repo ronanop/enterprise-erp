@@ -1,5 +1,7 @@
 "use client";
 
+import { newUuid } from "@/lib/uuid";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
@@ -197,7 +199,7 @@ export function HolidayCalendarPanel({ tab }: { tab: HrSetupTab }) {
       if (editingEntryId) {
         return list.map((h) => (h.id === editingEntryId ? { ...draft, id: editingEntryId } : h));
       }
-      return [...list, { ...draft, id: draft.id || crypto.randomUUID() }];
+      return [...list, { ...draft, id: draft.id || newUuid() }];
     });
     resetEntryDraft();
     toast(editingEntryId ? "Holiday updated in list" : "Holiday added to list", "success");

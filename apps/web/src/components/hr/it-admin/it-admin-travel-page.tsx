@@ -1,5 +1,7 @@
 "use client";
 
+import { newUuid } from "@/lib/uuid";
+
 import { useEffect, useState } from "react";
 import { Plane, Plus } from "lucide-react";
 
@@ -56,7 +58,7 @@ export function ItAdminTravelPage() {
       return;
     }
     const next: TravelRequest = {
-      id: crypto.randomUUID(),
+      id: newUuid(),
       employeeName: employeeName.trim(),
       destination: destination.trim(),
       fromDate,

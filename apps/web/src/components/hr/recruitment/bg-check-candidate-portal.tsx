@@ -1,5 +1,7 @@
 "use client";
 
+import { newUuid } from "@/lib/uuid";
+
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { CheckCircle2, FileUp, Loader2, ShieldCheck } from "lucide-react";
 
@@ -223,7 +225,7 @@ export function BgCheckCandidatePortal({ token }: { token: string }) {
       const fileDataUrl = await readFileAsDataUrl(file);
       const storedKind = opts?.append ? `${kind}-${Date.now()}` : kind;
       const doc: BgPortalDocument = {
-        id: crypto.randomUUID(),
+        id: newUuid(),
         kind: storedKind,
         fileName: file.name,
         mimeType: file.type || "application/octet-stream",

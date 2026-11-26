@@ -1,3 +1,4 @@
+import { newUuid } from "@/lib/uuid";
 /** Local demo store for procurement approval requests (user → admin). */
 
 export type PoApprovalStatus = "pending" | "accepted" | "rejected";
@@ -234,7 +235,7 @@ export function submitPoFinalizeApproval(input: {
   }
 
   const row: PoApprovalRequest = {
-    id: crypto.randomUUID(),
+    id: newUuid(),
     kind: "finalize",
     orderId: input.orderId,
     documentNumber: input.documentNumber,
@@ -287,7 +288,7 @@ export function submitCreatePoInStockApproval(input: {
   }
 
   const row: PoApprovalRequest = {
-    id: crypto.randomUUID(),
+    id: newUuid(),
     kind: "create_po_in_stock",
     orderId,
     documentNumber: input.ovfNo || input.ovfId,

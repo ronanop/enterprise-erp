@@ -2,6 +2,7 @@
  * HR Setup data layer - API resources + local configuration store.
  */
 
+import { newUuid } from "@/lib/uuid";
 import { ApiClientError, resourceService } from "@/services/api-client";
 import { buildReportingManagerOptions } from "@/lib/hr/reporting-managers";
 import { nextCode, type HrSetupTabId } from "@/config/hr-setup";
@@ -798,7 +799,7 @@ export async function createLocalSetup(
   }
   const row: SetupRow = {
     ...body,
-    id: crypto.randomUUID(),
+    id: newUuid(),
     code: String(body.code ?? nextCode(prefix, codes)),
     status: String(body.status ?? "active"),
     created_at: now,

@@ -1,3 +1,4 @@
+import { newUuid } from "@/lib/uuid";
 import { resourceService } from "@/services/api-client";
 import { loadEmployeeDirectory } from "@/services/employee-management-service";
 import type { HrRow } from "@/services/hr-service";
@@ -78,7 +79,7 @@ export function queueTrainingNotifications(
   for (const e of entries) {
     all.unshift({
       ...e,
-      id: crypto.randomUUID(),
+      id: newUuid(),
       read: false,
       at: now,
     });

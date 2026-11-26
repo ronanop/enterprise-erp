@@ -4,6 +4,7 @@
  * onboarding rows are merged when available.
  */
 
+import { newUuid } from "@/lib/uuid";
 import { ApiClientError, apiClient, resourceService } from "@/services/api-client";
 import { sendEmailCompose } from "@/services/email-notification-service";
 import { getShareableOrigin } from "@/utils/env";
@@ -89,7 +90,7 @@ function ensureInvitationCredentials(
 ): NonNullable<OnboardingCase["invitation"]> {
   const loginEmail = (invitation?.loginEmail || email || "").trim();
   return {
-    token: invitation?.token || crypto.randomUUID().replace(/-/g, "").slice(0, 16),
+    token: invitation?.token || newUuid().replace(/-/g, "").slice(0, 16),
     sentAt: invitation?.sentAt || "",
     expiresAt: invitation?.expiresAt || new Date().toISOString(),
     channel: invitation?.channel || "email",
@@ -449,7 +450,7 @@ function writeJson(key: string, value: unknown): boolean {
 
 export function appendOnboardingAudit(entry: Omit<OnboardingAuditEntry, "id" | "at">): void {
   const all = readJson<OnboardingAuditEntry[]>(AUDIT_KEY, []);
-  all.unshift({ ...entry, id: crypto.randomUUID(), at: nowIso() });
+  all.unshift({ ...entry, id: newUuid(), at: nowIso() });
   writeJson(AUDIT_KEY, all.slice(0, 5000));
 }
 
@@ -466,14 +467,14 @@ function nextCaseCode(): string {
 
 function buildPostJoinChecklist(): ChecklistItem[] {
   const hr = POST_JOIN_HR_CHECKLIST.map((t) => ({
-    id: crypto.randomUUID(),
+    id: newUuid(),
     code: t.code,
     name: t.name,
     owner: "hr" as const,
     status: "pending" as const,
   }));
   const mgr = DEFAULT_MANAGER_CHECKLIST.map((t) => ({
-    id: crypto.randomUUID(),
+    id: newUuid(),
     code: t.code,
     name: t.name,
     owner: "manager" as const,
@@ -758,15 +759,15 @@ export function filterOnboardingCases(
 }
 
 export async function startOnboarding(input: StartOnboardingInput): Promise<OnboardingCase> {
-  const id = crypto.randomUUID();
-  const token = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+  const id = newUuid();
+  const token = newUuid().replace(/-/g, "").slice(0, 16);
   const expires = new Date();
   expires.setDate(expires.getDate() + (input.invitationExpiryDays || INVITE_EXPIRY_DEFAULT_DAYS));
 
   const caseRow: OnboardingCase = {
     id,
     caseCode: nextCaseCode(),
-    candidateId: input.candidateId || crypto.randomUUID(),
+    candidateId: input.candidateId || newUuid(),
     candidateName: input.candidateName,
     candidateEmail: input.candidateEmail,
     candidatePhone: input.candidatePhone,
@@ -1023,7 +1024,7 @@ export async function sendInvitation(
   const expires = new Date();
   expires.setDate(expires.getDate() + (expiryDays ?? INVITE_EXPIRY_DEFAULT_DAYS));
   // Fresh token + password on every send so the email always matches portal login
-  const token = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+  const token = newUuid().replace(/-/g, "").slice(0, 16);
   const loginEmail = (
     c.invitation?.loginEmail ||
     c.candidateEmail ||

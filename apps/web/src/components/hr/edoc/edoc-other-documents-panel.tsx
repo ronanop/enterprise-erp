@@ -1,5 +1,7 @@
 "use client";
 
+import { newUuid } from "@/lib/uuid";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Eye,
@@ -204,7 +206,7 @@ export function EdocOtherDocumentsPanel() {
       try {
         const dataUrl = await readFileAsDataUrl(file);
         next.push({
-          id: crypto.randomUUID(),
+          id: newUuid(),
           fileName: file.name,
           mimeType: file.type || "application/octet-stream",
           dataUrl,

@@ -1,3 +1,4 @@
+import { newUuid } from "@/lib/uuid";
 import { apiClient } from "@/services/api-client";
 import { resourceService } from "@/services/api-client";
 import { employeeDisplayName, type HrRow } from "@/services/hr-service";
@@ -217,7 +218,7 @@ function appendActivity(event: Omit<ActivityEvent, "id" | "at">): void {
   const all = readJson<ActivityEvent[]>(ACTIVITY_KEY, []);
   all.unshift({
     ...event,
-    id: crypto.randomUUID(),
+    id: newUuid(),
     at: nowIso(),
   });
   writeJson(ACTIVITY_KEY, all.slice(0, 5000));
@@ -227,7 +228,7 @@ function appendAudit(entry: Omit<AuditEntry, "id" | "changedAt">): void {
   const all = readJson<AuditEntry[]>(AUDIT_KEY, []);
   all.unshift({
     ...entry,
-    id: crypto.randomUUID(),
+    id: newUuid(),
     changedAt: nowIso(),
   });
   writeJson(AUDIT_KEY, all.slice(0, 10000));

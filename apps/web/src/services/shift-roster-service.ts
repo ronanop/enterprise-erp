@@ -1,3 +1,4 @@
+import { newUuid } from "@/lib/uuid";
 import { resourceService } from "@/services/api-client";
 import { loadEmployeeDirectory } from "@/services/employee-management-service";
 import { cacheRosterAssignments } from "@/services/hr-master-connector";
@@ -123,7 +124,7 @@ function writeJson(key: string, value: unknown): void {
 
 export function appendShiftAudit(entry: Omit<ShiftAuditEntry, "id" | "at">): void {
   const all = readJson<ShiftAuditEntry[]>(AUDIT_KEY, []);
-  all.unshift({ ...entry, id: crypto.randomUUID(), at: new Date().toISOString() });
+  all.unshift({ ...entry, id: newUuid(), at: new Date().toISOString() });
   writeJson(AUDIT_KEY, all.slice(0, 5000));
 }
 
@@ -843,7 +844,7 @@ export async function saveRotation(rotation: Omit<ShiftRotation, "id"> & { id?: 
   const all = readJson<ShiftRotation[]>(ROTATIONS_KEY, []);
   const item: ShiftRotation = {
     ...rotation,
-    id: rotation.id ?? crypto.randomUUID(),
+    id: rotation.id ?? newUuid(),
   };
   const idx = all.findIndex((r) => r.id === item.id);
   if (idx >= 0) all[idx] = item;
@@ -883,7 +884,7 @@ export async function submitShiftSwap(
   const all = readJson<ShiftSwapRequest[]>(SWAPS_KEY, []);
   all.unshift({
     ...req,
-    id: crypto.randomUUID(),
+    id: newUuid(),
     workflowStage: "manager",
     createdAt: new Date().toISOString(),
   });

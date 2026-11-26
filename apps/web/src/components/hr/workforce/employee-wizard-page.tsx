@@ -1,5 +1,7 @@
 "use client";
 
+import { newUuid } from "@/lib/uuid";
+
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -343,7 +345,7 @@ export function EmployeeWizardPage() {
     }
     const dataUrl = await readFileAsDataUrl(file);
     const item: EmployeeDocumentItem = {
-      id: crypto.randomUUID(),
+      id: newUuid(),
       documentType: docType,
       documentNumber: "",
       issueDate: "",

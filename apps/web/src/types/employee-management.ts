@@ -1,3 +1,5 @@
+import { newUuid } from "@/lib/uuid";
+
 /** Enterprise Employee Management System - unified view model */
 
 export type EmployeeLifecycleStatus =
@@ -372,7 +374,7 @@ export function emptySalary(): SalaryDetails {
 
 export function emptyEducationEntry(): EducationEntry {
   return {
-    id: crypto.randomUUID(),
+    id: newUuid(),
     degree: "",
     institution: "",
     field: "",
@@ -385,7 +387,7 @@ export function emptyEducationEntry(): EducationEntry {
 
 export function emptyPreviousEmploymentEntry(): PreviousEmploymentEntry {
   return {
-    id: crypto.randomUUID(),
+    id: newUuid(),
     company: "",
     designation: "",
     fromDate: "",

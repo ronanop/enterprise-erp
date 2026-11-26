@@ -1,3 +1,5 @@
+import { newUuid } from "@/lib/uuid";
+
 /** Holiday calendar entry shape stored in holidays_json. */
 
 export const HOLIDAY_TYPES = [
@@ -57,7 +59,7 @@ export type HolidayEntry = {
 
 export function emptyHolidayEntry(defaults?: Partial<HolidayEntry>): HolidayEntry {
   return {
-    id: crypto.randomUUID(),
+    id: newUuid(),
     title: "",
     name: "",
     date: "",
@@ -125,7 +127,7 @@ export function normalizeHolidayEntry(raw: unknown): HolidayEntry | null {
 
   const name = title || String(h.name ?? "Holiday");
   return {
-    id: String(h.id ?? crypto.randomUUID()),
+    id: String(h.id ?? newUuid()),
     title: name,
     name,
     date,
@@ -158,7 +160,7 @@ export function serializeHolidays(entries: HolidayEntry[]): HolidayEntry[] {
     const title = h.title.trim() || h.name.trim() || "Holiday";
     const repeat = h.repeat || "never";
     return {
-      id: h.id || crypto.randomUUID(),
+      id: h.id || newUuid(),
       title,
       name: title,
       date: h.date.slice(0, 10),

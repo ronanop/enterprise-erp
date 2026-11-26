@@ -1,5 +1,7 @@
 "use client";
 
+import { newUuid } from "@/lib/uuid";
+
 import {
   useCallback,
   useEffect,
@@ -2483,7 +2485,7 @@ function CertificatesTab({
     try {
       const dataUrl = await readFileAsDataUrl(file);
       const item: EmployeeDocumentItem = {
-        id: crypto.randomUUID(),
+        id: newUuid(),
         documentType: certName,
         documentNumber: "",
         issueDate: "",

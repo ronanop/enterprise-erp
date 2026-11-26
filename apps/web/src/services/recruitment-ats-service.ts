@@ -2,6 +2,7 @@
  * Enterprise ATS service - API-first with local cache fallback.
  */
 
+import { newUuid } from "@/lib/uuid";
 import { apiGetBlob, apiUpload, formatApiError, resourceService } from "@/services/api-client";
 import {
   getBgPortalUrl,
@@ -312,7 +313,7 @@ function nextCode(kind: keyof SeqBag, prefix: string, pad = 6): string {
 
 export function appendAtsAudit(entry: Omit<AtsAuditEntry, "id" | "at">): void {
   const all = readJson<AtsAuditEntry[]>(AUDIT_KEY, []);
-  all.unshift({ ...entry, id: crypto.randomUUID(), at: nowIso() });
+  all.unshift({ ...entry, id: newUuid(), at: nowIso() });
   writeJson(AUDIT_KEY, all.slice(0, 500));
 }
 
@@ -557,7 +558,7 @@ function syncCandidateDocumentFolders(
       }
       if (!resumeDoc) {
         docs.unshift({
-          id: crypto.randomUUID(),
+          id: newUuid(),
           candidateId: c.id,
           kind: "resume",
           fileName,
@@ -688,7 +689,7 @@ function syncCandidateDocumentFolders(
       contentDataUrl = undefined;
     }
     docs.unshift({
-      id: crypto.randomUUID(),
+      id: newUuid(),
       candidateId: cand.id,
       kind: "offer_letter",
       fileName,
@@ -767,7 +768,7 @@ export async function loadAtsDirectory(): Promise<AtsDirectory> {
                   ? "draft"
                   : "open";
           return {
-            id: String(r.id ?? crypto.randomUUID()),
+            id: String(r.id ?? newUuid()),
             jobCode: String(r.document_number ?? `JOB-${String(i + 1).padStart(6, "0")}`),
             title: String(r.requisition_title ?? r.title ?? "Role"),
             department: String(r.department_name ?? ""),
@@ -905,7 +906,7 @@ export async function loadAtsDirectory(): Promise<AtsDirectory> {
       }
 
       const apiCandidates: AtsCandidate[] = overview.candidates.map((c, i) => {
-        const id = String(c.id ?? crypto.randomUUID());
+        const id = String(c.id ?? newUuid());
         const educationRaw = String(c.highest_education ?? "");
         const resume = resumeByCandidate.get(id);
         const profileFromCandidate =
@@ -1108,7 +1109,7 @@ export async function loadAtsDirectory(): Promise<AtsDirectory> {
             ? stage
             : null;
 
-        const id = String(a.id ?? crypto.randomUUID());
+        const id = String(a.id ?? newUuid());
         const local = prevApps.find((p) => p.id === id);
         const notes = local?.notes || "";
         return {
@@ -1169,7 +1170,7 @@ export async function loadAtsDirectory(): Promise<AtsDirectory> {
               : s.includes("sent") || s.includes("issued")
                 ? "sent"
                 : "draft";
-        const id = String(o.id ?? crypto.randomUUID());
+        const id = String(o.id ?? newUuid());
         const offerCode = String(o.document_number ?? `OFF-${String(i + 1).padStart(6, "0")}`);
         const local = prevOffers.find(
           (p) => p.id === id || p.offerCode === offerCode || p.applicationId === String(o.application_id ?? ""),
@@ -1411,7 +1412,7 @@ export async function createJob(input: CreateJobInput): Promise<JobOpening> {
     ...jobFields,
     postingAudience: audience,
     evidenceEmailFileName: evidenceName,
-    id: crypto.randomUUID(),
+    id: newUuid(),
     jobCode: nextCode("job", "JOB"),
     filled: 0,
     createdAt: nowIso(),
@@ -1611,7 +1612,7 @@ export async function createCandidate(input: CreateCandidateInput): Promise<AtsC
 
   const row: AtsCandidate = {
     ...input,
-    id: crypto.randomUUID(),
+    id: newUuid(),
     candidateCode: nextCode("cand", "CAN"),
     createdAt: nowIso(),
     updatedAt: nowIso(),
@@ -1876,7 +1877,7 @@ export async function applyCandidateToJob(
 
   const normalized = normalizeStage(stage);
   const row: PipelineApplication = {
-    id: crypto.randomUUID(),
+    id: newUuid(),
     applicationCode: nextCode("app", "APP"),
     candidateId,
     jobId,
@@ -2623,7 +2624,7 @@ export async function scheduleInterview(
     feedback: input.feedback ?? "",
     rating: input.rating ?? 0,
     recommendation: input.recommendation ?? "",
-    id: crypto.randomUUID(),
+    id: newUuid(),
     interviewCode: nextCode("int", "INT"),
     status: input.status ?? "scheduled",
     createdAt: nowIso(),
@@ -2860,7 +2861,7 @@ export async function generateOffer(
     templateFileName: offerInput.templateFileName || offerInput.offerLetterName || "offer-letter.pdf",
     mergedPreview: offerInput.mergedPreview || "",
     offerLetterName: offerInput.offerLetterName || offerInput.templateFileName || "offer-letter.pdf",
-    id: crypto.randomUUID(),
+    id: newUuid(),
     offerCode: nextCode("offer", "OFF"),
     status: offerInput.status ?? "draft",
     createdAt: nowIso(),
@@ -3377,7 +3378,7 @@ export function addDocument(
   },
 ): AtsDocument {
   const row: AtsDocument = {
-    id: crypto.randomUUID(),
+    id: newUuid(),
     candidateId,
     kind,
     fileName,
