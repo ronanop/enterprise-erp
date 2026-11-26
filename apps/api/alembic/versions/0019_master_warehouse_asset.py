@@ -13,14 +13,20 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     try:
         from modules.master_data.models.asset import MasterAsset  # noqa: F401
+        from modules.master_data.models.warehouse import MasterWarehouse  # noqa: F401
     except ModuleNotFoundError:
         return
-    MasterAsset.__table__.create(bind=op.get_bind(), checkfirst=True)
+    bind = op.get_bind()
+    MasterWarehouse.__table__.create(bind=bind, checkfirst=True)
+    MasterAsset.__table__.create(bind=bind, checkfirst=True)
 
 
 def downgrade() -> None:
     try:
         from modules.master_data.models.asset import MasterAsset  # noqa: F401
+        from modules.master_data.models.warehouse import MasterWarehouse  # noqa: F401
     except ModuleNotFoundError:
         return
-    MasterAsset.__table__.drop(bind=op.get_bind(), checkfirst=True)
+    bind = op.get_bind()
+    MasterAsset.__table__.drop(bind=bind, checkfirst=True)
+    MasterWarehouse.__table__.drop(bind=bind, checkfirst=True)

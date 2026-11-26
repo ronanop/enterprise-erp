@@ -15,7 +15,9 @@ def upgrade() -> None:
         from modules.master_data.models.party import MasterCustomer, MasterVendor  # noqa: F401
     except ModuleNotFoundError:
         return
-    MasterCustomer.__table__.create(bind=op.get_bind(), checkfirst=True)
+    bind = op.get_bind()
+    MasterCustomer.__table__.create(bind=bind, checkfirst=True)
+    MasterVendor.__table__.create(bind=bind, checkfirst=True)
 
 
 def downgrade() -> None:
@@ -23,4 +25,6 @@ def downgrade() -> None:
         from modules.master_data.models.party import MasterCustomer, MasterVendor  # noqa: F401
     except ModuleNotFoundError:
         return
-    MasterCustomer.__table__.drop(bind=op.get_bind(), checkfirst=True)
+    bind = op.get_bind()
+    MasterVendor.__table__.drop(bind=bind, checkfirst=True)
+    MasterCustomer.__table__.drop(bind=bind, checkfirst=True)
