@@ -15,7 +15,11 @@ def upgrade() -> None:
         from modules.master_data.models.reference import MasterCurrency, MasterTax, MasterUom  # noqa: F401
     except ModuleNotFoundError:
         return
-    MasterCurrency.__table__.create(bind=op.get_bind(), checkfirst=True)
+    bind = op.get_bind()
+    # Order: currency/uom/tax have no mutual FKs; create all three.
+    MasterCurrency.__table__.create(bind=bind, checkfirst=True)
+    MasterUom.__table__.create(bind=bind, checkfirst=True)
+    MasterTax.__table__.create(bind=bind, checkfirst=True)
 
 
 def downgrade() -> None:
@@ -23,4 +27,7 @@ def downgrade() -> None:
         from modules.master_data.models.reference import MasterCurrency, MasterTax, MasterUom  # noqa: F401
     except ModuleNotFoundError:
         return
-    MasterCurrency.__table__.drop(bind=op.get_bind(), checkfirst=True)
+    bind = op.get_bind()
+    MasterTax.__table__.drop(bind=bind, checkfirst=True)
+    MasterUom.__table__.drop(bind=bind, checkfirst=True)
+    MasterCurrency.__table__.drop(bind=bind, checkfirst=True)
