@@ -1,0 +1,57 @@
+# Path B — MinIO only (Coolify → test-minio VM)
+# ----------------------------------------------
+# Coolify UI:
+#   - Docker Compose Location: docker-compose.test-minio.yml
+#   - Server / destination: test-minio
+#   - Auto-deploy: on
+# Env: MINIO_ROOT_USER, MINIO_ROOT_PASSWORD, S3_BUCKET
+# Host publish: 9000 (API), 9001 (console)
+# App VM uses S3_ENDPOINT_URL=http://<test-minio-ip>:9000
+#
+# Built from source — MinIO removed public Docker Hub / Quay images (Sep 2026).
+
+services:
+  minio:
+    build:
+      context: ./docker/minio
+      dockerfile: Dockerfile
+    image: ${COOLIFY_RESOURCE_UUID:-erp}-minio:${COOLIFY_BRANCH:-local}
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-erp_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-erp_minio_password}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - test_minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  minio-init:
+    build:
+      context: ./docker/minio-mc
+      dockerfile: Dockerfile
+    image: ${COOLIFY_RESOURCE_UUID:-erp}-minio-mc:${COOLIFY_BRANCH:-local}
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set erp http://minio:9000 $${MINIO_ROOT_USER:-erp_minio} $${MINIO_ROOT_PASSWORD:-erp_minio_password} &&
+      mc mb --ignore-existing erp/$${S3_BUCKET:-cache-erp-bucket} &&
+      exit 0
+      "
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-erp_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-erp_minio_password}
+      S3_BUCKET: ${S3_BUCKET:-cache-erp-bucket}
+    restart: "no"
+
+volumes:
+  test_minio_data:

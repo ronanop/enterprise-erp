@@ -1,5 +1,7 @@
 # Coolify deployment
 
+## SaaS (single host + AWS)
+
 Use **Docker Compose** mode in Coolify with compose file:
 
 ```text
@@ -8,6 +10,79 @@ docker-compose.coolify.yml
 
 Coolify terminates HTTPS. Stack includes **Redis + RabbitMQ + API + Celery + Web + Employee App**.
 Postgres = **AWS RDS** via `DATABASE_URL`. Object storage = **AWS S3**.
+
+## Path B — on-prem test (3 VMs, same Git repo)
+
+Coolify does **not** place one compose across VMs. Create **three** Coolify Docker Compose resources that share the **same Git repo / branch**, each with a different compose file and server, and **auto-deploy on push** enabled.
+
+### Test VM inventory
+
+| Hostname | IP | Coolify resource | Compose file | Role |
+|----------|----|------------------|--------------|------|
+| test-app | `172.16.200.154` | `erp-test-app` | `docker-compose.coolify.yml` | Redis, RabbitMQ, API, Celery, Web, Employee App |
+| test-minio | `172.16.200.155` | `erp-test-minio` | `docker-compose.test-minio.yml` | MinIO + bucket init |
+| test-db | `172.16.200.156` | `erp-test-db` | `docker-compose.test-db.yml` | PostgreSQL only |
+
+SSH OS users (`test-app` / `test-minio` / `test-db` and `root`) are managed outside this repo — **do not commit passwords**.
+
+```text
+Git push → Coolify webhook → redeploy each resource on its own VM
+```
+
+Cross-VM traffic uses **private IPs in env**, not Docker service names (`postgres` / `minio` only work inside one compose network).
+
+### One-time Coolify setup
+
+1. Install Coolify; add servers by IP (`172.16.200.154`, `.155`, `.156`) with SSH + Docker; validate green.
+2. Create the three Compose resources above (same project/repo; different compose path + destination).
+3. Firewall / LAN allow only:
+   - `172.16.200.154` → `172.16.200.156:5432`
+   - `172.16.200.154` → `172.16.200.155:9000` (and `9001` if console needed)
+4. First deploy order: **db** → **minio** → **app**.
+
+### Env on `erp-test-db` (`172.16.200.156`)
+
+```bash
+POSTGRES_USER=erp-postgres
+POSTGRES_PASSWORD=strong-password
+POSTGRES_DB=erp
+# optional: POSTGRES_HOST_PORT=5432
+```
+
+### Env on `erp-test-minio` (`172.16.200.155`)
+
+```bash
+MINIO_ROOT_USER=erp_minio
+MINIO_ROOT_PASSWORD=strong-password
+S3_BUCKET=cache-erp-bucket
+```
+
+### Env on `erp-test-app` (`172.16.200.154` — remote DB + MinIO)
+
+```bash
+DATABASE_URL=postgresql+psycopg://erp-postgres:strong-password@172.16.200.156:5432/erp
+
+OBJECT_STORAGE_BACKEND=minio
+ASSET_STORAGE_BACKEND=minio
+S3_ENDPOINT_URL=http://172.16.200.155:9000
+S3_BUCKET=cache-erp-bucket
+S3_REGION=us-east-1
+AWS_ACCESS_KEY_ID=erp_minio
+AWS_SECRET_ACCESS_KEY=strong-password
+
+# In-compose broker (service DNS on test-app only)
+RABBITMQ_USER=erp
+RABBITMQ_PASSWORD=strong-password
+CELERY_BROKER_URL=amqp://erp:strong-password@rabbitmq:5672//
+REDIS_URL=redis://redis:6379/0
+
+JWT_SECRET_KEY=long-random-string
+# …plus public URLs / CORS / access codes as in SaaS section below
+```
+
+### Path B day-2 note
+
+With auto-deploy on all three resources, a push that only changes app code may still **restart** Postgres and MinIO briefly. Data survives if named volumes are preserved. Prefer Coolify watch-path filters later if you want infra to redeploy only when its compose files change.
 
 ## Public domain (Hostinger → Coolify)
 
@@ -82,7 +157,9 @@ AWS_SECRET_ACCESS_KEY=...
 
 1. Open **api** container logs in Coolify
 2. Look for `Running Alembic migrations` then either `Migrations complete` or an ERROR
-3. If connection times out: add Coolify EC2 security group to RDS inbound **5432**
+3. If connection times out:
+   - SaaS: add Coolify EC2 security group to RDS inbound **5432**
+   - Path B: confirm `DATABASE_URL` uses `<test-db-ip>:5432` and firewall allows `test-app` → `test-db:5432`
 
 ## After first deploy
 

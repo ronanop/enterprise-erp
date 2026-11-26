@@ -1,13 +1,24 @@
-# Coolify stack (docker-compose.coolify.yml)
-# ------------------------------------------
+# Coolify stack (docker-compose.coolify.yml) — app VM only
+# --------------------------------------------------------
 # In-compose: Redis, RabbitMQ, API, Celery, Web, Employee App (ESS)
-# External: AWS RDS (DATABASE_URL) + optional AWS S3
+# No Postgres / MinIO here — those run on separate Coolify resources/VMs (Path B)
+#   or on AWS RDS / S3 (SaaS).
+#
+# External (set in Coolify env — use private IPs across VMs, not Docker DNS):
+#   DATABASE_URL=postgresql+psycopg://USER:PASS@<test-db-ip>:5432/erp
+#   OBJECT_STORAGE_BACKEND=minio
+#   ASSET_STORAGE_BACKEND=minio
+#   S3_ENDPOINT_URL=http://<test-minio-ip>:9000
+#   S3_BUCKET=...  AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY = MinIO keys
+# SaaS alternative: RDS URL + OBJECT_STORAGE_BACKEND=s3 (no S3_ENDPOINT_URL).
+#
 # Coolify proxy terminates TLS — do NOT publish host ports for api/web/employee-app.
 #
-# Coolify UI:
+# Coolify UI (Path B resource erp-test-app → test-app server):
 #   - Docker Compose Location: docker-compose.coolify.yml
-#   - Env vars: see docs/coolify-deploy.md
+#   - Env vars: see docs/09_OPS/coolify-deploy.md
 #   - Domains → web:3000, api:8000, employee-app:3001
+# Sibling compose files: docker-compose.test-db.yml, docker-compose.test-minio.yml
 
 services:
   redis:
