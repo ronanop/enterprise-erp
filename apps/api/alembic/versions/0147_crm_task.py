@@ -12,15 +12,15 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     try:
-        from modules.crm.models.task import CrmTask  # noqa: F401,E402
+        from modules.crm.models.task import CrmTask  # noqa: F401
     except ModuleNotFoundError:
         return
-    F401,E402.__table__.create(bind=op.get_bind(), checkfirst=True)
+    CrmTask.__table__.create(bind=op.get_bind(), checkfirst=True)
 
 
 def downgrade() -> None:
     try:
-        from modules.crm.models.task import CrmTask  # noqa: F401,E402
+        from modules.crm.models.task import CrmTask  # noqa: F401
     except ModuleNotFoundError:
         return
-    F401,E402.__table__.drop(bind=op.get_bind(), checkfirst=True)
+    CrmTask.__table__.drop(bind=op.get_bind(), checkfirst=True)
