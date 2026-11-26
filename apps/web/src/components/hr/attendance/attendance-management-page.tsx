@@ -35,6 +35,7 @@ import { EmsPagination, EmsSkeleton } from "@/components/hr/workforce/ems-primit
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { isAuthenticated } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -56,6 +57,7 @@ import type {
   AttendanceFilters,
   AttendancePunch,
   AttendanceRecord,
+  AttendanceStatusCode,
 } from "@/types/attendance-management";
 import { ATTENDANCE_STATUS_LABELS, emptyAttendanceFilters } from "@/types/attendance-management";
 
@@ -262,14 +264,48 @@ export function AttendanceManagementPage() {
     );
   }, [statsSource, filters, today, directory?.options.employees]);
 
+  /** Statuses actually present in the list for the current day / org filters. */
+  const statusOptionsInList = useMemo(() => {
+    const day = (filters.dateFrom || filters.dateTo || today).slice(0, 10);
+    const scoped = filterAttendanceRecords(
+      records,
+      "",
+      { ...filters, status: "", dateFrom: day, dateTo: day },
+      null,
+    );
+    const present = new Set(scoped.map((r) => r.status));
+    const implied = impliedAbsentRecords(
+      records,
+      day,
+      directory?.options.employees ?? [],
+      filters,
+    );
+    if (implied.some((r) => r.status === "absent")) present.add("absent");
+    return (Object.keys(ATTENDANCE_STATUS_LABELS) as AttendanceStatusCode[]).filter((k) =>
+      present.has(k),
+    );
+  }, [records, filters, today, directory?.options.employees]);
+
+  useEffect(() => {
+    if (!filters.status) return;
+    if (statusOptionsInList.includes(filters.status as AttendanceStatusCode)) return;
+    setFilters((f) => ({ ...f, status: "" }));
+  }, [filters.status, statusOptionsInList]);
+
   const filtered = useMemo(() => {
-    if (statsBucket === "absent") {
-      const absents = impliedAbsentRecords(
+    const wantAbsent =
+      statsBucket === "absent" || (!statsBucket && filters.status === "absent");
+    if (wantAbsent) {
+      const day = (filters.dateFrom || filters.dateTo || today).slice(0, 10);
+      let absents = impliedAbsentRecords(
         records,
-        today,
+        day,
         directory?.options.employees ?? [],
         filters,
       );
+      if (filters.employeeId) {
+        absents = absents.filter((r) => r.employeeId === filters.employeeId);
+      }
       const q = query.trim().toLowerCase();
       if (!q) return absents;
       return absents.filter((r) => {
@@ -538,30 +574,44 @@ export function AttendanceManagementPage() {
                     </SetupSelect>
                   </SetupField>
                   <SetupField label="Employee">
-                    <SetupSelect
+                    <SearchableSelect
                       value={filters.employeeId}
-                      onChange={(e) => setFilters((f) => ({ ...f, employeeId: e.target.value }))}
-                    >
-                      <option value="">All</option>
-                      {directory?.options.employees.map((e) => (
-                        <option key={e.id} value={e.id}>
-                          {e.label} ({e.code})
-                        </option>
-                      ))}
-                    </SetupSelect>
+                      placeholder="All employees"
+                      searchPlaceholder="Search name or Emp ID…"
+                      allowCustomValue={false}
+                      className="w-full"
+                      options={[
+                        { value: "", label: "All employees" },
+                        ...(directory?.options.employees.map((e) => ({
+                          value: e.id,
+                          label: `${e.label} (${e.code})`,
+                          description: e.designation || undefined,
+                        })) ?? []),
+                      ]}
+                      onChange={(id) => setFilters((f) => ({ ...f, employeeId: id }))}
+                    />
                   </SetupField>
                   <SetupField label="Status">
                     <SetupSelect
                       value={statsBucket ? "" : filters.status}
                       disabled={Boolean(statsBucket)}
                       onChange={(e) => {
+                        const nextStatus = e.target.value;
                         setStatsBucket(null);
-                        setFilters((f) => ({ ...f, status: e.target.value }));
+                        setFilters((f) => ({ ...f, status: nextStatus }));
+                        const params = new URLSearchParams(searchParams.toString());
+                        params.delete("stats");
+                        if (nextStatus) params.set("status", nextStatus);
+                        else params.delete("status");
+                        const qs = params.toString();
+                        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
                       }}
                     >
                       <option value="">All</option>
-                      {Object.entries(ATTENDANCE_STATUS_LABELS).map(([k, v]) => (
-                        <option key={k} value={k}>{v}</option>
+                      {statusOptionsInList.map((k) => (
+                        <option key={k} value={k}>
+                          {ATTENDANCE_STATUS_LABELS[k]}
+                        </option>
                       ))}
                     </SetupSelect>
                   </SetupField>
@@ -571,6 +621,15 @@ export function AttendanceManagementPage() {
                       value={filters.dateFrom}
                       onChange={(e) => {
                         const date = e.target.value;
+                        // KPI cards are "today" only — clear them when browsing another day
+                        // so the list shows that date's attendance instead of 0 rows.
+                        if (statsBucket && date !== today) {
+                          setStatsBucket(null);
+                          const params = new URLSearchParams(searchParams.toString());
+                          params.delete("stats");
+                          const qs = params.toString();
+                          router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+                        }
                         setFilters((f) => ({ ...f, dateFrom: date, dateTo: date }));
                       }}
                     />

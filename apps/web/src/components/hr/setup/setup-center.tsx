@@ -47,8 +47,9 @@ function mapDepartment(row: SetupRow): SetupRow {
     ...row,
     code: row.department_code,
     name: row.department_name,
-    company: row.company_name ?? row.company ?? "-",
-    branch: row.branch_name ?? row.branch ?? "-",
+    // Leave blank when API has only ids — panel resolves entity/branch labels from lookups.
+    company: row.company_name ?? row.company ?? "",
+    branch: row.branch_name ?? row.branch ?? "",
     head: row.head_employee_id ?? "-",
   };
 }
@@ -58,6 +59,9 @@ function mapDesignation(row: SetupRow): SetupRow {
     ...row,
     code: row.designation_code,
     name: row.designation_name,
+    // Leave blank when API has only ids — panel resolves entity/branch from lookups.
+    company: row.company_name ?? row.company ?? "",
+    branch: row.branch_name ?? row.branch ?? "",
     level: row.job_level ?? "-",
   };
 }
@@ -194,7 +198,9 @@ function mapLocation(row: SetupRow): SetupRow {
     ...row,
     code: row.location_code,
     name: row.location_name,
-    branch: row.branch_name ?? row.branch ?? "-",
+    // Leave blank when API has only ids — panel resolves entity/branch from lookups.
+    company: row.company_name ?? row.company ?? "",
+    branch: row.branch_name ?? row.branch ?? "",
   };
 }
 
@@ -219,6 +225,8 @@ type TabConfig = {
   mapApiRow?: (row: SetupRow) => SetupRow;
   buildCreateBody?: (form: Record<string, string>) => Record<string, unknown>;
   buildUpdateBody?: (form: Record<string, string>) => Record<string, unknown>;
+  /** Collapse same display name to one row (shared across entities). */
+  dedupeByName?: boolean;
   /** Status values used by Activate / Deactivate / Archive toolbar actions */
   statusActions?: {
     activate?: string;
@@ -368,15 +376,20 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     nameKeys: ["name", "department_name"],
     codeKey: "department_code",
     mapApiRow: mapDepartment,
+    /** One shared catalog across all entities — collapse same name. */
+    dedupeByName: true,
     columns: [
       { key: "name", label: "Department" },
-      { key: "company", label: "Entity" },
-      { key: "branch", label: "Branch" },
       { key: "head", label: "Head" },
       { key: "status", label: "Status" },
     ],
     fields: [
-      { key: "department_name", label: "Department Name", required: true },
+      {
+        key: "department_name",
+        label: "Department Name",
+        required: true,
+        hint: "Shared across all entities — create once, use everywhere",
+      },
       {
         key: "department_code",
         label: "Department Code",
@@ -391,7 +404,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         type: "select",
         optionsSource: "companies",
         autoDefault: true,
-        hint: "Auto-selected from organization",
+        hidden: true,
       },
       {
         key: "branch_id",
@@ -400,7 +413,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         type: "select",
         optionsSource: "branches",
         autoDefault: true,
-        hint: "Auto-selected from organization",
+        hidden: true,
       },
       {
         key: "parent_department_id",
@@ -443,13 +456,19 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     nameKeys: ["name", "designation_name"],
     codeKey: "designation_code",
     mapApiRow: mapDesignation,
+    dedupeByName: true,
     columns: [
       { key: "name", label: "Designation" },
       { key: "level", label: "Level" },
       { key: "status", label: "Status" },
     ],
     fields: [
-      { key: "designation_name", label: "Designation Name", required: true },
+      {
+        key: "designation_name",
+        label: "Designation Name",
+        required: true,
+        hint: "Shared across all entities — create once, use everywhere",
+      },
       {
         key: "designation_code",
         label: "Designation Code",
@@ -458,11 +477,21 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         hidden: true,
       },
       {
+        key: "company_id",
+        label: "Company",
+        required: true,
+        type: "select",
+        optionsSource: "companies",
+        autoDefault: true,
+        hidden: true,
+      },
+      {
         key: "branch_id",
         label: "Branch",
         type: "select",
         optionsSource: "branches",
         autoDefault: true,
+        hidden: true,
       },
       {
         key: "job_level",
@@ -484,6 +513,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       archive: "inactive",
     },
     buildCreateBody: (f) => ({
+      company_id: f.company_id || null,
       designation_code: f.designation_code,
       designation_name: f.designation_name,
       branch_id: f.branch_id || null,
@@ -492,6 +522,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     }),
     buildUpdateBody: (f) => ({
       designation_name: f.designation_name,
+      branch_id: f.branch_id || null,
       job_level: f.job_level || null,
       status: f.status,
     }),
@@ -595,14 +626,20 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     nameKeys: ["name", "location_name"],
     codeKey: "location_code",
     mapApiRow: mapLocation,
+    dedupeByName: true,
     columns: [
-      { key: "name", label: "Work Location" },
-      { key: "branch", label: "Branch" },
+      { key: "name", label: "Base Location" },
       { key: "location_type", label: "Type" },
       { key: "status", label: "Status" },
     ],
     fields: [
-      { key: "location_name", label: "Work Location Name", required: true, placeholder: "e.g. Mumbai, Maharashtra" },
+      {
+        key: "location_name",
+        label: "Base Location Name",
+        required: true,
+        placeholder: "e.g. Mumbai, Maharashtra",
+        hint: "Shared across all entities — create once, use everywhere",
+      },
       { key: "location_code", label: "Code", required: true, readOnly: true, hidden: true },
       {
         key: "company_id",
@@ -611,6 +648,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         type: "select",
         optionsSource: "companies",
         autoDefault: true,
+        hidden: true,
       },
       {
         key: "branch_id",
@@ -619,7 +657,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         type: "select",
         optionsSource: "branches",
         autoDefault: true,
-        hint: "Parent branch for this work location",
+        hidden: true,
       },
       {
         key: "location_type",
@@ -1599,6 +1637,7 @@ function TabPanel({ tab }: { tab: HrSetupTab }) {
       buildCreateBody={cfg.buildCreateBody}
       buildUpdateBody={cfg.buildUpdateBody}
       statusActions={cfg.statusActions}
+      dedupeByName={cfg.dedupeByName}
     />
   );
 }

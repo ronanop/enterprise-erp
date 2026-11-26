@@ -25,6 +25,7 @@ from modules.recruitment.routers import (
     resumes_router,
     talent_pools_router,
 )
+from modules.recruitment.routers.offer_templates import offer_templates_router
 from modules.recruitment.routers.public_bg_check import public_bg_check_router
 from modules.recruitment.routers.public_bg_vendor import public_bg_vendor_router
 from modules.recruitment.routers.public_careers import public_careers_router
@@ -51,6 +52,7 @@ recruitment_router.include_router(application_stages_router)
 recruitment_router.include_router(interviews_router)
 recruitment_router.include_router(interview_feedback_router)
 recruitment_router.include_router(offers_router)
+recruitment_router.include_router(offer_templates_router)
 recruitment_router.include_router(offer_approvals_router)
 recruitment_router.include_router(background_verifications_router)
 recruitment_router.include_router(reference_checks_router)

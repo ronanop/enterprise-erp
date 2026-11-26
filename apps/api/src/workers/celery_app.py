@@ -22,8 +22,10 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,
     beat_schedule={
         "hr-biometric-fetch-punches": {
+            # After each dump finishes Celery schedules the next run; 120s gap
+            # avoids stacking on large K40 logs (full pull can take 1–3 min).
             "task": "hr.biometric_fetch_punches",
-            "schedule": 60.0,
+            "schedule": 120.0,
         },
         "hr-attendance-auto-absent": {
             "task": "hr.attendance_auto_absent",

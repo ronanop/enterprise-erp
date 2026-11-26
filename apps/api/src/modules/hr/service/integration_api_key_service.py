@@ -23,6 +23,8 @@ from modules.hr.models.employment import HrEmployment
 from modules.hr.models.integration_api_key import HrIntegrationApiKey
 from modules.hr.models.leave_balance import HrLeaveBalance
 from modules.hr.models.leave_type import HrLeaveType
+from modules.hr.models.shift import HrShift
+from modules.hr.models.shift_assignment import HrShiftAssignment
 from modules.hr.repository.integration_api_key_repository import HrIntegrationApiKeyRepository
 from modules.hr.schemas import (
     HrIntegrationApiKeyCreated,
@@ -34,6 +36,12 @@ from modules.master_data.models.employee import MasterEmployee
 from modules.organization.models.branch import OrgBranch
 from modules.organization.models.company import OrgCompany
 from modules.organization.models.hierarchy import OrgDepartment
+from modules.payroll.models.employee_salary import PayEmployeeSalary
+from modules.payroll.models.payroll_period import PayPayrollPeriod
+from modules.payroll.models.payroll_run import PayPayrollRun
+from modules.payroll.models.payroll_run_line import PayPayrollRunLine
+from modules.payroll.models.payslip import PayPayslip
+from modules.payroll.models.salary_structure import PaySalaryStructure
 
 
 class HrIntegrationApiKeyService:
@@ -161,6 +169,11 @@ class HrIntegrationApiKeyService:
         need_profile = bool({"gender", "date_of_birth"} & set(fields))
         need_employment = bool({"employment_type", "work_location"} & set(fields))
         need_leaves = bool({"leave_balances", "leave_balance_total", "leave_used_total"} & set(fields))
+        need_salary = "salary" in fields
+        need_payroll = "payroll" in fields
+        need_payslip = "payslip" in fields
+        need_shift = "shift" in fields
+        today = datetime.now(timezone.utc).date()
 
         dept_map = {
             d.id: d.department_name
@@ -245,6 +258,173 @@ class HrIntegrationApiKeyService:
                     }
                 )
 
+        salary_by_emp: dict[UUID, dict[str, object]] = {}
+        if need_salary and emp_ids:
+            salaries = list(
+                self._db.scalars(
+                    select(PayEmployeeSalary)
+                    .where(
+                        PayEmployeeSalary.employee_id.in_(emp_ids),
+                        PayEmployeeSalary.is_deleted.is_(False),
+                        PayEmployeeSalary.status.in_(("active", "ended")),
+                    )
+                    .order_by(PayEmployeeSalary.effective_from.desc())
+                ).all()
+            )
+            structure_ids = {s.salary_structure_id for s in salaries if s.salary_structure_id}
+            structure_map = {
+                s.id: s
+                for s in (
+                    self._db.scalars(
+                        select(PaySalaryStructure).where(PaySalaryStructure.id.in_(structure_ids))
+                    ).all()
+                    if structure_ids
+                    else []
+                )
+            }
+            for sal in salaries:
+                if sal.employee_id in salary_by_emp:
+                    continue
+                structure = structure_map.get(sal.salary_structure_id)
+                salary_by_emp[sal.employee_id] = {
+                    "ctc_amount": float(sal.ctc_amount or 0),
+                    "gross_amount": float(sal.gross_amount or 0),
+                    "currency_code": sal.currency_code,
+                    "status": sal.status,
+                    "effective_from": sal.effective_from.isoformat() if sal.effective_from else None,
+                    "effective_to": sal.effective_to.isoformat() if sal.effective_to else None,
+                    "structure_code": structure.structure_code if structure else None,
+                    "structure_name": structure.structure_name if structure else None,
+                }
+
+        payroll_by_emp: dict[UUID, dict[str, object]] = {}
+        if need_payroll and emp_ids:
+            lines = list(
+                self._db.scalars(
+                    select(PayPayrollRunLine)
+                    .where(
+                        PayPayrollRunLine.employee_id.in_(emp_ids),
+                        PayPayrollRunLine.is_deleted.is_(False),
+                        PayPayrollRunLine.status != "cancelled",
+                    )
+                    .order_by(PayPayrollRunLine.created_at.desc())
+                ).all()
+            )
+            run_ids = {ln.payroll_run_id for ln in lines if ln.payroll_run_id}
+            runs = {
+                r.id: r
+                for r in (
+                    self._db.scalars(select(PayPayrollRun).where(PayPayrollRun.id.in_(run_ids))).all()
+                    if run_ids
+                    else []
+                )
+            }
+            period_ids = {r.payroll_period_id for r in runs.values() if r.payroll_period_id}
+            periods = {
+                p.id: p
+                for p in (
+                    self._db.scalars(
+                        select(PayPayrollPeriod).where(PayPayrollPeriod.id.in_(period_ids))
+                    ).all()
+                    if period_ids
+                    else []
+                )
+            }
+            for ln in lines:
+                if ln.employee_id in payroll_by_emp:
+                    continue
+                run = runs.get(ln.payroll_run_id)
+                period = periods.get(run.payroll_period_id) if run else None
+                payroll_by_emp[ln.employee_id] = {
+                    "run_number": run.document_number if run else None,
+                    "run_date": run.run_date.isoformat() if run and run.run_date else None,
+                    "run_status": run.status if run else None,
+                    "period_code": period.period_code if period else None,
+                    "period_name": period.period_name if period else None,
+                    "payroll_year": period.payroll_year if period else None,
+                    "payroll_month": period.payroll_month if period else None,
+                    "paid_days": float(ln.paid_days or 0),
+                    "lop_days": float(ln.lop_days or 0),
+                    "leave_days": float(ln.leave_days or 0),
+                    "gross_earnings": float(ln.gross_earnings or 0),
+                    "total_deductions": float(ln.total_deductions or 0),
+                    "net_pay": float(ln.net_pay or 0),
+                    "employer_contribution": float(ln.employer_contribution or 0),
+                    "status": ln.status,
+                    "component_breakdown": ln.component_breakdown_json or None,
+                }
+
+        payslip_by_emp: dict[UUID, dict[str, object]] = {}
+        if need_payslip and emp_ids:
+            slips = list(
+                self._db.scalars(
+                    select(PayPayslip)
+                    .where(
+                        PayPayslip.employee_id.in_(emp_ids),
+                        PayPayslip.is_deleted.is_(False),
+                        PayPayslip.status != "void",
+                    )
+                    .order_by(PayPayslip.created_at.desc())
+                ).all()
+            )
+            for slip in slips:
+                if slip.employee_id in payslip_by_emp:
+                    continue
+                payslip_by_emp[slip.employee_id] = {
+                    "document_number": slip.document_number,
+                    "gross_salary": float(slip.gross_salary or 0),
+                    "total_deductions": float(slip.total_deductions or 0),
+                    "net_salary": float(slip.net_salary or 0),
+                    "payment_status": slip.payment_status,
+                    "delivery_status": slip.delivery_status,
+                    "status": slip.status,
+                    "issued_at": slip.issued_at.isoformat() if slip.issued_at else None,
+                    "payslip": slip.payslip_json or None,
+                }
+
+        shift_by_emp: dict[UUID, dict[str, object]] = {}
+        if need_shift and emp_ids:
+            assignments = list(
+                self._db.scalars(
+                    select(HrShiftAssignment)
+                    .where(
+                        HrShiftAssignment.employee_id.in_(emp_ids),
+                        HrShiftAssignment.is_deleted.is_(False),
+                        HrShiftAssignment.status.in_(("active", "approved")),
+                        HrShiftAssignment.effective_from <= today,
+                    )
+                    .order_by(HrShiftAssignment.effective_from.desc())
+                ).all()
+            )
+            shift_ids = {a.shift_id for a in assignments if a.shift_id}
+            shift_map = {
+                s.id: s
+                for s in (
+                    self._db.scalars(select(HrShift).where(HrShift.id.in_(shift_ids))).all()
+                    if shift_ids
+                    else []
+                )
+            }
+            for asn in assignments:
+                if asn.employee_id in shift_by_emp:
+                    continue
+                if asn.effective_to and asn.effective_to < today:
+                    continue
+                sh = shift_map.get(asn.shift_id)
+                shift_by_emp[asn.employee_id] = {
+                    "shift_code": sh.shift_code if sh else None,
+                    "shift_name": sh.shift_name if sh else None,
+                    "shift_type": sh.shift_type if sh else None,
+                    "start_time": sh.start_time.isoformat() if sh and sh.start_time else None,
+                    "end_time": sh.end_time.isoformat() if sh and sh.end_time else None,
+                    "is_overnight": bool(sh.is_overnight) if sh else None,
+                    "grace_minutes": sh.grace_minutes if sh else None,
+                    "break_minutes": sh.break_minutes if sh else None,
+                    "effective_from": asn.effective_from.isoformat() if asn.effective_from else None,
+                    "effective_to": asn.effective_to.isoformat() if asn.effective_to else None,
+                    "assignment_status": asn.status,
+                }
+
         out: list[HrIntegrationEmployeeRow] = []
         for emp in page_rows:
             payload: dict[str, object] = {}
@@ -321,6 +501,14 @@ class HrIntegrationApiKeyService:
                 payload["leave_used_total"] = round(
                     sum(float(x.get("used") or 0) for x in leaves), 2
                 )
+            if "salary" in fields:
+                payload["salary"] = salary_by_emp.get(emp.id)
+            if "payroll" in fields:
+                payload["payroll"] = payroll_by_emp.get(emp.id)
+            if "payslip" in fields:
+                payload["payslip"] = payslip_by_emp.get(emp.id)
+            if "shift" in fields:
+                payload["shift"] = shift_by_emp.get(emp.id)
             out.append(HrIntegrationEmployeeRow(id=str(emp.id), data=payload))
         return out, total
 

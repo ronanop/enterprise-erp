@@ -68,14 +68,16 @@ class BiometricDeviceRepository(HrScopedRepository):
             HrBiometricDevice.id == row_id,
             HrBiometricDevice.is_deleted.is_(False),
         )
-        stmt = self.apply_hr_filter(stmt, HrBiometricDevice, ctx, branch_scoped=True)
+        # Devices are company masters (IP/port) — do not hide by session branch.
+        stmt = self.apply_hr_filter(stmt, HrBiometricDevice, ctx, branch_scoped=False)
         return self.db.scalar(stmt)
 
     def list_rows(self, ctx: TenantContext, company_id: UUID | None):
         stmt = select(HrBiometricDevice).where(HrBiometricDevice.is_deleted.is_(False))
         if company_id is not None:
             stmt = stmt.where(HrBiometricDevice.company_id == company_id)
-        stmt = self.apply_hr_filter(stmt, HrBiometricDevice, ctx, branch_scoped=True)
+        # Devices are company masters — do not hide by session branch.
+        stmt = self.apply_hr_filter(stmt, HrBiometricDevice, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt).all())
 
     def get_by_code(self, ctx: TenantContext, company_id: UUID, device_code: str):

@@ -50,7 +50,7 @@ Public routers (unauthenticated or token-gated): digital onboarding, order track
 | Master data | master-data |
 | Operations | finance, sales, procurement, inventory, manufacturing, quality, crm, hr, payroll, recruitment, project, asset, service, helpdesk, document, marketing, grc, analytics, integration, ecommerce, portal |
 
-ESS is primarily the employee-app / `/ess` surface, backed by `ess` + `hr` APIs.
+ESS APIs live under `modules/ess` (leave, attendance, workplace). HR admin surfaces them via `/hr/ess*` inbox and policies. Employee PWA/mobile clients are not shipped in this repo.
 
 ## 3. Critical business flows
 

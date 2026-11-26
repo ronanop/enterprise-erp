@@ -1,20 +1,17 @@
 /**
  * Offer letter templates — PDF letterhead + body merge fields.
- * Stored in IndexedDB (PDFs exceed localStorage quota).
+ * Source of truth: MinIO via API. IndexedDB is a local cache only.
  */
 
+import { apiClient, formatApiError } from "@/services/api-client";
 import { idbGetJson, idbSetJson } from "@/lib/client-idb-json-store";
 import type { OfferLetterTemplate } from "@/types/recruitment-ats";
 
 const KEY = "erp_ats_offer_letter_templates_v1";
+const API = "/recruitment/offer-templates";
 
 let cache: OfferLetterTemplate[] | null = null;
 let loadPromise: Promise<OfferLetterTemplate[]> | null = null;
-let persistQueue: Promise<void> = Promise.resolve();
-
-function nowIso() {
-  return new Date().toISOString();
-}
 
 function sortTemplates(rows: OfferLetterTemplate[]): OfferLetterTemplate[] {
   return [...rows].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
@@ -26,59 +23,79 @@ function isTemplate(t: unknown): t is OfferLetterTemplate {
     typeof t === "object" &&
     typeof (t as OfferLetterTemplate).id === "string" &&
     typeof (t as OfferLetterTemplate).name === "string" &&
-    typeof (t as OfferLetterTemplate).pdfDataUrl === "string" &&
     typeof (t as OfferLetterTemplate).bodyContent === "string"
   );
 }
 
-function readLocalStorageFallback(): OfferLetterTemplate[] {
-  if (typeof window === "undefined") return [];
+function mapApiRow(row: Record<string, unknown>): OfferLetterTemplate | null {
+  if (!isTemplate(row) && !(row && typeof row.id === "string")) return null;
+  const id = String(row.id ?? "");
+  const name = String(row.name ?? "");
+  const bodyContent = String(row.bodyContent ?? row.body_content ?? "");
+  const pdfDataUrl = String(row.pdfDataUrl ?? row.pdf_data_url ?? "");
+  const pdfFileName = String(row.pdfFileName ?? row.pdf_file_name ?? "letterhead.pdf");
+  const createdAt = String(row.createdAt ?? row.created_at ?? new Date().toISOString());
+  const updatedAt = String(row.updatedAt ?? row.updated_at ?? createdAt);
+  if (!id || !name) return null;
+  return {
+    id,
+    name,
+    description: (row.description as string | undefined) || undefined,
+    pdfFileName,
+    pdfDataUrl: pdfDataUrl.startsWith("data:") ? pdfDataUrl : "",
+    bodyContent,
+    createdAt,
+    updatedAt,
+  };
+}
+
+async function cacheLocal(rows: OfferLetterTemplate[]): Promise<void> {
+  cache = sortTemplates(rows);
   try {
-    const raw = window.localStorage.getItem(KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isTemplate);
+    await idbSetJson(KEY, cache);
   } catch {
-    return [];
+    /* ignore quota */
   }
 }
 
-function clearLocalStorageTemplates() {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.removeItem(KEY);
-  } catch {
-    /* ignore */
+async function loadFromApi(): Promise<OfferLetterTemplate[]> {
+  const listed = await apiClient<Record<string, unknown>[]>(API);
+  const rows = (listed ?? []).map(mapApiRow).filter((r): r is OfferLetterTemplate => !!r);
+  // List omits PDF bytes — hydrate each template that needs a letterhead
+  const hydrated: OfferLetterTemplate[] = [];
+  for (const row of rows) {
+    if (row.pdfDataUrl?.startsWith("data:")) {
+      hydrated.push(row);
+      continue;
+    }
+    try {
+      const full = await apiClient<Record<string, unknown>>(`${API}/${encodeURIComponent(row.id)}`);
+      const mapped = mapApiRow(full ?? {});
+      hydrated.push(mapped ?? row);
+    } catch {
+      hydrated.push(row);
+    }
   }
+  await cacheLocal(hydrated);
+  return cache!;
 }
 
 async function loadFromStorage(): Promise<OfferLetterTemplate[]> {
   try {
-    const fromIdb = await idbGetJson<OfferLetterTemplate[]>(KEY);
-    if (Array.isArray(fromIdb) && fromIdb.length) {
-      cache = sortTemplates(fromIdb.filter(isTemplate));
-      clearLocalStorageTemplates();
-      return cache;
-    }
+    return await loadFromApi();
   } catch {
-    /* fall through */
-  }
-
-  const fromLs = readLocalStorageFallback();
-  if (fromLs.length) {
-    cache = sortTemplates(fromLs);
     try {
-      await idbSetJson(KEY, cache);
-      clearLocalStorageTemplates();
+      const fromIdb = await idbGetJson<OfferLetterTemplate[]>(KEY);
+      if (Array.isArray(fromIdb) && fromIdb.length) {
+        cache = sortTemplates(fromIdb.filter(isTemplate));
+        return cache;
+      }
     } catch {
-      /* keep LS if IDB write fails */
+      /* fall through */
     }
+    cache = [];
     return cache;
   }
-
-  cache = [];
-  return cache;
 }
 
 /** Warm cache (safe to call multiple times). */
@@ -89,31 +106,7 @@ export function ensureOfferLetterTemplatesLoaded(): Promise<OfferLetterTemplate[
 }
 
 function getAllSync(): OfferLetterTemplate[] {
-  if (cache) return cache;
-  const fromLs = readLocalStorageFallback();
-  if (fromLs.length) {
-    cache = sortTemplates(fromLs);
-    return cache;
-  }
-  return [];
-}
-
-async function persist(rows: OfferLetterTemplate[]): Promise<void> {
-  persistQueue = persistQueue
-    .then(async () => {
-      await idbSetJson(KEY, rows);
-      clearLocalStorageTemplates();
-    })
-    .catch((err) => {
-      const msg =
-        err instanceof Error ? err.message : "Failed to save offer templates";
-      throw new Error(
-        /quota|storage/i.test(msg)
-          ? "Browser storage is full — free space or use a smaller PDF (max 5 MB)."
-          : msg,
-      );
-    });
-  return persistQueue;
+  return cache ? [...cache] : [];
 }
 
 export function listOfferLetterTemplates(): OfferLetterTemplate[] {
@@ -129,11 +122,6 @@ export async function saveOfferLetterTemplate(
     id?: string;
   },
 ): Promise<OfferLetterTemplate> {
-  await ensureOfferLetterTemplatesLoaded();
-  const all = [...getAllSync()];
-  const now = nowIso();
-  const name = input.name.trim() || "Untitled template";
-
   if (!input.pdfDataUrl?.startsWith("data:")) {
     throw new Error("Upload a PDF letterhead before saving.");
   }
@@ -141,47 +129,37 @@ export async function saveOfferLetterTemplate(
     throw new Error("Add body content before saving.");
   }
 
-  if (input.id) {
-    const idx = all.findIndex((t) => t.id === input.id);
-    if (idx >= 0) {
-      const next: OfferLetterTemplate = {
-        ...all[idx]!,
-        name,
-        description: (input.description || "").trim() || undefined,
-        pdfFileName: input.pdfFileName,
-        pdfDataUrl: input.pdfDataUrl,
-        bodyContent: input.bodyContent,
-        updatedAt: now,
-      };
-      all[idx] = next;
-      cache = sortTemplates(all);
-      await persist(cache);
-      return next;
-    }
+  try {
+    const saved = await apiClient<Record<string, unknown>>(API, {
+      method: "POST",
+      body: {
+        id: input.id || null,
+        name: input.name.trim() || "Untitled template",
+        description: (input.description || "").trim() || null,
+        pdf_file_name: input.pdfFileName || "letterhead.pdf",
+        pdf_data_url: input.pdfDataUrl,
+        body_content: input.bodyContent,
+      },
+    });
+    const mapped = mapApiRow(saved ?? {});
+    if (!mapped) throw new Error("Invalid template response");
+    await ensureOfferLetterTemplatesLoaded();
+    const all = getAllSync().filter((t) => t.id !== mapped.id);
+    all.unshift(mapped);
+    await cacheLocal(all);
+    return mapped;
+  } catch (err) {
+    throw new Error(formatApiError(err, "Failed to save offer template to storage"));
   }
-
-  const row: OfferLetterTemplate = {
-    id: crypto.randomUUID(),
-    name,
-    description: (input.description || "").trim() || undefined,
-    pdfFileName: input.pdfFileName,
-    pdfDataUrl: input.pdfDataUrl,
-    bodyContent: input.bodyContent,
-    createdAt: now,
-    updatedAt: now,
-  };
-  all.unshift(row);
-  cache = sortTemplates(all);
-  await persist(cache);
-  return row;
 }
 
 export async function deleteOfferLetterTemplate(id: string): Promise<boolean> {
-  await ensureOfferLetterTemplatesLoaded();
-  const all = getAllSync();
-  const next = all.filter((t) => t.id !== id);
-  if (next.length === all.length) return false;
-  cache = next;
-  await persist(cache);
-  return true;
+  try {
+    await apiClient<null>(`${API}/${encodeURIComponent(id)}`, { method: "DELETE" });
+    const next = getAllSync().filter((t) => t.id !== id);
+    await cacheLocal(next);
+    return true;
+  } catch {
+    return false;
+  }
 }

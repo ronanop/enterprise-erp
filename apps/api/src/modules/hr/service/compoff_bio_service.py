@@ -268,26 +268,25 @@ class BiometricDeviceService:
 
     @staticmethod
     def _probe_device(ip: str | None, port: int | None) -> tuple[bool, str]:
-        """Fast TCP reachability check. Never block the API worker on black-holed hosts."""
+        """Fast TCP reachability check for Status (Active = port open)."""
         if not ip or not port:
             return False, "Configure IP and port to connect to the device."
         host = str(ip).strip()
         port_i = int(port)
-
-        def _connect() -> None:
-            with socket.create_connection((host, port_i), timeout=1.5):
-                return None
-
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(2.0)
         try:
-            with ThreadPoolExecutor(max_workers=1) as pool:
-                pool.submit(_connect).result(timeout=2.5)
+            sock.connect((host, port_i))
             return True, f"Device reachable at {host}:{port_i}"
-        except FuturesTimeout:
-            return False, f"Cannot reach {host}:{port_i} — connection timed out"
         except OSError as exc:
             return False, f"Cannot reach {host}:{port_i} - {exc}"
         except Exception as exc:  # noqa: BLE001 - probe must never fail the feed
             return False, f"Cannot reach {host}:{port_i} - {exc}"
+        finally:
+            try:
+                sock.close()
+            except OSError:
+                pass
 
     def get(self, ctx: TenantContext, row_id: UUID):
         row = self._repo.get(ctx, row_id)
@@ -295,26 +294,69 @@ class BiometricDeviceService:
             raise NotFoundException("Biometric device not found")
         return row
 
-    def live_feed(self, ctx: TenantContext, row_id: UUID, *, days: int = 14) -> BiometricDeviceFeedResponse:
-        """Punch list from DB; short TCP probe only for reachability banner (no ZK protocol)."""
+    def ping(self, ctx: TenantContext, row_id: UUID) -> dict:
+        """Fast TCP reachability for the Status column (connected vs unreachable)."""
+        device = self.get(ctx, row_id)
+        reachable, message = self._probe_device(device.ip_address, device.port)
+        return {
+            "device_id": device.id,
+            "reachable": reachable,
+            "message": message,
+        }
+
+    def ping_all(self, ctx: TenantContext, company_id: UUID | None = None) -> list[dict]:
+        """Probe every registered device once (Status column batch, in parallel)."""
+        rows = self.list(ctx, company_id)
+
+        def _one(device) -> dict:
+            enabled = str(getattr(device, "status", "") or "").lower() == "active"
+            if not enabled:
+                return {
+                    "device_id": device.id,
+                    "reachable": False,
+                    "enabled": False,
+                    "message": "Device is disabled",
+                }
+            reachable, message = self._probe_device(device.ip_address, device.port)
+            return {
+                "device_id": device.id,
+                "reachable": reachable,
+                "enabled": True,
+                "message": message,
+            }
+
+        if not rows:
+            return []
+        # Parallel probes so 3 devices finish in ~2s (not 6s sequential).
+        with ThreadPoolExecutor(max_workers=min(8, len(rows))) as pool:
+            return list(pool.map(_one, rows))
+
+    def live_feed(
+        self,
+        ctx: TenantContext,
+        row_id: UUID,
+        *,
+        days: int = 14,
+        skip_probe: bool = False,
+    ) -> BiometricDeviceFeedResponse:
+        """Punch list from DB; optional short TCP probe for reachability banner."""
         from sqlalchemy import func, select
 
         from modules.hr.models.biometric_punch import HrBiometricPunch
         from modules.master_data.models.employee import MasterEmployee
 
         device = self.get(ctx, row_id)
-        cid = device.company_id
         today = date.today()
         window_days = max(1, min(days, 90))
         cutoff = today - timedelta(days=window_days)
 
-        # Cap the drawer payload — large windows used to take 20s+ and kill the Next proxy.
+        # Cap the drawer payload — show recent history without killing the Next proxy.
         punch_rows = self._punches.list_for_device(
             ctx,
             device_id=device.id,
             date_from=cutoff,
             date_to=today,
-            limit=100,
+            limit=250,
         )
         today_punch_count = int(
             self._db.scalar(
@@ -370,7 +412,15 @@ class BiometricDeviceService:
             )
 
         punch_total = len(punch_rows)
-        reachable, probe_msg = self._probe_device(device.ip_address, device.port)
+        # Silent UI refreshes skip TCP probe so the drawer stays fast.
+        if skip_probe:
+            reachable = True
+            probe_msg = (
+                f"Showing saved punches for {device.ip_address or 'device'}"
+                f"{f':{device.port}' if device.port else ''}"
+            )
+        else:
+            reachable, probe_msg = self._probe_device(device.ip_address, device.port)
         if punch_total == 0:
             reachability_message = (
                 f"{probe_msg} No punches saved in ERP for this device (last {window_days} days). "
@@ -379,7 +429,8 @@ class BiometricDeviceService:
         else:
             reachability_message = (
                 f"{probe_msg} Showing latest {punch_total} punch(es) already saved in ERP "
-                f"(last {window_days} days). Use Fetch punches only to pull new machine logs."
+                f"(last {window_days} days). Background sync pulls new machine logs; "
+                "this feed refreshes from ERP every 1 min."
             )
         return BiometricDeviceFeedResponse(
             device=BiometricDeviceResponse.model_validate(device),
@@ -725,13 +776,15 @@ class BiometricDeviceService:
 
         def _pull_filtered() -> list[dict]:
             last_err: Exception | None = None
+            # TCP first; UDP only if connect/handshake fails. Do not double-pull
+            # 50k–80k logs (each dump can take 1–3 minutes on K40 Pro).
             for force_udp in (False, True):
                 conn = None
                 try:
                     terminal = ZK(
                         host,
                         port=port_i,
-                        timeout=30,
+                        timeout=60,
                         password=password,
                         force_udp=force_udp,
                         ommit_ping=True,
@@ -764,14 +817,17 @@ class BiometricDeviceService:
                 f"Cannot fetch punches from {host}:{port_i}. {last_err}"
             )
 
+        # Run inline — ThreadPoolExecutor.__exit__ waits for the worker and on
+        # Windows a timed-out ZK dump can block the API for minutes after timeout.
         try:
-            with ThreadPoolExecutor(max_workers=1) as pool:
-                raw_rows = pool.submit(_pull_filtered).result(timeout=_ZK_PULL_TIMEOUT_SEC)
-        except FuturesTimeout as exc:
+            raw_rows = _pull_filtered()
+        except AppException:
+            raise
+        except Exception as exc:  # noqa: BLE001
             raise AppException(
-                f"Timed out fetching punches from {host}:{port_i} "
-                f"({_ZK_PULL_TIMEOUT_SEC}s). Device log is very large — "
-                f"only last {_LOG_LOOKBACK_DAYS} days are ingested after download."
+                f"Timed out or failed fetching punches from {host}:{port_i} "
+                f"(device may hold 50k+ logs; last {_LOG_LOOKBACK_DAYS} days are kept). "
+                f"{exc}"
             ) from exc
 
         # Incremental watermark with overlap so partial syncs can catch up.

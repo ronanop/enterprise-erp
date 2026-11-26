@@ -36,6 +36,10 @@ INTEGRATION_EMPLOYEE_FIELDS: list[dict[str, str]] = [
     {"id": "leave_balances", "label": "Leave balances (all types)"},
     {"id": "leave_balance_total", "label": "Leave balance total"},
     {"id": "leave_used_total", "label": "Leave used total"},
+    {"id": "salary", "label": "Salary (CTC / gross / structure)"},
+    {"id": "payroll", "label": "Payroll (latest run line)"},
+    {"id": "payslip", "label": "Payslip (latest)"},
+    {"id": "shift", "label": "Shift (current assignment)"},
 ]
 
 ENDPOINT_IDS = {row["id"] for row in INTEGRATION_ENDPOINTS}

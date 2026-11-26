@@ -4,7 +4,7 @@
 # Object storage: MinIO via S3_ENDPOINT_URL (AWS S3 disabled).
 # Shares Docker network `erp-net` with infra (REDIS_URL=redis://redis:6379/0, etc.).
 # Does NOT bind 80/443/5432/6379/5672/9200/9000.
-# Host ports: Nginx TLS :8443 | Web :3000 | API :8000 | Employee :3001
+# Host ports: Nginx TLS :8443 | Web :3000 | API :8000
 
 networks:
   erp-net:
@@ -140,30 +140,6 @@ services:
       - "3000"
     ports:
       - "3000:3000"
-    depends_on:
-      api:
-        condition: service_healthy
-
-  employee-app:
-    networks: [erp-net]
-    build:
-      context: ./apps/employee-app
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_EMPLOYEE_API_URL:-/api/v1}
-        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME_EMPLOYEE:-Employee App}
-        NEXT_PUBLIC_USE_MOCK: ${NEXT_PUBLIC_USE_MOCK:-false}
-    image: enterprise-erp-employee:local
-    container_name: erp-employee-app
-    restart: unless-stopped
-    environment:
-      PORT: "3001"
-      HOSTNAME: 0.0.0.0
-      NODE_ENV: production
-      API_PROXY_TARGET: http://api:8000
-      API_INTERNAL_URL: http://api:8000
-    ports:
-      - "3001:3001"
     depends_on:
       api:
         condition: service_healthy

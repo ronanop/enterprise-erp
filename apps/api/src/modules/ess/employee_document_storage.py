@@ -59,18 +59,17 @@ def save_employee_document_bytes(
     except UnsafeUploadError as exc:
         raise AppException(str(exc)) from exc
 
-    stored_name = f"{uuid.uuid4()}_{safe_name}"
-    rel = f"{company_id}/{employee_id}/{stored_name}"
-    if object_storage.is_enabled():
-        key = object_storage.module_key("hr", "ess", rel)
-        return object_storage.put_bytes(key, raw, guess_media_type(file_name))
+    from core.blob_store import store_bytes
 
-    UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
-    dest_dir = UPLOAD_ROOT / str(company_id) / str(employee_id)
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / stored_name
-    dest.write_bytes(raw)
-    return f"{ESS_DOC_PREFIX}{rel}"
+    return store_bytes(
+        module="hr",
+        category="ess",
+        owner_id=str(employee_id),
+        company_id=str(company_id),
+        file_name=safe_name,
+        data=raw,
+        content_type=guess_media_type(file_name),
+    )
 
 
 def resolve_document_path(storage_uri: str) -> Path:
@@ -91,9 +90,10 @@ def resolve_document_path(storage_uri: str) -> Path:
 
 
 def load_document_download(storage_uri: str, document_name: str) -> DocumentDownload:
-    if object_storage.is_object_uri(storage_uri):
-        content = object_storage.get_bytes(storage_uri)
-        stored_name = storage_uri.rsplit("/", 1)[-1]
+    from core.blob_store import FILE_URI_PREFIX, load_bytes
+
+    if object_storage.is_object_uri(storage_uri) or storage_uri.startswith(FILE_URI_PREFIX):
+        content, stored_name = load_bytes(storage_uri)
         suffix = Path(stored_name).suffix
         download_name = document_name
         if suffix and not download_name.lower().endswith(suffix.lower()):

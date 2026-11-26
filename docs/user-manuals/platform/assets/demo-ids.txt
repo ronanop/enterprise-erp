@@ -1,5 +1,0 @@
-DEMO_USER=Techbank
-DEMO_EMAIL=techbank@cachedigitech.com
-DEMO_HOME=/home
-DEMO_MY_JOBS=2 open jobs (CRM)
-UPDATED=2026-10-17

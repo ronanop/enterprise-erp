@@ -5,7 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import NotFoundException, ValidationException
+from core.exceptions import ConflictException, NotFoundException, ValidationException
 from modules.foundation.domain.erp_modules import ERP_MODULE_KEY_SET
 from modules.foundation.domain.value_objects import TenantContext
 from modules.platform.compat.audit_facade import PlatformAuditFacade
@@ -90,6 +90,12 @@ class DepartmentService:
     def create_department(self, ctx: TenantContext, **fields) -> DepartmentEntity:
         module_keys = self._normalize_module_keys(fields.pop("module_keys", None))
         self._scope.validate_branch_access(ctx, fields["branch_id"])
+        name = str(fields.get("department_name") or "").strip()
+        if name and self._repo.find_by_name(ctx, name) is not None:
+            raise ConflictException(
+                f"Department '{name}' already exists. "
+                "Departments are shared across all entities — use the existing one."
+            )
         dept = self._repo.create(ctx, **fields)
         if module_keys:
             self._modules.replace_modules(ctx, department_id=dept.id, module_keys=module_keys)
@@ -179,6 +185,12 @@ class LocationService:
 
     def create_location(self, ctx: TenantContext, **fields):
         self._scope.validate_branch_access(ctx, fields["branch_id"])
+        name = str(fields.get("location_name") or "").strip()
+        if name and self._repo.find_by_name(ctx, name) is not None:
+            raise ConflictException(
+                f"Base location '{name}' already exists. "
+                "Locations are shared across all entities — use the existing one."
+            )
         loc = self._repo.create(ctx, **fields)
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,

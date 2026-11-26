@@ -6,10 +6,11 @@ from sqlalchemy.orm import Session
 
 from core.exceptions import ConflictException, NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
+from modules.organization.repository.company_repository import CompanyRepository
+from modules.organization.service.logo_storage import persist_logo_if_data_url
+from modules.organization.service.org_scope_validator import OrgScopeValidator
 from modules.platform.compat.audit_facade import PlatformAuditFacade
 from modules.platform.compat.notify_facade import PlatformNotifyFacade
-from modules.organization.repository.company_repository import CompanyRepository
-from modules.organization.service.org_scope_validator import OrgScopeValidator
 
 
 class CompanyService:
@@ -64,7 +65,7 @@ class CompanyService:
             registration_number=registration_number,
             tax_number=tax_number,
             tan_number=tan_number,
-            logo_url=logo_url,
+            logo_url=None,
             address_line1=address_line1,
             address_line2=address_line2,
             city=city,
@@ -75,6 +76,10 @@ class CompanyService:
             status=status or "active",
             employee_code_prefix=employee_code_prefix,
         )
+        if logo_url:
+            stored_logo = persist_logo_if_data_url(company_id=company.id, logo_url=logo_url)
+            if stored_logo:
+                company = self._repo.update(ctx, company.id, logo_url=stored_logo) or company
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name="org_company",
@@ -87,6 +92,11 @@ class CompanyService:
 
     def update_company(self, ctx: TenantContext, company_id: UUID, **fields):
         self._scope.validate_company_access(ctx, company_id)
+        if "logo_url" in fields:
+            fields["logo_url"] = persist_logo_if_data_url(
+                company_id=company_id,
+                logo_url=fields.get("logo_url"),
+            )
         company = self._repo.update(ctx, company_id, **fields)
         if company is None:
             raise NotFoundException("Company not found")

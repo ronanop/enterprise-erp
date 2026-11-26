@@ -722,10 +722,16 @@ export async function previewPayrollRunEmployees(
 }
 
 function normalizePayrollRun(row: PayrollRun): PayrollRun {
-  if (row.cycleStart && row.cycleEnd && row.cycleLabel) return row;
+  // Approval steps disabled for now — legacy pending_* runs land as approved.
+  const status =
+    row.status === "pending_hr" || row.status === "pending_finance" ? "approved" : row.status;
+  if (row.cycleStart && row.cycleEnd && row.cycleLabel) {
+    return status === row.status ? row : { ...row, status };
+  }
   const cycle = buildPayrollCycle(row.month, row.cycleCutoverDay ?? readPayrollCutoverDay());
   return {
     ...row,
+    status,
     cycleStart: cycle.start,
     cycleEnd: cycle.end,
     cycleCutoverDay: cycle.cutoverDay,
@@ -1383,17 +1389,18 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
 export function computePayrollStats(dir: PayrollDirectory) {
   const locked = dir.locks.filter((l) => l.status === "locked").length;
   const pending = dir.runs.filter((r) =>
-    ["draft", "processing", "pending_hr", "pending_finance"].includes(r.status),
+    ["draft", "processing"].includes(r.status),
   ).length;
   const processed = dir.runs.filter((r) =>
-    ["approved", "paid", "locked"].includes(r.status),
+    ["approved", "paid", "locked", "pending_hr", "pending_finance"].includes(r.status),
   ).length;
   const netPaid = dir.runs
-    .filter((r) => ["approved", "paid", "locked"].includes(r.status))
+    .filter((r) =>
+      ["approved", "paid", "locked", "pending_hr", "pending_finance"].includes(r.status),
+    )
     .reduce((s, r) => s + r.netTotal, 0);
-  const pendingApprovals = dir.runs.filter((r) =>
-    ["pending_hr", "pending_finance"].includes(r.status),
-  ).length;
+  // Approvals disabled for now.
+  const pendingApprovals = 0;
   const upcomingRev = dir.revisions.filter((r) => r.effectiveDate >= nowIso().slice(0, 10)).length;
 
   return {
@@ -2101,7 +2108,7 @@ export async function runPayroll(month: string, cutoverDay?: number): Promise<Pa
     grossTotal: Math.round(gross),
     deductionTotal: Math.round(ded),
     netTotal: Math.max(0, Math.round(gross - ded)),
-    status: "pending_hr",
+    status: "approved",
     attendanceSynced: attendanceLines.length > 0,
     leaveSynced: attendanceLines.some((l) => l.leaveDays > 0) || Boolean(
       readJson<unknown[]>("erp_leave_audit_v1", []).length,
@@ -2244,30 +2251,23 @@ function emptyStructure(): SalaryStructure {
   };
 }
 
+/** Approvals disabled — keeps legacy callers from breaking; coerces to approved. */
 export function advancePayrollApproval(runId: string): PayrollRun | null {
-  const flow: PayrollRunStatus[] = ["pending_hr", "pending_finance", "approved", "paid"];
   const all = load<PayrollRun>(K.runs);
   const idx = all.findIndex((r) => r.id === runId);
   if (idx < 0) return null;
-  // Month lock blocks regenerate/edits — approval chain must still be able to finish.
   const cur = all[idx].status;
-  const i = flow.indexOf(cur);
-  if (i < 0) {
-    if (cur === "draft" || cur === "processing") {
-      all[idx] = { ...all[idx], status: "pending_hr", updatedAt: nowIso() };
-    } else return all[idx];
-  } else if (i < flow.length - 1) {
-    all[idx] = {
-      ...all[idx],
-      status: flow[i + 1],
-      updatedAt: nowIso(),
-      approvedBy: actor(),
-    };
-  }
+  if (cur === "paid" || cur === "locked" || cur === "cancelled") return all[idx];
+  all[idx] = {
+    ...all[idx],
+    status: "approved",
+    updatedAt: nowIso(),
+    approvedBy: actor(),
+  };
   save(K.runs, all);
   appendPayrollAudit({
     action: "payroll_approval",
-    detail: `${all[idx].runCode} → ${all[idx].status}`,
+    detail: `${all[idx].runCode} → approved (approvals disabled)`,
     actor: actor(),
   });
   return all[idx];

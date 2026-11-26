@@ -66,8 +66,6 @@ class Settings(BaseSettings):
         default=[
             "http://localhost:3000",
             "http://127.0.0.1:3000",
-            "http://localhost:3001",
-            "http://127.0.0.1:3001",
         ],
         alias="CORS_ORIGINS",
     )
@@ -303,8 +301,9 @@ class Settings(BaseSettings):
     mcp_auth_token: str = Field(default="", alias="MCP_AUTH_TOKEN")
 
     frontend_url: str = Field(default="http://localhost:3000", alias="FRONTEND_URL")
+    # Deprecated: employee PWA removed; kept so existing env files do not break Settings load.
     employee_app_url: str = Field(
-        default="http://localhost:3001",
+        default="",
         alias="EMPLOYEE_APP_URL",
     )
 

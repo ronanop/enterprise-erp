@@ -15,17 +15,35 @@ class DesignationRepository(HrScopedRepository):
         super().__init__(db)
 
     def get(self, ctx: TenantContext, row_id: UUID) -> HrDesignation | None:
-        stmt = select(HrDesignation).where(HrDesignation.id == row_id, HrDesignation.is_deleted.is_(False))
-        # Designations are company masters (branch_id often null) - do not branch-scope.
-        stmt = self.apply_hr_filter(stmt, HrDesignation, ctx, branch_scoped=False)
+        stmt = select(HrDesignation).where(
+            HrDesignation.id == row_id,
+            HrDesignation.tenant_id == ctx.tenant_id,
+            HrDesignation.is_deleted.is_(False),
+        )
         return self.db.scalar(stmt)
 
     def list_rows(self, ctx: TenantContext, company_id: UUID | None):
-        stmt = select(HrDesignation).where(HrDesignation.is_deleted.is_(False))
+        # Tenant-wide catalog: designations are shared across entities.
+        stmt = select(HrDesignation).where(
+            HrDesignation.tenant_id == ctx.tenant_id,
+            HrDesignation.is_deleted.is_(False),
+        )
         if company_id is not None:
             stmt = stmt.where(HrDesignation.company_id == company_id)
-        stmt = self.apply_hr_filter(stmt, HrDesignation, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt).all())
+
+    def find_by_name(self, ctx: TenantContext, designation_name: str) -> HrDesignation | None:
+        key = (designation_name or "").strip().lower()
+        if not key:
+            return None
+        stmt = select(HrDesignation).where(
+            HrDesignation.tenant_id == ctx.tenant_id,
+            HrDesignation.is_deleted.is_(False),
+        )
+        for row in self.db.scalars(stmt).all():
+            if str(row.designation_name or "").strip().lower() == key:
+                return row
+        return None
 
     def create(self, ctx: TenantContext, **fields) -> HrDesignation:
         row = HrDesignation(

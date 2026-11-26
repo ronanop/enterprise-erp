@@ -2619,8 +2619,7 @@ function CertificatesTab({
         >
           <DocumentPreviewContent
             fileName={preview.fileName}
-            fileDataUrl={preview.fileDataUrl}
-            mimeType={preview.mimeType}
+            dataUrl={preview.fileDataUrl}
           />
         </SetupDrawer>
       ) : null}

@@ -3,14 +3,13 @@
 from typing import Annotated
 from uuid import UUID
 
-from pathlib import Path
-
 from fastapi import APIRouter, Depends, File, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from core.blob_store import guess_content_type, load_bytes
 from core.exceptions import NotFoundException, ValidationException
 from modules.foundation.dependencies import require_permission
 from modules.foundation.domain.value_objects import TenantContext
@@ -471,7 +470,7 @@ def download_candidate_resume_file(
     ctx: Annotated[TenantContext, Depends(require_permission("recruitment.candidate:read"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    """Download the primary resume file stored for a candidate."""
+    """Download the primary resume file stored for a candidate (MinIO or disk)."""
     CandidateService(db).get(ctx, row_id)
     resumes = list(
         db.scalars(
@@ -486,41 +485,25 @@ def download_candidate_resume_file(
     if not resumes:
         raise NotFoundException("Resume file not found")
 
-    # apps/api and apps/api/src — cover both historical and current upload roots
-    src_root = Path(__file__).resolve().parents[3]
-    api_root = Path(__file__).resolve().parents[4]
-    path: Path | None = None
+    content: bytes | None = None
     chosen_name = "resume.pdf"
     for row in resumes:
         raw = str(row.storage_uri or "").strip()
         if not raw:
             continue
-        uri = Path(raw)
-        candidates = [uri] if uri.is_absolute() else [api_root / uri, src_root / uri, uri]
-        for candidate_path in candidates:
-            try:
-                resolved = candidate_path.resolve()
-            except OSError:
-                continue
-            if resolved.is_file():
-                path = resolved
-                chosen_name = resolved.name
-                break
-        if path is not None:
+        try:
+            content, chosen_name = load_bytes(raw)
             break
-    if path is None:
-        raise NotFoundException("Resume file missing on disk")
+        except FileNotFoundError:
+            continue
+    if content is None:
+        raise NotFoundException("Resume file missing in storage")
 
-    suffix = path.suffix.lower()
-    media = "application/pdf" if suffix == ".pdf" else "application/octet-stream"
-    if suffix in {".doc", ".docx"}:
-        media = "application/msword" if suffix == ".doc" else (
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
-    return FileResponse(
-        path,
-        filename=chosen_name,
+    media = guess_content_type(chosen_name)
+    return Response(
+        content=content,
         media_type=media,
+        headers={"Content-Disposition": f'attachment; filename="{chosen_name}"'},
     )
 
 

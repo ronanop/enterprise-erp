@@ -25,6 +25,17 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ApiClientError, apiClient, resourceService } from "@/services/api-client";
 
+/** Long ZK pulls bypass Next rewrite (proxy cuts ~60–90s mid-dump). */
+function biometricDownloadBaseUrl(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  const host = window.location.hostname;
+  if (host === "localhost" || host === "127.0.0.1") {
+    // Same hostname as the UI so CORS + bearer auth stay simple.
+    return `http://${host}:8000/api/v1`;
+  }
+  return undefined;
+}
+
 const DEVICE_MODELS = [
   {
     value: "fingerprint_k40_zkteco_pro",
@@ -53,6 +64,8 @@ type Device = {
   location_text?: string | null;
   status: string;
   branch_id: string;
+  /** Live TCP probe from list API (Active / Inactive column). */
+  reachable?: boolean | null;
 };
 
 type Option = { id: string; label: string };
@@ -93,8 +106,41 @@ type LiveFeed = {
   ingested_records: LiveLogItem[];
 };
 
+/** Live TCP status for the Status column (not the DB enable flag). */
+type ConnStatus = "checking" | "connected" | "inactive" | "disabled";
+
 function modelLabel(value?: string | null) {
   return DEVICE_MODELS.find((m) => m.value === value)?.label ?? value ?? "-";
+}
+
+function ConnectionStatusBadge({ status }: { status: ConnStatus }) {
+  if (status === "checking") {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+        <Loader2 className="size-3 animate-spin" aria-hidden />
+        Checking…
+      </span>
+    );
+  }
+  if (status === "connected") {
+    return (
+      <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-emerald-800">
+        Active
+      </span>
+    );
+  }
+  if (status === "disabled") {
+    return (
+      <span className="inline-flex items-center rounded-md border border-border bg-muted px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        Disabled
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-amber-900">
+      Inactive
+    </span>
+  );
 }
 
 const IPV4 = /^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$/;
@@ -140,33 +186,92 @@ export default function BiometricDevicesPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const downloadingLock = useRef(false);
+  const [connById, setConnById] = useState<Record<string, ConnStatus>>({});
 
-  const loadFeed = useCallback(async (deviceId: string, opts?: { silent?: boolean }) => {
-    if (!opts?.silent) {
-      setFeedLoading(true);
-      setFeedError(null);
-    }
-    try {
-      const res = await apiClient<LiveFeed>(`/hr/biometric-devices/${deviceId}/live-feed`, {
-        method: "GET",
-        query: { days: 4 },
-      });
-      setFeed(res.data ?? null);
-      setFeedError(null);
-    } catch (err) {
-      const message =
-        err instanceof ApiClientError
-          ? err.message
-          : "Failed to load device feed from database";
-      if (!opts?.silent) {
-        toast(message, "error");
-        setFeed(null);
-        setFeedError(message);
+  /** Probe Status via same-origin API (same path Live feed uses — no cross-origin :8000). */
+  const refreshConnectionStatus = useCallback(async (devices: Device[]) => {
+    if (!devices.length) return;
+    setConnById((prev) => {
+      const pending = { ...prev };
+      for (const d of devices) {
+        if (String(d.status || "").toLowerCase() !== "active") {
+          pending[d.id] = "disabled";
+        } else if (pending[d.id] !== "connected" && pending[d.id] !== "inactive") {
+          pending[d.id] = "checking";
+        }
       }
-    } finally {
-      if (!opts?.silent) setFeedLoading(false);
+      return pending;
+    });
+
+    try {
+      const res = await apiClient<
+        { device_id: string; reachable: boolean; enabled?: boolean }[]
+      >("/hr/biometric-devices/connectivity", {
+        method: "GET",
+        timeoutMs: 20_000,
+      });
+      const rows = Array.isArray(res.data) ? res.data : [];
+      if (!rows.length) return;
+      const next: Record<string, ConnStatus> = {};
+      for (const d of devices) {
+        const hit = rows.find((r) => String(r.device_id) === d.id);
+        if (String(d.status || "").toLowerCase() !== "active") next[d.id] = "disabled";
+        else if (hit?.enabled === false) next[d.id] = "disabled";
+        else if (hit?.reachable === true) next[d.id] = "connected";
+        else next[d.id] = "inactive";
+      }
+      setConnById((prev) => ({ ...prev, ...next }));
+    } catch {
+      // Keep last known status; do not force Inactive on network blips.
     }
   }, []);
+
+  const loadFeed = useCallback(
+    async (deviceId: string, opts?: { silent?: boolean; skipProbe?: boolean }) => {
+      if (!opts?.silent) {
+        setFeedLoading(true);
+        setFeedError(null);
+      }
+      try {
+        const res = await apiClient<LiveFeed>(`/hr/biometric-devices/${deviceId}/live-feed`, {
+          method: "GET",
+          query: {
+            days: 7,
+            // Always probe on first open so Status stays in sync with the banner.
+            ...(opts?.silent || opts?.skipProbe ? { skip_probe: true } : {}),
+          },
+          timeoutMs: 45_000,
+        });
+        setFeed(res.data ?? null);
+        setFeedError(null);
+        // Only trust a real TCP probe (skip_probe fabricates reachable=true).
+        if (
+          res.data &&
+          !opts?.skipProbe &&
+          !opts?.silent &&
+          typeof res.data.reachable === "boolean"
+        ) {
+          setConnById((prev) => ({
+            ...prev,
+            [deviceId]: res.data?.reachable ? "connected" : "inactive",
+          }));
+        }
+      } catch (err) {
+        const message =
+          err instanceof ApiClientError
+            ? err.message
+            : "Failed to load device feed from database";
+        if (!opts?.silent) {
+          toast(message, "error");
+          setFeed(null);
+          setFeedError(message);
+        }
+      } finally {
+        if (!opts?.silent) setFeedLoading(false);
+      }
+    },
+    [],
+  );
 
   const openDeviceFeed = useCallback(
     (device: Device) => {
@@ -184,27 +289,33 @@ export default function BiometricDevicesPage() {
     setFeedError(null);
   }, []);
 
-  // Refresh punch log from DB every 1 minute while the live feed drawer is open.
-  useEffect(() => {
-    if (!feedDevice?.id) return;
-    const id = feedDevice.id;
-    const timer = window.setInterval(() => {
-      void loadFeed(id, { silent: true });
-    }, 60_000);
-    return () => window.clearInterval(timer);
-  }, [feedDevice?.id, loadFeed]);
-
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await resourceService.list("/hr/biometric-devices", { page_size: 100 });
-      setRows((Array.isArray(res.data) ? res.data : []) as Device[]);
+      // Fast list (no TCP probe) so the table renders immediately.
+      const res = await apiClient<Device[]>("/hr/biometric-devices", {
+        method: "GET",
+        query: { page_size: 100, probe: false },
+        timeoutMs: 15_000,
+      });
+      const list = (Array.isArray(res.data) ? res.data : []) as Device[];
+      setRows(list);
+      void refreshConnectionStatus(list);
     } catch {
       toast("Failed to load biometric devices", "error");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refreshConnectionStatus]);
+
+  // Re-check connectivity every minute while the page is open.
+  useEffect(() => {
+    if (!rows.length) return;
+    const timer = window.setInterval(() => {
+      void refreshConnectionStatus(rows);
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [rows, refreshConnectionStatus]);
 
   const loadBranches = useCallback(async () => {
     try {
@@ -243,7 +354,11 @@ export default function BiometricDevicesPage() {
           created: number;
           updated: number;
           skipped: number;
-        }>(`/hr/biometric-devices/${device.id}/download`, { method: "POST" });
+        }>(`/hr/biometric-devices/${device.id}/download`, {
+          method: "POST",
+          baseUrl: biometricDownloadBaseUrl(),
+          timeoutMs: 300_000,
+        });
         const data = res.data;
         const read = data?.logs_new ?? data?.logs_read ?? 0;
         const already = data?.logs_already_saved ?? 0;
@@ -276,7 +391,9 @@ export default function BiometricDevicesPage() {
         } else if (saved > 0) {
           toast(`Auto-fetch: ${saved} attendance row(s) updated.`, "success");
         }
-        if (feedDevice?.id === device.id) void loadFeed(device.id);
+        if (feedDevice?.id === device.id) {
+          void loadFeed(device.id, { silent: Boolean(opts?.silent), skipProbe: true });
+        }
       } catch (err) {
         if (!opts?.silent) {
           toast(
@@ -292,8 +409,16 @@ export default function BiometricDevicesPage() {
     [feedDevice?.id, loadFeed],
   );
 
-  // Live feed is DB-only. Do not auto-pull from the machine on open —
-  // unreachable devices (e.g. wrong VLAN) hang the API and break the drawer.
+  // Live feed is DB-only. A background worker pulls machines; this drawer
+  // just refreshes saved punches (including previous days) every 1 minute.
+  useEffect(() => {
+    if (!feedDevice?.id) return;
+    const id = feedDevice.id;
+    const timer = window.setInterval(() => {
+      void loadFeed(id, { silent: true, skipProbe: true });
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [feedDevice?.id, loadFeed]);
 
   const fetchAllActive = useCallback(
     async (opts?: { silent?: boolean }) => {
@@ -313,7 +438,11 @@ export default function BiometricDevicesPage() {
               created: number;
               updated: number;
               skipped: number;
-            }>(`/hr/biometric-devices/${device.id}/download`, { method: "POST" });
+            }>(`/hr/biometric-devices/${device.id}/download`, {
+              method: "POST",
+              baseUrl: biometricDownloadBaseUrl(),
+              timeoutMs: 300_000,
+            });
             totalSaved += (res.data?.created ?? 0) + (res.data?.updated ?? 0);
           } catch (err) {
             if (!opts?.silent) {
@@ -337,9 +466,6 @@ export default function BiometricDevicesPage() {
     },
     [rows, feedDevice, loadFeed],
   );
-
-  // No auto machine-pull — punches stay in DB; user fetches new logs manually.
-  // (Auto-fetch every minute was blocking the API and breaking Live feed.)
 
   function openCreate() {
     const model = DEVICE_MODELS[0];
@@ -498,7 +624,7 @@ export default function BiometricDevicesPage() {
       <SetupToastHost />
       <PageHeader
         title="Biometric devices"
-        description="Register a ZKTeco K40 Pro with IP, port, and Comm password. Background sync pulls the last 4 days of punches every 1 minute. Click a device to view punches saved in ERP; use Fetch punches for an on-demand pull."
+        description="Register a ZKTeco K40 Pro with IP, port, and Comm password. A background worker pulls punches from all active machines; Live feed shows previous + new punches from ERP and refreshes every minute."
         actions={
           <div className="flex gap-2">
             <Button
@@ -573,7 +699,11 @@ export default function BiometricDevicesPage() {
                     <td className="px-3 py-2 text-muted-foreground">
                       {r.location_text?.trim() ? r.location_text : "—"}
                     </td>
-                    <td className="px-3 py-2 text-xs uppercase text-muted-foreground">{r.status}</td>
+                    <td className="px-3 py-2">
+                      <ConnectionStatusBadge
+                        status={connById[r.id] ?? "checking"}
+                      />
+                    </td>
                     <td className="sticky right-0 z-10 bg-card px-3 py-2 text-right whitespace-nowrap shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.15)]">
                       <div className="flex justify-end gap-1">
                         <Button
@@ -658,7 +788,9 @@ export default function BiometricDevicesPage() {
                 disabled={downloadingId === feedDevice.id}
               >
                 <Download className="size-3.5" />
-                {downloadingId === feedDevice.id ? "Fetching…" : "Fetch punches"}
+                {downloadingId === feedDevice.id
+                  ? "Fetching… (1–3 min)"
+                  : "Fetch punches"}
               </Button>
               <Button
                 size="sm"
@@ -704,22 +836,26 @@ export default function BiometricDevicesPage() {
                 <span className="text-muted-foreground"> punches today</span>
               </span>
               <span className="text-muted-foreground">·</span>
-              <span className="text-xs text-muted-foreground">Auto-refreshes every 1 min</span>
+              <span className="text-xs text-muted-foreground">
+                Feed refreshes every 1 min · machines sync in background
+              </span>
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Punch log reads from the database (machine Emp code + linked HR Emp ID). Use Fetch punches to pull new machine logs.
+              Shows punches already saved in ERP (last 7 days, newest first). A background
+              worker pulls new logs from each machine on a loop — use Fetch punches only for
+              an on-demand pull.
             </p>
 
             <div>
               <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                Punch log (this device)
+                Punch log (this device · last 7 days)
               </p>
               {!(feed.punches?.length) ? (
                 <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
                   {downloadingId === feedDevice?.id
                     ? "Fetching punches from the machine…"
-                    : "No punches stored for this device in the last 4 days. Click Fetch punches to pull logs from the machine."}
+                    : "No punches stored for this device in the last 7 days. Wait for background sync, or click Fetch punches."}
                 </p>
               ) : (
                 <div className="overflow-x-auto rounded-lg border border-border">

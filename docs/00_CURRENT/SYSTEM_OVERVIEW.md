@@ -42,9 +42,7 @@ OpenSearch / Kubernetes / warehouse extract remain **evolution-gated** (`modules
 ```text
 apps/
   api/          FastAPI (src/modules/*, alembic/, workers/)
-  web/          Next.js admin UI
-  employee-app/ ESS / employee PWA (optional)
-  employee-mobile/
+  web/          Next.js HRMS admin UI
 docs/           Baseline pack + 00_CURRENT living docs
 design-system/  UI/UX Pro Max tokens for iConnect Plus
 docker/         MinIO build contexts

@@ -1,6 +1,6 @@
 # iConnect Plus — HRMS
 
-Standalone Human Resource Management System (admin web + employee PWA).
+Standalone Human Resource Management System (HRMS admin web + API).
 
 **Architecture Baseline:** v1.1 — LOCKED · **Addendum:** v1.2 · **HRMS scope:** v1.3  
 **Product:** iConnect Plus HRMS (B2B SaaS)
@@ -42,9 +42,7 @@ OpenSearch / Kubernetes / microservice extract remain **gated** (`modules/platfo
 enterprise-erp/
 ├── apps/
 │   ├── api/                 # FastAPI backend (modules/*, alembic, workers)
-│   ├── web/                 # Next.js admin UI
-│   ├── employee-app/        # Employee PWA (optional)
-│   └── employee-mobile/
+│   └── web/                 # Next.js HRMS admin UI
 ├── design-system/           # UI/UX Pro Max — iConnect Plus
 ├── docker/                  # MinIO build contexts
 ├── docs/                    # Baseline pack + living 00_CURRENT

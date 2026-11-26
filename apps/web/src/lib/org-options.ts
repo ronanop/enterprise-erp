@@ -2,6 +2,47 @@ import { ApiClientError, resourceService } from "@/services/api-client";
 
 export type OrgOption = { id: string; label: string };
 
+/** Org named option (department / location) before label collision handling. */
+export type DepartmentOptionSeed = {
+  id: string;
+  label: string;
+  companyId?: string;
+  companyName?: string;
+  branchId?: string;
+  headEmployeeId?: string;
+};
+
+/** Alias — same shape/rules as departments. */
+export type LocationOptionSeed = DepartmentOptionSeed;
+
+/**
+ * Tenant-wide org masters: one option per name (case-insensitive).
+ * Prefer the first id seen after id-dedupe — labels are not qualified by entity.
+ */
+export function uniqueDepartmentOptions<T extends DepartmentOptionSeed>(rows: T[]): T[] {
+  const byId = new Map<string, T>();
+  for (const row of rows) {
+    const id = String(row.id || "").trim();
+    if (!id) continue;
+    if (!byId.has(id)) byId.set(id, row);
+  }
+  const byName = new Map<string, T>();
+  for (const row of byId.values()) {
+    const key = row.label.trim().toLowerCase();
+    if (!key) continue;
+    if (!byName.has(key)) byName.set(key, row);
+  }
+  return Array.from(byName.values()).sort((a, b) =>
+    a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
+  );
+}
+
+/** Same as uniqueDepartmentOptions — for work locations shared across entities. */
+export const uniqueLocationOptions = uniqueDepartmentOptions;
+
+/** Same as uniqueDepartmentOptions — for designations shared across entities. */
+export const uniqueDesignationOptions = uniqueDepartmentOptions;
+
 /** Employee directory entry for Asset Inventory / Detail enrichment (read-only). */
 export type EmployeeDirectoryEntry = {
   id: string;
@@ -185,11 +226,27 @@ export async function listDepartmentOptions(
   options: { throwOnError?: boolean } = {},
 ): Promise<OrgOption[]> {
   try {
-    const rows = await listAllResourcePages("/departments");
-    return rows.map((r) => ({
-      id: String(r.id),
-      label: String(r.department_name ?? r.name ?? r.department_code ?? r.id),
-    }));
+    const [deptRows, companyRows] = await Promise.all([
+      listAllResourcePages("/departments"),
+      listAllResourcePages("/companies").catch(() => [] as Record<string, unknown>[]),
+    ]);
+    const companyNameById = new Map(
+      companyRows.map((c) => [
+        String(c.id),
+        String(c.company_name ?? c.name ?? c.company_code ?? "").trim(),
+      ]),
+    );
+    return uniqueDepartmentOptions(
+      deptRows.map((r) => {
+        const companyId = String(r.company_id ?? "");
+        return {
+          id: String(r.id),
+          label: String(r.department_name ?? r.name ?? r.department_code ?? r.id),
+          companyId,
+          companyName: companyNameById.get(companyId) || "",
+        };
+      }),
+    ).map(({ id, label }) => ({ id, label }));
   } catch (err) {
     if (options.throwOnError) {
       if (isMissingPermissionError(err, DEPARTMENT_READ_PERM)) {
@@ -210,11 +267,27 @@ export async function listLocationOptions(branchId?: string): Promise<OrgOption[
     const path = branchId
       ? `/locations?branch_id=${encodeURIComponent(branchId)}`
       : "/locations";
-    const rows = await listAllResourcePages(path);
-    return rows.map((r) => ({
-      id: String(r.id),
-      label: String(r.location_name ?? r.name ?? r.location_code ?? r.id),
-    }));
+    const [rows, companyRows] = await Promise.all([
+      listAllResourcePages(path),
+      listAllResourcePages("/companies").catch(() => [] as Record<string, unknown>[]),
+    ]);
+    const companyNameById = new Map(
+      companyRows.map((c) => [
+        String(c.id),
+        String(c.company_name ?? c.name ?? c.company_code ?? "").trim(),
+      ]),
+    );
+    return uniqueLocationOptions(
+      rows.map((r) => {
+        const companyId = String(r.company_id ?? "");
+        return {
+          id: String(r.id),
+          label: String(r.location_name ?? r.name ?? r.location_code ?? r.id),
+          companyId,
+          companyName: companyNameById.get(companyId) || "",
+        };
+      }),
+    ).map(({ id, label }) => ({ id, label }));
   } catch {
     return [];
   }

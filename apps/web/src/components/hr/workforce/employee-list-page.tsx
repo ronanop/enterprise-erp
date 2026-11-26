@@ -162,43 +162,34 @@ export function EmployeeManagementPage() {
       setLoading(false);
 
       const { records: rows, options: opts, errors } = await loadEmployeeDirectory();
-      // Existing office employees → office_staff so client-side imports can use other tags.
-      let tagged = rows;
-      let nextOpts = opts;
-      try {
-        const { backfillOfficeStaffTags, stampLocalOfficeStaffTags } = await import(
-          "@/services/employee-import-service"
-        );
-        stampLocalOfficeStaffTags();
-        const result = await backfillOfficeStaffTags();
-        if (Number(result.updated || 0) > 0) {
-          const refreshed = await loadEmployeeDirectory();
-          tagged = refreshed.records;
-          nextOpts = refreshed.options;
-        } else {
-          tagged = rows.map((r) => {
-            const tags = r.tags?.length
-              ? r.tags
-              : r.extension?.tags?.length
-                ? r.extension.tags
-                : ["office_staff"];
-            return { ...r, tags, extension: { ...r.extension, tags } };
-          });
-        }
-      } catch {
-        tagged = rows.map((r) => {
-          const tags = r.tags?.length
-            ? r.tags
-            : r.extension?.tags?.length
-              ? r.extension.tags
-              : ["office_staff"];
-          return { ...r, tags, extension: { ...r.extension, tags } };
-        });
-      }
+      const tagged = rows.map((r) => {
+        const tags = r.tags?.length
+          ? r.tags
+          : r.extension?.tags?.length
+            ? r.extension.tags
+            : ["office_staff"];
+        return { ...r, tags, extension: { ...r.extension, tags } };
+      });
       setRecords(tagged);
-      setOptions(nextOpts);
+      setOptions(opts);
       setDirectoryReady(true);
       if (errors.length) toast(errors.join(" · "), "info");
+
+      // Tag backfill in background — do not block UI or force a second full directory load.
+      void import("@/services/employee-import-service")
+        .then(async ({ backfillOfficeStaffTags, stampLocalOfficeStaffTags }) => {
+          stampLocalOfficeStaffTags();
+          const result = await backfillOfficeStaffTags();
+          if (Number(result.updated || 0) > 0) {
+            const { invalidateEmployeeDirectoryCache } = await import(
+              "@/services/employee-management-service"
+            );
+            invalidateEmployeeDirectoryCache();
+          }
+        })
+        .catch(() => {
+          /* optional migration */
+        });
     } catch {
       toast("Failed to load employee directory", "error");
     } finally {
@@ -271,8 +262,29 @@ export function EmployeeManagementPage() {
     const designations = uniqueSorted(
       (options?.designations ?? []).map((d) => d.label).concat(records.map((r) => r.designationName)),
     );
-    const departments = (options?.departments ?? []).map((d) => ({ value: d.id, label: d.label }));
-    const deptFallback = uniqueSorted(records.map((r) => r.departmentName)).map((label) => {
+    const departments = (options?.departments ?? [])
+      .filter((d) => {
+        if (!filters.entityId) return true;
+        // Prefer companyId when present; fall back to employees in that entity.
+        if (d.companyId) return d.companyId === filters.entityId;
+        return records.some(
+          (r) =>
+            r.departmentId === d.id &&
+            (r.companyId === filters.entityId ||
+              r.extension.employment.entityId === filters.entityId),
+        );
+      })
+      .map((d) => ({ value: d.id, label: d.label }));
+    const deptFallback = uniqueSorted(
+      records
+        .filter(
+          (r) =>
+            !filters.entityId ||
+            r.companyId === filters.entityId ||
+            r.extension.employment.entityId === filters.entityId,
+        )
+        .map((r) => r.departmentName),
+    ).map((label) => {
       const hit = records.find((r) => r.departmentName === label);
       return { value: hit?.departmentId || label, label };
     });
@@ -314,7 +326,7 @@ export function EmployeeManagementPage() {
         label: value,
       })),
     };
-  }, [records, options]);
+  }, [records, options, filters.entityId]);
 
   const filtersActive = Boolean(
     query ||

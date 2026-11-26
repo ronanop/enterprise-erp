@@ -104,7 +104,7 @@ const SECTION_META: Record<PayrollSection, { title: string; description?: string
   "run-payroll": {
     title: "Run payroll",
     description:
-      "Generate a month, review employees, then approve: HR review → Finance review → Approved → Paid.",
+      "Generate a month and review employees. No approval step for now — runs are approved on generate.",
   },
   payslip: {
     title: "Payslip",

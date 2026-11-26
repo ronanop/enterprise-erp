@@ -64,29 +64,31 @@ def main() -> int:
         return 0 if result.get("status") == "ok" else 1
 
     print(
-        f"Biometric punch fetcher started — every {interval}s. Ctrl+C to stop.",
+        f"Biometric punch fetcher started — pull all active devices, "
+        f"then wait {interval}s. Ctrl+C to stop.",
         flush=True,
     )
     while True:
         started = time.monotonic()
         result = _run_once()
         status = result.get("status")
+        elapsed = time.monotonic() - started
         if status == "ok":
             print(
-                f"[fetch] devices={result.get('devices')} ok={result.get('ok')} "
-                f"failed={result.get('failed')} logs={result.get('logs_read')} "
+                f"[fetch] {elapsed:.0f}s devices={result.get('devices')} "
+                f"ok={result.get('ok')} failed={result.get('failed')} "
+                f"logs={result.get('logs_read')} "
                 f"saved={(result.get('created') or 0) + (result.get('updated') or 0)}",
                 flush=True,
             )
             for err in result.get("errors") or []:
                 print(f"  ! {err}", flush=True)
         else:
-            print(f"[fetch] error: {result.get('message')}", flush=True)
+            print(f"[fetch] {elapsed:.0f}s error: {result.get('message')}", flush=True)
 
-        elapsed = time.monotonic() - started
-        sleep_for = max(1.0, interval - elapsed)
+        # Always wait a full interval after the dump finishes (K40 can take 1–3 min).
         try:
-            time.sleep(sleep_for)
+            time.sleep(interval)
         except KeyboardInterrupt:
             print("Stopped.", flush=True)
             return 0

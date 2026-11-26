@@ -2,6 +2,7 @@ import { apiClient, resourceService } from "@/services/api-client";
 import { loadEmployeeDirectory } from "@/services/employee-management-service";
 import type { HrRow } from "@/services/hr-service";
 import type { NormalizedLeaveBalanceImportRow } from "@/lib/leave-balance-import-map";
+import { uniqueDepartmentOptions } from "@/lib/org-options";
 import { payrollTargetCompanyIds } from "@/lib/payroll-company";
 import type {
   ApplyLeavePayload,
@@ -562,10 +563,19 @@ export async function loadLeaveDirectory(): Promise<LeaveDirectory> {
         id: String(b.id),
         label: String(b.branch_name ?? b.name ?? b.id),
       })),
-      departments: deptRows.map((d) => ({
-        id: String(d.id),
-        label: String(d.department_name ?? d.name ?? d.id),
-      })),
+      departments: uniqueDepartmentOptions(
+        deptRows.map((d) => {
+          const companyId = String(d.company_id ?? "");
+          const companyName =
+            (empDir.options.companies || []).find((c) => c.id === companyId)?.label || "";
+          return {
+            id: String(d.id),
+            label: String(d.department_name ?? d.name ?? d.id),
+            companyId,
+            companyName,
+          };
+        }),
+      ).map(({ id, label }) => ({ id, label })),
       // Leave module: activated employees only (exclude pending-join / probation / notice / archived).
       employees: (() => {
         const companyById = new Map(

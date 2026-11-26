@@ -39,6 +39,13 @@ type RequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
   auth?: boolean;
   query?: Record<string, string | number | boolean | null | undefined>;
+  /** Abort the request after this many ms (biometric download can exceed default). */
+  timeoutMs?: number;
+  /**
+   * Override API base for this call (e.g. direct :8000 for long ZK pulls that
+   * time out through the Next.js rewrite proxy).
+   */
+  baseUrl?: string;
   /** Internal: skip one refresh retry to avoid loops. */
   _retried?: boolean;
   /** Internal: skip one API-base failover retry. */
@@ -190,9 +197,12 @@ async function apiClientExecute<T>(
     headers,
     auth = true,
     query,
+    timeoutMs,
+    baseUrl,
     _retried,
     _apiFailover,
     _cookieOnly,
+    signal: outerSignal,
     ...rest
   } = options;
   // Prefer a non-expired bearer; otherwise omit so HttpOnly cookie can authenticate.
@@ -202,12 +212,23 @@ async function apiClientExecute<T>(
   const token = auth && !_cookieOnly ? getRequestAccessToken() : null;
   const sentBearer = Boolean(token);
 
-  await ensureApiBase();
+  if (!baseUrl) {
+    await ensureApiBase();
+  }
+
+  const controller =
+    typeof timeoutMs === "number" && timeoutMs > 0 ? new AbortController() : null;
+  const timer =
+    controller != null
+      ? window.setTimeout(() => controller.abort(), timeoutMs)
+      : null;
+  const signal = controller?.signal ?? outerSignal;
 
   let response: Response;
   try {
-    response = await fetch(buildUrl(path, query), {
+    response = await fetch(buildUrl(path, query, baseUrl ? baseUrl.replace(/\/+$/, "") : getApiUrl()), {
       ...rest,
+      signal,
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
@@ -218,7 +239,14 @@ async function apiClientExecute<T>(
       credentials: "include",
       cache: "no-store",
     });
-  } catch {
+  } catch (err) {
+    if (timer != null) window.clearTimeout(timer);
+    if (controller?.signal.aborted) {
+      throw new ApiClientError(
+        `Request timed out after ${timeoutMs}ms`,
+        0,
+      );
+    }
     if (!_apiFailover) {
       await failoverApiBase();
       return apiClient<T>(path, { ...options, _apiFailover: true });
@@ -228,6 +256,7 @@ async function apiClientExecute<T>(
       0,
     );
   }
+  if (timer != null) window.clearTimeout(timer);
 
   let payload: ApiResponse<T> | ErrorResponse;
   try {

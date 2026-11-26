@@ -22,7 +22,6 @@ from modules.organization.models.hierarchy import (
     OrgLocation,
     OrgProfitCenter,
 )
-from modules.foundation.domain.org_data_scope import apply_company_scope, effective_company_ids
 from modules.organization.repository.base import OrgScopedRepository, utcnow
 
 ORGANIZATION_MODULE_KEY = "organization"
@@ -35,19 +34,32 @@ class DepartmentRepository(OrgScopedRepository):
     def list_departments(
         self, ctx: TenantContext, *, company_id: UUID | None = None, branch_id: UUID | None = None
     ) -> list[DepartmentEntity]:
+        # Tenant-wide catalog: same department name is shared across entities.
+        # Optional company_id/branch_id filters are explicit only (no session pin).
         stmt = select(OrgDepartment).where(
             OrgDepartment.tenant_id == ctx.tenant_id,
             OrgDepartment.is_deleted.is_(False),
         )
         if company_id:
             stmt = stmt.where(OrgDepartment.company_id == company_id)
-        elif hasattr(OrgDepartment, "company_id"):
-            stmt = apply_company_scope(
-                stmt, OrgDepartment, ctx, module_key=ORGANIZATION_MODULE_KEY
-            )
         if branch_id:
             stmt = stmt.where(OrgDepartment.branch_id == branch_id)
         return [self._to_entity(r) for r in self.db.scalars(stmt).all()]
+
+    def find_by_name(
+        self, ctx: TenantContext, department_name: str
+    ) -> DepartmentEntity | None:
+        key = (department_name or "").strip().lower()
+        if not key:
+            return None
+        stmt = select(OrgDepartment).where(
+            OrgDepartment.tenant_id == ctx.tenant_id,
+            OrgDepartment.is_deleted.is_(False),
+        )
+        for row in self.db.scalars(stmt).all():
+            if str(row.department_name or "").strip().lower() == key:
+                return self._to_entity(row)
+        return None
 
     def get_by_id(self, ctx: TenantContext, department_id: UUID) -> DepartmentEntity | None:
         stmt = select(OrgDepartment).where(
@@ -209,9 +221,36 @@ class LocationRepository(OrgScopedRepository):
     def __init__(self, db: Session) -> None:
         super().__init__(db)
 
+    def find_by_name(self, ctx: TenantContext, location_name: str) -> LocationEntity | None:
+        key = (location_name or "").strip().lower()
+        if not key:
+            return None
+        stmt = select(OrgLocation).where(
+            OrgLocation.tenant_id == ctx.tenant_id,
+            OrgLocation.is_deleted.is_(False),
+        )
+        for row in self.db.scalars(stmt).all():
+            if str(row.location_name or "").strip().lower() == key:
+                return LocationEntity(
+                    id=row.id,
+                    tenant_id=row.tenant_id,
+                    company_id=row.company_id,
+                    branch_id=row.branch_id,
+                    location_code=row.location_code,
+                    location_name=row.location_name,
+                    location_type=row.location_type,
+                    status=row.status,
+                    version=row.version,
+                    latitude=float(row.latitude) if row.latitude is not None else None,
+                    longitude=float(row.longitude) if row.longitude is not None else None,
+                    geofence_radius_meters=row.geofence_radius_meters,
+                )
+        return None
+
     def list_locations(
         self, ctx: TenantContext, *, branch_id: UUID | None = None, company_id: UUID | None = None
     ):
+        # Tenant-wide catalog: base locations are shared across entities.
         stmt = (
             select(OrgLocation, OrgBranch.branch_name)
             .outerjoin(OrgBranch, OrgBranch.id == OrgLocation.branch_id)
@@ -222,17 +261,8 @@ class LocationRepository(OrgScopedRepository):
         )
         if branch_id:
             stmt = stmt.where(OrgLocation.branch_id == branch_id)
-        elif company_id:
+        if company_id:
             stmt = stmt.where(OrgLocation.company_id == company_id)
-        else:
-            allowed = effective_company_ids(ctx, module_key=ORGANIZATION_MODULE_KEY)
-            if allowed is not None:
-                if not allowed:
-                    stmt = stmt.where(OrgLocation.id.is_(None))
-                elif len(allowed) == 1:
-                    stmt = stmt.where(OrgLocation.company_id == allowed[0])
-                else:
-                    stmt = stmt.where(OrgLocation.company_id.in_(allowed))
         return [
             LocationEntity(
                 id=r.id,

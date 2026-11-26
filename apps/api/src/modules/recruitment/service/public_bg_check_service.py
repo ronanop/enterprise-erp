@@ -6,13 +6,13 @@ import base64
 import secrets
 import string
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
+from core.blob_store import load_bytes, store_bytes
 from core.config import settings
 from core.exceptions import AppException, NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
@@ -27,8 +27,6 @@ from modules.recruitment.service.application_service import ApplicationService
 from modules.recruitment.service.background_verification_service import (
     BackgroundVerificationService,
 )
-
-_UPLOAD_ROOT = Path(__file__).resolve().parents[4] / "var" / "recruitment-bg-docs"
 _SYSTEM_USER = UUID("00000000-0000-0000-0000-000000000001")
 _TOKEN_ALPHABET = string.ascii_lowercase + string.digits
 _INVITE_DAYS = 7
@@ -931,13 +929,20 @@ class PublicBgCheckService:
         if len(raw) > 15 * 1024 * 1024:
             raise AppException("File too large (max 15 MB)", status_code=400)
         safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in file_name)[:120]
-        dest_dir = _UPLOAD_ROOT / str(company_id) / str(candidate_id)
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        dest = dest_dir / f"{doc_id[:8]}_{safe}"
-        dest.write_bytes(raw)
-        # stash mime hint beside path via filename only
-        _ = header
-        return str(dest.resolve())
+        mime = "application/octet-stream"
+        if "image/" in header:
+            mime = header.split(":")[-1].split(";")[0].strip() or mime
+        elif "pdf" in header.lower():
+            mime = "application/pdf"
+        return store_bytes(
+            module="recruitment",
+            category="bg-docs",
+            owner_id=str(candidate_id),
+            company_id=str(company_id),
+            file_name=f"{doc_id[:8]}_{safe}",
+            data=raw,
+            content_type=mime,
+        )
 
     def _doc_to_attachment(self, doc: dict) -> dict | None:
         name = str(doc.get("fileName") or "document.pdf")
@@ -945,10 +950,10 @@ class PublicBgCheckService:
         path = str(doc.get("storagePath") or "").strip()
         data_url = str(doc.get("fileDataUrl") or "").strip()
         if path:
-            p = Path(path)
-            if not p.is_file():
+            try:
+                raw, _ = load_bytes(path)
+            except FileNotFoundError:
                 return None
-            raw = p.read_bytes()
             return {
                 "filename": name,
                 "content_base64": base64.b64encode(raw).decode("ascii"),

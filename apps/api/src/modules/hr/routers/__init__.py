@@ -91,6 +91,7 @@ from modules.hr.schemas import (
     CompoffRequestResponse,
     BiometricDeviceCreate,
     BiometricDeviceFeedResponse,
+    BiometricDevicePingResponse,
     BiometricDeviceResponse,
     BiometricDeviceUpdate,
     BiometricPunchResponse,
@@ -1417,10 +1418,41 @@ def list_biometric_devices(
     db: Annotated[Session, Depends(get_db)],
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
+    probe: bool = False,
 ):
+    """List devices. TCP probe is optional — use GET /connectivity for Status (faster UI)."""
+    svc = BiometricDeviceService(db)
+    rows = svc.list(ctx, company_id)
+    page = paginate(rows, pagination)
+    if probe and page:
+        probed: list[BiometricDeviceResponse] = []
+        for row in page:
+            item = BiometricDeviceResponse.model_validate(row)
+            if str(getattr(row, "status", "") or "").lower() != "active":
+                probed.append(item.model_copy(update={"reachable": False}))
+                continue
+            reachable, _msg = BiometricDeviceService._probe_device(
+                getattr(row, "ip_address", None),
+                getattr(row, "port", None),
+            )
+            probed.append(item.model_copy(update={"reachable": reachable}))
+        page = probed
+    return APIResponse(message="OK", data=page)
+
+
+@biometric_devices_router.get(
+    "/connectivity",
+    response_model=APIResponse[list[BiometricDevicePingResponse]],
+)
+def biometric_devices_connectivity(
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.attendance:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+):
+    """Batch TCP probe for Status column (Active = reachable)."""
     return APIResponse(
         message="OK",
-        data=paginate(BiometricDeviceService(db).list(ctx, company_id), pagination),
+        data=BiometricDeviceService(db).ping_all(ctx, company_id),
     )
 
 
@@ -1481,16 +1513,34 @@ def rotate_biometric_api_key(
     return APIResponse(message="API key rotated", data={"api_key": key})
 
 
+@biometric_devices_router.get(
+    "/{row_id}/ping",
+    response_model=APIResponse[BiometricDevicePingResponse],
+)
+def ping_biometric_device(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.attendance:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=BiometricDeviceService(db).ping(ctx, row_id),
+    )
+
+
 @biometric_devices_router.get("/{row_id}/live-feed", response_model=APIResponse[BiometricDeviceFeedResponse])
 def biometric_device_live_feed(
     row_id: UUID,
     ctx: Annotated[TenantContext, Depends(require_permission("hr.attendance:read"))],
     db: Annotated[Session, Depends(get_db)],
     days: int = 14,
+    skip_probe: bool = False,
 ):
     return APIResponse(
         message="OK",
-        data=BiometricDeviceService(db).live_feed(ctx, row_id, days=days),
+        data=BiometricDeviceService(db).live_feed(
+            ctx, row_id, days=days, skip_probe=skip_probe
+        ),
     )
 
 

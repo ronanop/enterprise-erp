@@ -194,6 +194,29 @@ function resolveEmployeeLabel(
   return id;
 }
 
+function dedupeSetupRowsByName(rows: SetupRow[], nameKeys: string[]): SetupRow[] {
+  const byName = new Map<string, SetupRow>();
+  for (const row of rows) {
+    const label = nameKeys
+      .map((k) => String(row[k] ?? "").trim())
+      .find((v) => v.length > 0);
+    const key = (label || String(row.id ?? "")).toLowerCase();
+    if (!key) continue;
+    const existing = byName.get(key);
+    if (!existing) {
+      byName.set(key, row);
+      continue;
+    }
+    // Prefer active over inactive/draft.
+    const status = String(row.status ?? "").toLowerCase();
+    const existingStatus = String(existing.status ?? "").toLowerCase();
+    if (status === "active" && existingStatus !== "active") {
+      byName.set(key, row);
+    }
+  }
+  return Array.from(byName.values());
+}
+
 export function SetupEntityPanel({
   tab,
   columns,
@@ -204,6 +227,7 @@ export function SetupEntityPanel({
   buildCreateBody,
   buildUpdateBody,
   statusActions,
+  dedupeByName = false,
 }: {
   tab: HrSetupTab;
   columns: ColumnDef[];
@@ -218,6 +242,7 @@ export function SetupEntityPanel({
     deactivate?: string;
     archive?: string;
   };
+  dedupeByName?: boolean;
 }) {
   const [rows, setRows] = useState<SetupRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -260,20 +285,32 @@ export function SetupEntityPanel({
           setOrgLookups(lookups);
         }
         if (mapApiRow) data = data.map(mapApiRow);
-        // Label company/branch so same dept names under different entities are clear.
+        // Label company/branch when those columns are shown.
         const companyLabel = (id: string) =>
           lookups.companies.find((c) => c.value === id)?.label || "-";
         const branchLabel = (id: string) =>
           lookups.branches.find((b) => b.value === id)?.label || "-";
-        data = data.map((row) => ({
-          ...row,
-          company:
-            String(row.company_name ?? row.company ?? "").trim() ||
-            companyLabel(String(row.company_id ?? "")),
-          branch:
-            String(row.branch_name ?? row.branch ?? "").trim() ||
-            branchLabel(String(row.branch_id ?? "")),
-        }));
+        data = data.map((row) => {
+          const rawCompany = String(row.company_name ?? row.company ?? "").trim();
+          const rawBranch = String(row.branch_name ?? row.branch ?? "").trim();
+          const companyId = String(row.company_id ?? "");
+          // Treat placeholder "-" as empty so id→label lookup still runs.
+          const company =
+            (rawCompany && rawCompany !== "-" ? rawCompany : "") ||
+            companyLabel(companyId);
+          let branch =
+            (rawBranch && rawBranch !== "-" ? rawBranch : "") ||
+            branchLabel(String(row.branch_id ?? ""));
+          // Designations often have null branch_id — fall back to company's branch.
+          if ((!branch || branch === "-") && companyId) {
+            const companyBranch = lookups.branches.find((b) => b.companyId === companyId);
+            if (companyBranch) branch = companyBranch.label;
+          }
+          return { ...row, company, branch: branch || "-" };
+        });
+        if (dedupeByName) {
+          data = dedupeSetupRowsByName(data, nameKeys);
+        }
       }
       setRows(data);
       setSelected(new Set());
@@ -287,7 +324,7 @@ export function SetupEntityPanel({
     } finally {
       setLoading(false);
     }
-  }, [tab, mapApiRow, needsOrgLookups]);
+  }, [tab, mapApiRow, needsOrgLookups, dedupeByName, nameKeys]);
 
   useEffect(() => {
     void load();

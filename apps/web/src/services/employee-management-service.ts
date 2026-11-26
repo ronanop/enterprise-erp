@@ -13,6 +13,11 @@ import {
   buildReportingManagerOptions,
   type EmployeeMasterRow,
 } from "@/lib/hr/reporting-managers";
+import {
+  uniqueDepartmentOptions,
+  uniqueDesignationOptions,
+  uniqueLocationOptions,
+} from "@/lib/org-options";
 import type {
   ActivityEvent,
   AuditEntry,
@@ -534,9 +539,15 @@ function mergeRow(
 
 export type EmployeeDirectoryOptions = {
   branches: { id: string; label: string; headEmployeeId: string }[];
-  departments: { id: string; label: string; branchId: string; headEmployeeId: string }[];
-  locations: { id: string; label: string; branchId: string; code: string }[];
-  designations: { id: string; label: string }[];
+  departments: {
+    id: string;
+    label: string;
+    branchId: string;
+    headEmployeeId: string;
+    companyId?: string;
+  }[];
+  locations: { id: string; label: string; branchId: string; code: string; companyId?: string }[];
+  designations: { id: string; label: string; companyId?: string }[];
   /** Reporting managers only - for assignment picklists */
   managers: { id: string; label: string }[];
   /** All active employees - for name lookup (branch/dept heads, etc.) */
@@ -552,7 +563,7 @@ export type EmployeeDirectoryResult = {
   errors: string[];
 };
 
-const DIRECTORY_CACHE_TTL_MS = 20_000;
+const DIRECTORY_CACHE_TTL_MS = 5 * 60_000;
 let directoryCache: { at: number; value: EmployeeDirectoryResult } | null = null;
 let directoryInflight: Promise<EmployeeDirectoryResult> | null = null;
 
@@ -564,6 +575,13 @@ export const EMPLOYEE_LIST_PAGE_SIZE = 10;
 /** Clear cached HR directory after creates/updates (or wait for TTL in dev). */
 export function invalidateEmployeeDirectoryCache(): void {
   directoryCache = null;
+}
+
+/** Sync peek — used by attendance to avoid a second full directory fetch. */
+export function peekEmployeeDirectoryCache(): EmployeeDirectoryResult | null {
+  if (!directoryCache) return null;
+  if (Date.now() - directoryCache.at >= DIRECTORY_CACHE_TTL_MS) return null;
+  return directoryCache.value;
 }
 
 async function listAllPages(apiPath: string): Promise<{ data: HrRow[]; error?: unknown }> {
@@ -592,41 +610,30 @@ async function listAllPages(apiPath: string): Promise<{ data: HrRow[]; error?: u
 const EMPTY_LABEL_MAP = new Map<string, string>();
 const EMPTY_COMPANY_MAP = new Map<string, { name: string; code: string }>();
 
-/** First-paint list: one page of master employees + best-effort profiles for gender/DOB. */
+/** First-paint list: one page of employees + companies only (no full profiles dump). */
 export async function listEmployeesPage(
   page: number,
   pageSize = EMPLOYEE_LIST_PAGE_SIZE,
 ): Promise<{ records: EmployeeRecord[]; hasMore: boolean }> {
   await ensureEmployeeExtensionsLoaded();
-  const res = await resourceService.list("/employees", {
-    page: Math.max(1, page),
-    page_size: Math.min(Math.max(1, pageSize), API_PAGE_SIZE),
-  });
-  const masterRows = (Array.isArray(res.data) ? res.data : []) as HrRow[];
+  const [empRes, companiesRes] = await Promise.all([
+    resourceService.list("/employees", {
+      page: Math.max(1, page),
+      page_size: Math.min(Math.max(1, pageSize), API_PAGE_SIZE),
+    }),
+    resourceService.list("/companies", { page: 1, page_size: 200 }).catch(() => ({ data: [] })),
+  ]);
+  const masterRows = (Array.isArray(empRes.data) ? empRes.data : []) as HrRow[];
   const extensions = loadExtensions();
 
-  // Profiles + companies so Entity column is correct before full directory hydrates.
-  const profileByEmployee = new Map<string, HrRow>();
   const companyMap = new Map<string, { name: string; code: string }>();
-  try {
-    const [profiles, companies] = await Promise.all([
-      listAllPages("/hr/employee-profiles"),
-      listAllPages("/companies"),
-    ]);
-    for (const p of (Array.isArray(profiles.data) ? profiles.data : []) as HrRow[]) {
-      const empId = String(p.employee_id ?? "");
-      if (empId) profileByEmployee.set(empId, p);
-    }
-    for (const c of (Array.isArray(companies.data) ? companies.data : []) as HrRow[]) {
-      const id = String(c.id ?? "");
-      if (!id) continue;
-      companyMap.set(id, {
-        name: String(c.company_name ?? c.name ?? ""),
-        code: String(c.company_code ?? ""),
-      });
-    }
-  } catch {
-    /* optional for first paint */
+  for (const c of (Array.isArray(companiesRes.data) ? companiesRes.data : []) as HrRow[]) {
+    const id = String(c.id ?? "");
+    if (!id) continue;
+    companyMap.set(id, {
+      name: String(c.company_name ?? c.name ?? ""),
+      code: String(c.company_code ?? ""),
+    });
   }
 
   const records = masterRows
@@ -636,7 +643,7 @@ export async function listEmployeesPage(
       const id = String(m.id);
       return mergeRow(
         m,
-        profileByEmployee.get(id),
+        undefined,
         undefined,
         EMPTY_LABEL_MAP,
         EMPTY_LABEL_MAP,
@@ -649,68 +656,209 @@ export async function listEmployeesPage(
   return { records, hasMore: masterRows.length >= pageSize };
 }
 
-async function loadOptions(): Promise<EmployeeDirectoryOptions> {
-  const [branches, departments, locations, designations, employees, shifts, mgmtGroups, companies] =
-    await Promise.all([
-    listAllPages("/branches"),
-    listAllPages("/departments"),
-    listAllPages("/locations"),
-    listAllPages("/hr/designations"),
-    listAllPages("/employees"),
-    listAllPages("/hr/shifts"),
-    listAllPages("/hr/management-groups"),
-    listAllPages("/companies"),
-  ]);
+function asOptionRows(d: unknown): HrRow[] {
+  return (Array.isArray(d) ? d : []).filter((r): r is HrRow => !!r && typeof r === "object");
+}
 
-  const asRows = (d: unknown) =>
-    (Array.isArray(d) ? d : []).filter((r): r is HrRow => !!r && typeof r === "object");
-
-  const empRows = asRows(employees.data) as EmployeeMasterRow[];
-  const companyRows = asRows(companies.data);
+function buildDirectoryOptions(
+  empRows: EmployeeMasterRow[],
+  parts: {
+    branches: HrRow[];
+    departments: HrRow[];
+    locations: HrRow[];
+    designations: HrRow[];
+    shifts: HrRow[];
+    managementGroups: HrRow[];
+    companies: HrRow[];
+  },
+): EmployeeDirectoryOptions {
+  const companyNameById = new Map(
+    parts.companies.map((c) => [
+      String(c.id),
+      String(c.company_name ?? c.name ?? c.company_code ?? "").trim(),
+    ]),
+  );
 
   return {
-    branches: asRows(branches.data).map((r) => ({
+    branches: parts.branches.map((r) => ({
       id: String(r.id),
       label: String(r.branch_name ?? r.name ?? r.branch_code ?? r.id),
       headEmployeeId: String(r.head_employee_id ?? ""),
     })),
-    departments: asRows(departments.data).map((r) => ({
-      id: String(r.id),
-      label: String(r.department_name ?? r.name ?? r.department_code ?? r.id),
-      branchId: String(r.branch_id ?? ""),
-      headEmployeeId: String(r.head_employee_id ?? ""),
+    departments: uniqueDepartmentOptions(
+      parts.departments.map((r) => {
+        const companyId = String(r.company_id ?? "");
+        return {
+          id: String(r.id),
+          label: String(r.department_name ?? r.name ?? r.department_code ?? r.id),
+          branchId: String(r.branch_id ?? ""),
+          headEmployeeId: String(r.head_employee_id ?? ""),
+          companyId,
+          companyName: companyNameById.get(companyId) || "",
+        };
+      }),
+    ).map(({ id, label, branchId, headEmployeeId, companyId }) => ({
+      id,
+      label,
+      branchId,
+      headEmployeeId,
+      companyId,
     })),
-    locations: asRows(locations.data).map((r) => ({
-      id: String(r.id),
-      label: String(r.location_name ?? r.name ?? r.location_code ?? r.id),
-      branchId: String(r.branch_id ?? ""),
-      code: String(r.location_code ?? ""),
+    locations: uniqueLocationOptions(
+      parts.locations.map((r) => {
+        const companyId = String(r.company_id ?? "");
+        return {
+          id: String(r.id),
+          label: String(r.location_name ?? r.name ?? r.location_code ?? r.id),
+          branchId: String(r.branch_id ?? ""),
+          code: String(r.location_code ?? ""),
+          companyId,
+          companyName: companyNameById.get(companyId) || "",
+        };
+      }),
+    ).map(({ id, label, branchId, code, companyId }) => ({
+      id,
+      label,
+      branchId: branchId || "",
+      code: code || "",
+      companyId,
     })),
-    designations: asRows(designations.data).map((r) => ({
-      id: String(r.id),
-      label: String(r.designation_name ?? r.designation_code ?? r.id),
-    })),
+    designations: uniqueDesignationOptions(
+      parts.designations.map((r) => {
+        const companyId = String(r.company_id ?? "");
+        return {
+          id: String(r.id),
+          label: String(r.designation_name ?? r.designation_code ?? r.id),
+          companyId,
+          companyName: companyNameById.get(companyId) || "",
+        };
+      }),
+    ).map(({ id, label, companyId }) => ({ id, label, companyId })),
     managers: buildReportingManagerOptions(empRows),
     employees: buildEmployeeLookupOptions(empRows),
-    shifts: asRows(shifts.data).map((r) => ({
+    shifts: parts.shifts.map((r) => ({
       id: String(r.id),
       label: String(r.shift_name ?? r.shift_code ?? r.id),
     })),
-    managementGroups: asRows(mgmtGroups.data).map((r) => ({
+    managementGroups: parts.managementGroups.map((r) => ({
       id: String(r.id),
       label: String(r.group_name ?? r.group_code ?? r.id),
       employmentType: String(r.employment_type ?? "permanent"),
       shiftId: String(r.default_shift_id ?? ""),
     })),
-    companies: companyRows.map((r) => {
-      const name = String(r.company_name ?? r.name ?? r.company_code ?? r.id);
-      const code = String(r.company_code ?? "");
+    companies: parts.companies.map((r) => ({
+      id: String(r.id),
+      label: String(r.company_name ?? r.name ?? r.company_code ?? r.id),
+      code: String(r.company_code ?? ""),
+    })),
+  };
+}
+
+export type AttendanceFilterOptions = {
+  branches: { id: string; label: string; companyId?: string }[];
+  departments: { id: string; label: string }[];
+  shifts: { id: string; label: string }[];
+  managers: { id: string; label: string }[];
+  employees: {
+    id: string;
+    label: string;
+    code: string;
+    departmentId: string;
+    departmentName?: string;
+    designation: string;
+    managerId: string;
+    branchId?: string;
+    companyId?: string;
+  }[];
+};
+
+function attendanceEmployeesFromMaster(rows: HrRow[]): AttendanceFilterOptions["employees"] {
+  return rows
+    .filter((m) => !m.is_deleted)
+    .filter((m) => !isDemoEmployeeCode(String(m.employee_code ?? "")))
+    .map((m) => {
+      const name =
+        [m.first_name, m.last_name].filter(Boolean).join(" ").trim() ||
+        String(m.display_name ?? "").trim() ||
+        String(m.employee_code ?? m.id);
+      const code = String(m.employee_code ?? "");
       return {
-        id: String(r.id),
-        label: name,
+        id: String(m.id),
+        label: code ? `${name} (${code})` : name,
         code,
+        departmentId: String(m.department_id ?? ""),
+        departmentName: "",
+        designation: String(m.designation ?? m.job_title ?? ""),
+        managerId: String(m.reporting_manager_id ?? ""),
+        branchId: String(m.branch_id ?? ""),
+        companyId: String(m.company_id ?? ""),
       };
-    }),
+    })
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/**
+ * Slim options for Attendance filters — employees + branch/dept/shift only.
+ * Skips profiles, employment, locations, designations, management groups.
+ */
+export async function loadAttendanceFilterOptions(): Promise<AttendanceFilterOptions> {
+  const cached = peekEmployeeDirectoryCache();
+  if (cached?.records?.length) {
+    const deptById = new Map(cached.options.departments.map((d) => [d.id, d.label]));
+    return {
+      branches: cached.options.branches,
+      departments: cached.options.departments,
+      shifts: cached.options.shifts,
+      managers: cached.options.managers,
+      employees: cached.records.map((e) => ({
+        id: e.id,
+        label: e.displayName,
+        code: e.employeeCode,
+        departmentId: e.departmentId,
+        departmentName: e.departmentName || deptById.get(e.departmentId) || "",
+        designation: e.designationName,
+        managerId: e.reportingManagerId,
+        branchId: e.branchId,
+        companyId: e.companyId,
+      })),
+    };
+  }
+
+  const [employees, branches, departments, shifts, companies] = await Promise.all([
+    listAllPages("/employees"),
+    listAllPages("/branches"),
+    listAllPages("/departments"),
+    listAllPages("/hr/shifts"),
+    listAllPages("/companies"),
+  ]);
+
+  const empRows = asOptionRows(employees.data);
+  const opts = buildDirectoryOptions(empRows as EmployeeMasterRow[], {
+    branches: asOptionRows(branches.data),
+    departments: asOptionRows(departments.data),
+    locations: [],
+    designations: [],
+    shifts: asOptionRows(shifts.data),
+    managementGroups: [],
+    companies: asOptionRows(companies.data),
+  });
+
+  const companyByBranch = new Map(
+    asOptionRows(branches.data).map((r) => [
+      String(r.id),
+      r.company_id ? String(r.company_id) : undefined,
+    ]),
+  );
+  return {
+    branches: opts.branches.map((b) => ({
+      id: b.id,
+      label: b.label,
+      companyId: companyByBranch.get(b.id),
+    })),
+    departments: opts.departments.map((d) => ({ id: d.id, label: d.label })),
+    shifts: opts.shifts,
+    managers: opts.managers,
+    employees: attendanceEmployeesFromMaster(empRows),
   };
 }
 
@@ -718,11 +866,28 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
   await ensureEmployeeExtensionsLoaded();
   purgeLocalDemoEmployees();
 
-  const [masters, profiles, employment, options] = await Promise.all([
+  const [
+    masters,
+    profiles,
+    employment,
+    branches,
+    departments,
+    locations,
+    designations,
+    shifts,
+    mgmtGroups,
+    companies,
+  ] = await Promise.all([
     listAllPages("/employees"),
     listAllPages("/hr/employee-profiles"),
     listAllPages("/hr/employment"),
-    loadOptions(),
+    listAllPages("/branches"),
+    listAllPages("/departments"),
+    listAllPages("/locations"),
+    listAllPages("/hr/designations"),
+    listAllPages("/hr/shifts"),
+    listAllPages("/hr/management-groups"),
+    listAllPages("/companies"),
   ]);
 
   const errors: string[] = [];
@@ -730,6 +895,16 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
   if (profiles.error) errors.push("Could not load HR profiles");
 
   const masterRows = (Array.isArray(masters.data) ? masters.data : []) as HrRow[];
+  const empRows = masterRows as EmployeeMasterRow[];
+  const options = buildDirectoryOptions(empRows, {
+    branches: asOptionRows(branches.data),
+    departments: asOptionRows(departments.data),
+    locations: asOptionRows(locations.data),
+    designations: asOptionRows(designations.data),
+    shifts: asOptionRows(shifts.data),
+    managementGroups: asOptionRows(mgmtGroups.data),
+    companies: asOptionRows(companies.data),
+  });
   const profileRows = (Array.isArray(profiles.data) ? profiles.data : []) as HrRow[];
   const employmentRows = (Array.isArray(employment.data) ? employment.data : []) as HrRow[];
 

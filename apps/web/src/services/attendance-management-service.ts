@@ -4,7 +4,11 @@ import {
   normalizeAttendanceTime,
 } from "@/lib/attendance-import-map";
 import { resourceService } from "@/services/api-client";
-import { loadEmployeeDirectory } from "@/services/employee-management-service";
+import {
+  loadAttendanceFilterOptions,
+  loadEmployeeDirectory,
+  type AttendanceFilterOptions,
+} from "@/services/employee-management-service";
 import type { HrRow } from "@/services/hr-service";
 import { devError, devWarn } from "@/lib/dev-log";
 import type {
@@ -572,23 +576,6 @@ function cleanDeptName(value: string | undefined | null): string {
   return !v || v === "-" ? "" : v;
 }
 
-function buildEmpMap(
-  empDir: Awaited<ReturnType<typeof loadEmployeeDirectory>>,
-): EmpLookup {
-  const empMap: EmpLookup = new Map();
-  for (const e of empDir.records) {
-    empMap.set(e.id, {
-      name: e.displayName,
-      code: e.employeeCode,
-      dept: cleanDeptName(e.departmentName),
-      deptId: e.departmentId,
-      desig: e.designationName,
-      manager: e.reportingManagerName,
-    });
-  }
-  return empMap;
-}
-
 function empMapFromOptions(
   employees: AttendanceDirectory["options"]["employees"],
   departments: AttendanceDirectory["options"]["departments"] = [],
@@ -643,35 +630,23 @@ export async function loadAttendanceDirectory(
     };
   }
 
-  const [attRows, empDir, branchRows, departmentRows, shiftRowsRaw, punchMap] =
-    await Promise.all([
-      attPromise,
-      loadEmployeeDirectory().catch(() => ({
-        records: [],
-        options: {
-          branches: [],
-          departments: [],
-          designations: [],
-          managers: [],
-          shifts: [],
-        },
-        errors: [],
-      })),
-      listAllRows("/branches", {}, 5),
-      listAllRows("/departments", {}, 5),
-      listAllRows("/hr/shifts", {}, 5),
-      punchPromise,
-    ]);
+  const emptyOpts: AttendanceFilterOptions = {
+    branches: [],
+    departments: [],
+    shifts: [],
+    managers: [],
+    employees: [],
+  };
 
-  const empMap = buildEmpMap(empDir);
-  const asOpts = (arr: HrRow[], labelKeys: string[]) =>
-    arr.map((r) => ({
-      id: String(r.id),
-      label: String(labelKeys.map((k) => r[k]).find(Boolean) ?? r.id),
-    }));
-  const departments = asOpts(departmentRows, ["department_name", "name", "department_code"]);
-  const deptById = new Map(departments.map((d) => [d.id, d.label]));
-  // Fill blank department names from /departments when directory hydration missed them.
+  // Slim filter options (or reuse employee-directory cache) — no profiles/employment fan-out.
+  const [attRows, options, punchMap] = await Promise.all([
+    attPromise,
+    loadAttendanceFilterOptions().catch(() => emptyOpts),
+    punchPromise,
+  ]);
+
+  const empMap = empMapFromOptions(options.employees, options.departments);
+  const deptById = new Map(options.departments.map((d) => [d.id, d.label]));
   for (const [id, emp] of empMap) {
     if (!cleanDeptName(emp.dept) && emp.deptId) {
       empMap.set(id, {
@@ -680,36 +655,25 @@ export async function loadAttendanceDirectory(
       });
     }
   }
-  const shiftMap = new Map(
-    shiftRowsRaw.map((s) => [String(s.id), String(s.shift_name ?? s.shift_code ?? s.id)]),
-  );
+  const shiftMap = new Map(options.shifts.map((s) => [s.id, s.label]));
 
   return {
     records: recordsFromRows(attRows, empMap, shiftMap, punchMap),
     loadedFrom: dateFrom,
     loadedTo: dateTo,
     options: {
-      branches: branchRows.map((r) => ({
-        id: String(r.id),
-        label: String(r.branch_name ?? r.name ?? r.branch_code ?? r.id),
-        companyId: r.company_id ? String(r.company_id) : undefined,
-      })),
-      departments,
-      shifts: asOpts(shiftRowsRaw, ["shift_name", "shift_code"]),
-      managers: empDir.options.managers,
-      employees: empDir.records.map((e) => {
+      branches: options.branches,
+      departments: options.departments,
+      shifts: options.shifts,
+      managers: options.managers,
+      employees: options.employees.map((e) => {
         const fromMap = empMap.get(e.id);
         return {
-          id: e.id,
-          label: e.displayName,
-          code: e.employeeCode,
-          departmentId: e.departmentId,
+          ...e,
           departmentName:
-            cleanDeptName(fromMap?.dept) || cleanDeptName(e.departmentName),
-          designation: e.designationName,
-          managerId: e.reportingManagerId,
-          branchId: e.branchId,
-          companyId: e.companyId,
+            cleanDeptName(fromMap?.dept) ||
+            cleanDeptName(e.departmentName) ||
+            cleanDeptName(deptById.get(e.departmentId)),
         };
       }),
     },
@@ -766,9 +730,10 @@ export function filterAttendanceRecords(
   statsBucket: AttendanceStatBucket | null = null,
 ): AttendanceRecord[] {
   const q = query.trim().toLowerCase();
-  const today = todayIso();
+  // Prefer the selected day for card filters (falls back to today).
+  const bucketDate = (filters.dateFrom || filters.dateTo || todayIso()).slice(0, 10);
   return records.filter((r) => {
-    if (statsBucket && !matchesAttendanceStatBucket(r, statsBucket, today)) return false;
+    if (statsBucket && !matchesAttendanceStatBucket(r, statsBucket, bucketDate)) return false;
     if (filters.branchId && r.branchId !== filters.branchId) return false;
     if (filters.shiftId && r.shiftId !== filters.shiftId) return false;
     if (!statsBucket && filters.status && r.status !== filters.status) return false;

@@ -663,10 +663,18 @@ export async function loadSetupOrgLookups(): Promise<{
       label: String(r.branch_name ?? r.name ?? r.branch_code ?? r.id),
       companyId: r.company_id != null ? String(r.company_id) : undefined,
     })),
-    departments: deptRows.map((r) => ({
-      value: String(r.id),
-      label: String(r.department_name ?? r.name ?? r.department_code ?? r.id),
-    })),
+    departments: (() => {
+      const byName = new Map<string, { value: string; label: string }>();
+      for (const r of deptRows) {
+        const label = String(r.department_name ?? r.name ?? r.department_code ?? r.id).trim();
+        const key = label.toLowerCase();
+        if (!key || byName.has(key)) continue;
+        byName.set(key, { value: String(r.id), label });
+      }
+      return Array.from(byName.values()).sort((a, b) =>
+        a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
+      );
+    })(),
     employees: employeeRows.map((r) => {
       const name = [r.first_name, r.last_name].filter(Boolean).join(" ").trim();
       const code = String(r.employee_code ?? "");

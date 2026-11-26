@@ -184,6 +184,10 @@ export const FALLBACK_INTEGRATION_CATALOG: HrIntegrationCatalog = {
     { id: "leave_balances", label: "Leave balances (all types)" },
     { id: "leave_balance_total", label: "Leave balance total" },
     { id: "leave_used_total", label: "Leave used total" },
+    { id: "salary", label: "Salary (CTC / gross / structure)" },
+    { id: "payroll", label: "Payroll (latest run line)" },
+    { id: "payslip", label: "Payslip (latest)" },
+    { id: "shift", label: "Shift (current assignment)" },
   ],
 };
 

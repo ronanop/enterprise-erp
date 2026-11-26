@@ -6,21 +6,19 @@ Use **Docker Compose** mode in Coolify with compose file:
 docker-compose.coolify.yml
 ```
 
-Coolify terminates HTTPS. Stack includes **Redis + RabbitMQ + API + Celery + Web + Employee App**.
+Coolify terminates HTTPS. Stack includes **Redis + RabbitMQ + API + Celery + Web (HRMS admin)**.
 Postgres = **AWS RDS** via `DATABASE_URL`. Object storage = **AWS S3**.
 
 ## Public domain (Hostinger → Coolify)
 
-Marketing site + ERP web share one Next app; ESS is a separate Next app:
+HRMS admin is a single Next app (`apps/web`):
 
 | Hostinger DNS | Points to | Coolify service |
 |---------------|-----------|-----------------|
 | `iconnectplus.in` / `www` | Coolify EC2 (A/CNAME) | `web:3000` |
 | `api.iconnectplus.in` | Coolify EC2 | `api:8000` |
-| `ess.iconnectplus.in` | Coolify EC2 | `employee-app:3001` |
 
 Landing (`/`) → **Sign in** → access code → **demo** (`/demo`) or **iConnectPlus** (`/login`).
-Employee self-service PWA: `https://ess.iconnectplus.in` (container port **3001**).
 
 ## Services to expose
 
@@ -28,9 +26,8 @@ Employee self-service PWA: `https://ess.iconnectplus.in` (container port **3001*
 |-----------------|------|----------------|
 | `web` | 3000 | `https://iconnectplus.in` |
 | `api` | 8000 | `https://api.iconnectplus.in` |
-| `employee-app` | 3001 | `https://ess.iconnectplus.in` |
 
-Point `NEXT_PUBLIC_API_URL` at the **public** API URL (includes `/api/v1`), or use same-origin `/api/v1` via Next rewrites when web/employee-app proxies to API.
+Point `NEXT_PUBLIC_API_URL` at the **public** API URL (includes `/api/v1`), or use same-origin `/api/v1` via Next rewrites when web proxies to API.
 
 ## Required environment variables
 
@@ -44,12 +41,9 @@ JWT_SECRET_KEY=long-random-string
 # Public URLs
 NEXT_PUBLIC_API_URL=https://api.iconnectplus.in/api/v1
 FRONTEND_URL=https://iconnectplus.in
-CORS_ORIGINS=["https://iconnectplus.in","https://www.iconnectplus.in","https://ess.iconnectplus.in"]
+CORS_ORIGINS=["https://iconnectplus.in","https://www.iconnectplus.in"]
 SMTP_HOST=smtp.yourcompany.com
 SMTP_FROM_ADDRESS=noreply@yourcompany.com
-NEXT_PUBLIC_APP_NAME_EMPLOYEE=Employee App
-NEXT_PUBLIC_USE_MOCK=false
-EMPLOYEE_APP_PORT=3001
 
 # Landing access gate (two codes)
 ACCESS_CODE_DEMO=your-sales-demo-code

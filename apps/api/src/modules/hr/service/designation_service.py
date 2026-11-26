@@ -4,7 +4,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import NotFoundException
+from core.exceptions import ConflictException, NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.platform.compat.audit_facade import PlatformAuditFacade
 from modules.hr.models import HrDesignation
@@ -21,8 +21,8 @@ class DesignationService:
         self._audit = PlatformAuditFacade(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
-        cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_rows(ctx, cid)
+        # Shared across entities — only filter when caller explicitly passes company_id.
+        return self._repo.list_rows(ctx, company_id)
 
     def get(self, ctx: TenantContext, row_id: UUID) -> HrDesignation:
         row = self._repo.get(ctx, row_id)
@@ -31,7 +31,13 @@ class DesignationService:
         return row
 
     def create(self, ctx: TenantContext, company_id: UUID | None = None, **fields):
-        cid = self._scope.resolve_company_id(ctx, company_id)
+        cid = self._scope.resolve_write_company_id(ctx, company_id)
+        name = str(fields.get("designation_name") or "").strip()
+        if name and self._repo.find_by_name(ctx, name) is not None:
+            raise ConflictException(
+                f"Designation '{name}' already exists. "
+                "Designations are shared across all entities — use the existing one."
+            )
         row = self._repo.create(ctx, company_id=cid, **fields)
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,

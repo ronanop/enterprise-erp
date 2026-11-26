@@ -29,6 +29,7 @@ class DesignationCreate(BaseModel):
 
 class DesignationUpdate(BaseModel):
     designation_name: str | None = None
+    branch_id: UUID | None = None
     job_level: str | None = None
     status: str | None = None
     version: int | None = None
@@ -1380,6 +1381,15 @@ class BiometricDeviceResponse(OrmModel):
     status: str
     version: int
     api_key: str | None = None
+    # Live TCP reachability when list/ping includes a probe.
+    reachable: bool | None = None
+
+
+class BiometricDevicePingResponse(BaseModel):
+    device_id: UUID
+    reachable: bool
+    message: str
+    enabled: bool = True
 
 
 class BiometricDeviceLiveLogItem(BaseModel):
@@ -1452,7 +1462,13 @@ class DeviceSyncResponse(BaseModel):
 
 
 class BiometricDownloadResponse(DeviceSyncResponse):
-    logs_read: int
+    logs_read: int = 0
+    logs_on_device: int = 0
+    logs_already_saved: int = 0
+    logs_new: int = 0
+    relinked: int = 0
+    lookback_days: int | None = None
+    since: str | None = None
 
 
 class ShiftRotationCreate(BaseModel):

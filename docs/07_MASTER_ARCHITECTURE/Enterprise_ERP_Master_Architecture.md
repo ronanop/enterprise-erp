@@ -274,10 +274,8 @@ Aligned with [ERP Architecture Lock Report v1.1](../05_ARCHITECTURE_LOCK/ERP_Arc
 
 ```text
 enterprise-erp/   # iConnect Plus monorepo
-├── apps/api/                    # FastAPI modular monolith (+ platform, alembic, workers)
-├── apps/web/                    # Next.js admin (iconnectplus.in)
-├── apps/employee-app/           # Next.js ESS PWA (ess.iconnectplus.in)
-├── apps/employee-mobile/        # Employee mobile
+├── apps/api/                    # FastAPI HRMS modular monolith (+ platform, alembic, workers)
+├── apps/web/                    # Next.js HRMS admin (iconnectplus.in)
 ├── docs/                        # Baseline pack + 00_CURRENT living docs
 ├── design-system/               # UI/UX Pro Max tokens
 ├── docker-compose.local.yml     # All-in-one local

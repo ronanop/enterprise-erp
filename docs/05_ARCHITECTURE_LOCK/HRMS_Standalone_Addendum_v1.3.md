@@ -12,9 +12,9 @@ This addendum records that **this repository is an HRMS-only product**. It does 
 | Surface | Role |
 |---------|------|
 | `apps/web` | HRMS admin UI (`/login`, `/hr/*`, public careers / onboarding) |
-| `apps/employee-app` | Employee PWA (ESS client) |
-| `apps/employee-mobile` | Employee mobile (same API) |
 | `apps/api` | FastAPI modular monolith — HRMS modules only |
+
+Employee PWA / mobile clients were removed from this repository. ESS APIs remain under `modules/ess` for HR admin inbox and future clients.
 
 Do **not** reintroduce finance, CRM, procurement, inventory, manufacturing, quality, projects, assets (ERP), service, helpdesk (ERP), documents (ERP DMS), marketing, analytics, ecommerce, voice-agent, GRC, integration, portal, or sales as first-class modules in this repo.
 
@@ -35,7 +35,7 @@ Do **not** reintroduce finance, CRM, procurement, inventory, manufacturing, qual
 
 - One credential: work email **or** employee code + password.
 - One endpoint: `POST /api/v1/auth/login`.
-- HR web uses HttpOnly cookies; PWA/mobile may use bearer tokens from the same login.
+- HR web uses HttpOnly cookies; the same login endpoint remains available for future ESS clients (bearer tokens).
 - Post-login for HR admins: `/hr`.
 - Superadmin Panel (`/hr/superadmin`) grants HR logins, company/entity scope, and sidebar `navKey`s.
 - Assignable product module key: `hr`. Nested permission prefixes (`organization`, `payroll`, `recruitment`, `master-data`) unlock via `HRMS_NESTED_MODULE_KEYS` when the user has `hr`.

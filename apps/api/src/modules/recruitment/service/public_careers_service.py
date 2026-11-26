@@ -7,12 +7,12 @@ import json
 import re
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
-from pathlib import Path
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from core.blob_store import store_bytes
 from core.exceptions import AppException, NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.organization.models.branch import OrgBranch
@@ -26,9 +26,6 @@ from modules.recruitment.models import (
 from modules.recruitment.service.application_service import ApplicationService
 from modules.recruitment.service.candidate_service import CandidateService
 from modules.recruitment.service.resume_service import ResumeService
-
-# apps/api/var/recruitment-resumes (stable across process cwd)
-_UPLOAD_ROOT = Path(__file__).resolve().parents[4] / "var" / "recruitment-resumes"
 
 _SYSTEM_USER = UUID("00000000-0000-0000-0000-000000000001")
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -496,12 +493,16 @@ class PublicCareersService:
         resume_text: str | None,
         profile: dict | None = None,
     ) -> None:
-        """Persist careers resume to disk + rec_resume so HR can preview/download."""
+        """Persist careers resume to MinIO (or local var fallback) + rec_resume."""
         safe_name = re.sub(r"[^\w.\- ]+", "_", resume_name).strip() or "resume.pdf"
-        dest_dir = _UPLOAD_ROOT / str(company_id or "unknown") / str(candidate_id)
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        dest = dest_dir / f"{uuid4().hex[:12]}_{safe_name}"
-        dest.write_bytes(resume_bytes)
+        storage_uri = store_bytes(
+            module="recruitment",
+            category="resumes",
+            owner_id=str(candidate_id),
+            company_id=str(company_id) if company_id else None,
+            file_name=safe_name,
+            data=resume_bytes,
+        )
 
         existing = list(
             self._db.scalars(
@@ -528,7 +529,7 @@ class PublicCareersService:
             branch_id=branch_id,
             candidate_id=candidate_id,
             version_no=next_version,
-            storage_uri=str(dest.resolve()),
+            storage_uri=storage_uri,
             content_hash=hashlib.sha256(resume_bytes).hexdigest(),
             parsed_skills_json=parsed,
             is_primary=True,

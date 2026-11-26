@@ -1,10 +1,11 @@
 """Job requisition service."""
 
 from pathlib import Path
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from core.blob_store import store_bytes
 from core.exceptions import NotFoundException, ValidationException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.organization.models.branch import OrgBranch
@@ -16,7 +17,6 @@ from modules.recruitment.service.document_number_service import DocumentNumberSe
 from modules.recruitment.service.engines import JobRequisitionEngine
 from modules.recruitment.service.recruitment_scope_validator import RecruitmentScopeValidator
 
-_EVIDENCE_ROOT = Path(__file__).resolve().parents[4] / "var" / "recruitment-job-evidence"
 _ALLOWED_AUDIENCES = frozenset({"internal", "external"})
 
 
@@ -100,15 +100,19 @@ class JobRequisitionService:
             raise ValidationException("Evidence file is empty")
         if len(content) > 15 * 1024 * 1024:
             raise ValidationException("Evidence file must be 15 MB or smaller")
-        _EVIDENCE_ROOT.mkdir(parents=True, exist_ok=True)
-        stored = f"{row.id}_{uuid4().hex[:8]}_{safe_name}"
-        path = _EVIDENCE_ROOT / stored
-        path.write_bytes(content)
+        uri = store_bytes(
+            module="recruitment",
+            category="job-evidence",
+            owner_id=str(row.id),
+            company_id=str(row.company_id) if getattr(row, "company_id", None) else None,
+            file_name=safe_name,
+            data=content,
+        )
         updated = self._repo.update(
             ctx,
             row_id,
             evidence_email_file_name=safe_name,
-            evidence_email_path=str(path),
+            evidence_email_path=uri,
         )
         if updated is None:
             raise NotFoundException("Job requisition not found")
