@@ -178,6 +178,7 @@ function nextDeviceCode(devices: Device[]): string {
 export default function BiometricDevicesPage() {
   const [rows, setRows] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -324,6 +325,7 @@ export default function BiometricDevicesPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       // Fast list (no TCP probe) so the table renders immediately.
       const res = await apiClient<Device[]>("/hr/biometric-devices", {
@@ -335,8 +337,13 @@ export default function BiometricDevicesPage() {
       setRows(list);
       void refreshConnectionStatus(list);
       void loadAdmsSetup();
-    } catch {
-      toast("Failed to load biometric devices", "error");
+    } catch (err) {
+      const message =
+        err instanceof ApiClientError
+          ? err.message
+          : "Failed to load biometric devices";
+      setLoadError(message);
+      toast(message, "error");
     } finally {
       setLoading(false);
     }
@@ -756,7 +763,25 @@ export default function BiometricDevicesPage() {
       ) : null}
 
       <section className="overflow-hidden rounded-lg border border-border bg-card">
-        {!rows.length ? (
+        {loading && !rows.length ? (
+          <p className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+            <Loader2 className="size-3.5 animate-spin" aria-hidden />
+            Loading biometric devices…
+          </p>
+        ) : loadError && !rows.length ? (
+          <div className="space-y-3 p-4">
+            <p className="text-sm text-amber-950">{loadError}</p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="cursor-pointer transition-colors duration-200"
+              onClick={() => void load()}
+            >
+              <RefreshCw className="size-3.5" />
+              Retry
+            </Button>
+          </div>
+        ) : !rows.length ? (
           <p className="p-4 text-sm text-muted-foreground">No biometric devices registered</p>
         ) : (
           <div className="overflow-x-auto">

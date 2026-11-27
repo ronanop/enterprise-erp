@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   amountsFromSplit,
+  buildCompensationSheet,
   computeCtcSplit,
   computePayablePreview,
   employeePfFromWage,
@@ -111,5 +112,17 @@ describe("salary-structure-excel mapped formulas", () => {
     expect(amounts.employerContribution).toBe(1800);
     expect(amounts.pf).toBe(1296);
     expect(amounts.pf).not.toBe(1800);
+  });
+
+  it("builds Compensation Sheet Fixed / Statutory / Monthly / Yearly", () => {
+    const sheet = buildCompensationSheet(360_000, "Anil Kumar");
+    expect(sheet).not.toBeNull();
+    expect(sheet!.title).toBe("Compensation Sheet for Anil Kumar");
+    expect(sheet!.fixedMonthly).toBe(sheet!.split.employeeGross);
+    expect(sheet!.employerPf).toBe(EXCEL_DEFAULTS.employerContribution);
+    expect(sheet!.statutoryMonthly).toBe(sheet!.employeePf + sheet!.employerPf);
+    expect(sheet!.totalMonthly).toBe(sheet!.fixedMonthly - sheet!.statutoryMonthly);
+    expect(sheet!.rows.some((r) => r.label.startsWith("a) Basic"))).toBe(true);
+    expect(sheet!.rows.some((r) => r.kind === "total")).toBe(true);
   });
 });

@@ -23,11 +23,13 @@ import {
   ALL_HR_NAV_KEYS,
   hrNavAccessGroups,
 } from "@/config/hr-nav";
+import { AccessRolesPanel } from "@/components/hr/superadmin/access-roles-panel";
 import {
   assignHrAdmin,
   createIntegrationApiKey,
   FALLBACK_INTEGRATION_CATALOG,
   getIntegrationApiKeyCatalog,
+  listAccessRoles,
   listHrActivityLogs,
   listHrAdmins,
   listHrEntities,
@@ -35,8 +37,10 @@ import {
   resetHrAdminPassword,
   revokeHrAdmin,
   revokeIntegrationApiKey,
+  setHrAdminAccessRole,
   setHrAdminEntities,
   setHrAdminNav,
+  type HrAccessRoleRecord,
   type HrActivityLogRecord,
   type HrAdminEntityOption,
   type HrAdminRecord,
@@ -45,11 +49,13 @@ import {
 } from "@/services/hr-superadmin-service";
 import type { EmployeeRecord } from "@/types/employee-management";
 import { ApiClientError, formatApiError } from "@/services/api-client";
+import { formatHrActivityLog } from "@/lib/hr-activity-log-format";
 
-type TabId = "assign" | "passwords" | "api-keys" | "logs";
+type TabId = "assign" | "roles" | "passwords" | "api-keys" | "logs";
 
 const TABS: HrTabItem[] = [
-  { id: "assign", label: "Give access", icon: UserPlus },
+  { id: "assign", label: "People", icon: UserPlus },
+  { id: "roles", label: "Roles", icon: Shield },
   { id: "passwords", label: "Passwords", icon: KeyRound },
   { id: "api-keys", label: "API keys", icon: Webhook },
   { id: "logs", label: "Activity logs", icon: ScrollText },
@@ -189,6 +195,8 @@ export function HrSuperadminPage() {
   const [logQuery, setLogQuery] = useState("");
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   const [admins, setAdmins] = useState<HrAdminRecord[]>([]);
+  const [accessRoles, setAccessRoles] = useState<HrAccessRoleRecord[]>([]);
+  const [defaultAccessRoleId, setDefaultAccessRoleId] = useState<string>("");
   const [entities, setEntities] = useState<HrAdminEntityOption[]>([]);
   const [logs, setLogs] = useState<HrActivityLogRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -218,14 +226,18 @@ export function HrSuperadminPage() {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [dir, adminRows, entityRows] = await Promise.all([
+      const [dir, adminRows, entityRows, roleRows] = await Promise.all([
         loadEmployeeDirectory(),
         listHrAdmins(),
         listHrEntities(),
+        listAccessRoles(),
       ]);
       setEmployees(dir.records.filter((r) => !r.isDeleted));
       setAdmins(adminRows);
       setEntities(entityRows);
+      setAccessRoles(roleRows);
+      const adminRole = roleRows.find((r) => r.is_system) ?? roleRows[0];
+      setDefaultAccessRoleId(adminRole?.id ?? "");
     } catch (err) {
       const message = formatApiError(err, "Couldn't load Superadmin data. Refresh the page.");
       toast(message, "error");
@@ -330,42 +342,54 @@ export function HrSuperadminPage() {
     });
   }, [employees, query, assignedEmployeeIds]);
 
+  const formattedLogs = useMemo(
+    () => logs.map((row) => ({ row, view: formatHrActivityLog(row) })),
+    [logs],
+  );
+
   const filteredLogs = useMemo(() => {
     const q = logQuery.trim().toLowerCase();
-    if (!q) return logs;
-    return logs.filter(
-      (row) =>
-        row.action.toLowerCase().includes(q) ||
-        (row.entity_name ?? "").toLowerCase().includes(q) ||
-        (row.actor_name ?? "").toLowerCase().includes(q) ||
-        (row.actor_email ?? "").toLowerCase().includes(q) ||
-        row.summary.toLowerCase().includes(q) ||
-        row.kind.toLowerCase().includes(q),
-    );
-  }, [logs, logQuery]);
+    if (!q) return formattedLogs;
+    return formattedLogs.filter(({ view }) => view.searchText.includes(q));
+  }, [formattedLogs, logQuery]);
 
-  async function onToggleHr(employeeId: string, next: boolean) {
+  /** Assign a predefined role, or revoke when roleId is empty. */
+  async function onSelectRole(employeeId: string, roleId: string) {
     setBusyId(employeeId);
     try {
-      if (next) {
+      if (!roleId) {
+        await revokeHrAdmin(employeeId);
+        toast("Access removed. That user has been signed out.");
+      } else {
         const emp = employees.find((row) => row.id === employeeId);
-        const row = await assignHrAdmin(employeeId, emp?.companyId ? [emp.companyId] : []);
-        if (row.login_created || row.email_sent) {
+        const already = adminByEmployee.has(employeeId);
+        if (already) {
+          const row = await setHrAdminAccessRole(employeeId, roleId);
           toast(
-            row.email_sent
-              ? `${row.display_name} now has HR access. Login password emailed to ${row.email}.`
-              : `${row.display_name} now has HR module access.`,
+            row.access_role_name
+              ? `Role set to ${row.access_role_name}. User was signed out to refresh permissions.`
+              : "Access role updated.",
           );
         } else {
-          toast(`${row.display_name} now has HR module access`);
+          const row = await assignHrAdmin(
+            employeeId,
+            emp?.companyId ? [emp.companyId] : [],
+            roleId,
+          );
+          if (row.email_sent) {
+            toast(
+              `${row.display_name} assigned ${row.access_role_name || "role"}. Login password emailed to ${row.email}.`,
+            );
+          } else {
+            toast(
+              `${row.display_name} assigned ${row.access_role_name || "role"}.`,
+            );
+          }
         }
-      } else {
-        await revokeHrAdmin(employeeId);
-        toast("HR module access revoked. That user has been signed out.");
       }
       await Promise.all([reload(), reloadLogs()]);
     } catch (err) {
-      toast(formatApiError(err, next ? "Couldn't update access. Try again." : "Couldn't revoke access. Try again."), "error");
+      toast(formatApiError(err, "Couldn't update role. Try again."), "error");
     } finally {
       setBusyId(null);
     }
@@ -376,7 +400,7 @@ export function HrSuperadminPage() {
     if (next) current.add(companyId);
     else current.delete(companyId);
     if (current.size === 0) {
-      toast("Keep at least one entity, or turn off Give access", "error");
+      toast("Keep at least one entity, or set role to No access", "error");
       return;
     }
     setBusyId(`entity:${employeeId}:${companyId}`);
@@ -568,7 +592,7 @@ export function HrSuperadminPage() {
       <SetupToastHost />
       <PageHeader
         title="Superadmin Panel"
-        description="Give HR access, choose entities for data segregation, pick sidebar menus, create integration API keys, email login passwords, and review activity logs."
+        description="Define roles under Roles, then assign a role to people here. Entities and sidebar can still be fine-tuned per person."
       />
 
       <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
@@ -586,12 +610,14 @@ export function HrSuperadminPage() {
         </div>
 
         <div className="p-5">
+          {tab === "roles" ? <AccessRolesPanel onChanged={() => void reload()} /> : null}
+
           {tab === "assign" ? (
             <>
               <PanelHeader
                 icon={Shield}
                 title={`People with access (${admins.length})`}
-                caption="Toggle entities (data segregation) and sidebar menus. Superadmin Panel is never granted here. Turn off Give access to revoke."
+                caption="Role comes from the Roles tab (permissions + menus). Change role or set No access to revoke. Entities and sidebar can be fine-tuned here."
               >
                 <Input
                   value={query}
@@ -604,8 +630,8 @@ export function HrSuperadminPage() {
                 <HrLoadingBlock label="Loading employees…" />
               ) : assignedRows.length === 0 ? (
                 <HrEmptyState
-                  title="No HR module users yet"
-                  description="Turn on Give access for an employee in the list below."
+                  title="No people with access yet"
+                  description="In the Employees list below, pick a role for someone."
                 />
               ) : (
                 <div className="mb-6 overflow-auto rounded-xl border border-border/70">
@@ -613,10 +639,9 @@ export function HrSuperadminPage() {
                     <thead className="sticky top-0 bg-muted/80 backdrop-blur">
                       <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted-foreground">
                         <th className="px-3 py-2.5 font-medium">Employee</th>
-                        <th className="px-3 py-2.5 font-medium">Designation</th>
+                        <th className="px-3 py-2.5 font-medium">Role</th>
                         <th className="px-3 py-2.5 font-medium">Entities</th>
                         <th className="px-3 py-2.5 font-medium">Sidebar menus</th>
-                        <th className="px-3 py-2.5 text-right font-medium">Give access</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -637,8 +662,29 @@ export function HrSuperadminPage() {
                                 {admin.employee_code} · {admin.email}
                               </p>
                             </td>
-                            <td className="px-3 py-3 text-muted-foreground">
-                              {admin.designation || emp?.designationName || "-"}
+                            <td className="px-3 py-3">
+                              <select
+                                className="h-8 w-full min-w-[9rem] cursor-pointer rounded-md border border-border bg-background px-2 text-xs transition-colors duration-200"
+                                value={admin.access_role_id || defaultAccessRoleId || ""}
+                                disabled={
+                                  busyId === admin.employee_id ||
+                                  busyId === `role:${admin.employee_id}`
+                                }
+                                onChange={(e) =>
+                                  void onSelectRole(admin.employee_id, e.target.value)
+                                }
+                                aria-label={`Access role for ${admin.display_name}`}
+                              >
+                                <option value="">No access</option>
+                                {accessRoles.map((role) => (
+                                  <option key={role.id} value={role.id}>
+                                    {role.role_name}
+                                  </option>
+                                ))}
+                              </select>
+                              <p className="mt-1 text-[10px] text-muted-foreground">
+                                {admin.designation || emp?.designationName || "—"}
+                              </p>
                             </td>
                             <td className="px-3 py-3">
                               <p className="text-foreground">
@@ -734,16 +780,6 @@ export function HrSuperadminPage() {
                                 })}
                               </div>
                             </td>
-                            <td className="px-3 py-3">
-                              <div className="flex justify-end">
-                                <ToggleSwitch
-                                  checked
-                                  disabled={busyId === admin.employee_id}
-                                  label="Give access"
-                                  onChange={(next) => void onToggleHr(admin.employee_id, next)}
-                                />
-                              </div>
-                            </td>
                           </tr>
                         );
                       })}
@@ -755,7 +791,7 @@ export function HrSuperadminPage() {
               <PanelHeader
                 icon={UserPlus}
                 title="Employees"
-                caption="Turn on Give access to add HRMS to the user's ERP menu, then set entities and sidebar menus above."
+                caption="Select a role defined under the Roles tab. That grants access with that role’s permissions and sidebar. Choose No access to leave them without HRMS access."
               />
               {!loading && filtered.length === 0 ? (
                 <HrEmptyState title="No employees match" description="Try a different search." />
@@ -767,12 +803,26 @@ export function HrSuperadminPage() {
                         name={emp.displayName}
                         meta={`${emp.employeeCode} · ${emp.officialEmail} · ${emp.designationName || "-"}`}
                       >
-                        <ToggleSwitch
-                          checked={false}
-                          disabled={busyId === emp.id}
-                          label="Give access"
-                          onChange={(next) => void onToggleHr(emp.id, next)}
-                        />
+                        <select
+                          className="h-8 min-w-[10rem] cursor-pointer rounded-md border border-border bg-background px-2 text-xs transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-60"
+                          value=""
+                          disabled={busyId === emp.id || accessRoles.length === 0}
+                          onChange={(e) => {
+                            const roleId = e.target.value;
+                            e.target.value = "";
+                            if (roleId) void onSelectRole(emp.id, roleId);
+                          }}
+                          aria-label={`Assign role to ${emp.displayName}`}
+                        >
+                          <option value="" disabled>
+                            {accessRoles.length ? "Select role…" : "Create a role first"}
+                          </option>
+                          {accessRoles.map((role) => (
+                            <option key={role.id} value={role.id}>
+                              {role.role_name}
+                            </option>
+                          ))}
+                        </select>
                       </PersonRow>
                     </li>
                   ))}
@@ -791,7 +841,7 @@ export function HrSuperadminPage() {
               {admins.length === 0 ? (
                 <HrEmptyState
                   title="No HR module users yet"
-                  description="Turn on Give access for an employee first, then send their login password by email here."
+                  description="Assign a role to an employee on the People tab first, then send their login password here."
                 />
               ) : (
                 <ul>
@@ -1225,7 +1275,7 @@ export function HrSuperadminPage() {
                 <Input
                   value={logQuery}
                   onChange={(e) => setLogQuery(e.target.value)}
-                  placeholder="Filter logs…"
+                  placeholder="Search by person, action, device…"
                   className="h-9 w-full lg:w-56"
                 />
                 <Button type="button" variant="outline" size="sm" className="h-9" onClick={() => void reloadLogs()}>
@@ -1241,44 +1291,56 @@ export function HrSuperadminPage() {
                 />
               ) : (
                 <div className="overflow-auto rounded-xl border border-border/70">
-                  <table className="w-full min-w-[40rem] text-left text-xs">
+                  <table className="w-full min-w-[44rem] text-left text-xs">
                     <thead className="sticky top-0 bg-muted/80 backdrop-blur">
                       <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted-foreground">
                         <th className="px-3 py-2.5 font-medium">When</th>
-                        <th className="px-3 py-2.5 font-medium">Type</th>
-                        <th className="px-3 py-2.5 font-medium">Action</th>
-                        <th className="px-3 py-2.5 font-medium">Actor</th>
-                        <th className="px-3 py-2.5 font-medium">Detail</th>
+                        <th className="px-3 py-2.5 font-medium">What happened</th>
+                        <th className="px-3 py-2.5 font-medium">Who</th>
+                        <th className="px-3 py-2.5 font-medium">Details</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredLogs.map((row) => (
+                      {filteredLogs.map(({ row, view }) => (
                         <tr key={row.id} className="border-b border-border/50 last:border-b-0">
-                          <td className="whitespace-nowrap px-3 py-2.5 align-middle text-muted-foreground">
+                          <td className="whitespace-nowrap px-3 py-2.5 align-top text-muted-foreground">
                             {formatWhen(row.occurred_at)}
                           </td>
-                          <td className="px-3 py-2.5 align-middle">
-                            <span className="inline-flex rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium">
-                              {row.kind}
-                            </span>
+                          <td className="px-3 py-2.5 align-top">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span
+                                className={cn(
+                                  "inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium",
+                                  view.typeClassName,
+                                )}
+                              >
+                                {view.typeLabel}
+                              </span>
+                              <p className="font-medium text-foreground" title={view.technicalAction}>
+                                {view.title}
+                              </p>
+                            </div>
                           </td>
-                          <td className="px-3 py-2.5 align-middle font-medium">
-                            {row.action}
-                            {row.entity_name ? (
-                              <span className="ml-1 font-normal text-muted-foreground">· {row.entity_name}</span>
+                          <td className="px-3 py-2.5 align-top">
+                            <p className="leading-4 text-foreground">{view.actorLabel}</p>
+                            {view.actorHint ? (
+                              <p className="mt-0.5 text-[10px] leading-3 text-muted-foreground">
+                                {view.actorHint}
+                              </p>
                             ) : null}
                           </td>
-                          <td className="px-3 py-2.5 align-middle">
-                            <p className="leading-4">{row.actor_name || "-"}</p>
-                            {row.actor_email ? (
-                              <p className="mt-0.5 text-[10px] leading-3 text-muted-foreground">{row.actor_email}</p>
-                            ) : null}
-                          </td>
-                          <td
-                            className="max-w-xs truncate px-3 py-2.5 align-middle text-muted-foreground"
-                            title={row.summary}
-                          >
-                            {row.summary || "-"}
+                          <td className="max-w-md px-3 py-2.5 align-top text-muted-foreground">
+                            {view.details.length ? (
+                              <ul className="space-y-0.5">
+                                {view.details.map((line) => (
+                                  <li key={line} className="leading-4">
+                                    {line}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <span>—</span>
+                            )}
                           </td>
                         </tr>
                       ))}

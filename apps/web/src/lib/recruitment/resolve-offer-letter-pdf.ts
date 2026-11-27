@@ -59,6 +59,7 @@ export async function resolveOfferLetterPdfDataUrl(
       const composed = await composeOfferLetterPdf({
         letterheadDataUrl: tpl.pdfDataUrl,
         body,
+        annualCtc: offer.ctc || undefined,
       });
       if (composed.startsWith("data:")) {
         await saveOfferLetterPdf(offer.id, composed);

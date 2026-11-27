@@ -13,8 +13,36 @@ export type HrAdminRecord = {
   company_ids: string[];
   nav_keys: string[];
   nav_unrestricted: boolean;
+  access_role_id?: string | null;
+  access_role_name?: string | null;
   /** MODULE_ROLE_ADMIN from Organization → Users */
   is_org_module_admin: boolean;
+};
+
+export type HrAccessAreaActions = { view: boolean; edit: boolean; delete: boolean };
+
+export type HrAccessRoleRecord = {
+  id: string;
+  role_code: string;
+  role_name: string;
+  description?: string | null;
+  area_actions: Record<string, HrAccessAreaActions>;
+  nav_keys: string[];
+  is_system: boolean;
+  sec_role_id?: string | null;
+};
+
+export type HrAccessAreaCatalogItem = {
+  id: string;
+  label: string;
+  description: string;
+  nav_keys: string[];
+  supports_delete: boolean;
+};
+
+export type HrAccessRoleCatalog = {
+  areas: HrAccessAreaCatalogItem[];
+  nav_keys: string[];
 };
 
 export type HrNavAccessRecord = {
@@ -55,7 +83,23 @@ function mapAdmin(row: HrAdminRecord): HrAdminRecord {
     company_ids: Array.isArray(row.company_ids) ? row.company_ids.map(String) : [],
     nav_keys: Array.isArray(row.nav_keys) ? row.nav_keys.map(String) : [],
     nav_unrestricted: Boolean(row.nav_unrestricted),
+    access_role_id: row.access_role_id ? String(row.access_role_id) : null,
+    access_role_name: row.access_role_name ?? null,
     is_org_module_admin: Boolean(row.is_org_module_admin),
+  };
+}
+
+function mapAccessRole(row: HrAccessRoleRecord): HrAccessRoleRecord {
+  return {
+    ...row,
+    id: String(row.id),
+    role_code: String(row.role_code),
+    role_name: String(row.role_name),
+    description: row.description ?? null,
+    area_actions: row.area_actions && typeof row.area_actions === "object" ? row.area_actions : {},
+    nav_keys: Array.isArray(row.nav_keys) ? row.nav_keys.map(String) : [],
+    is_system: Boolean(row.is_system),
+    sec_role_id: row.sec_role_id ? String(row.sec_role_id) : null,
   };
 }
 
@@ -78,12 +122,77 @@ export async function listHrEntities(): Promise<HrAdminEntityOption[]> {
 export async function assignHrAdmin(
   employeeId: string,
   companyIds: string[] = [],
+  accessRoleId?: string | null,
 ): Promise<HrAdminRecord> {
   const res = await apiClient<HrAdminRecord>("/hr/superadmin/admins", {
     method: "POST",
-    body: { employee_id: employeeId, company_ids: companyIds },
+    body: {
+      employee_id: employeeId,
+      company_ids: companyIds,
+      access_role_id: accessRoleId || null,
+    },
   });
   if (!res.data) throw new Error(res.message || "Assign failed");
+  return mapAdmin(res.data);
+}
+
+export async function listAccessRoles(): Promise<HrAccessRoleRecord[]> {
+  const res = await apiClient<HrAccessRoleRecord[]>("/hr/superadmin/access-roles");
+  return (res.data ?? []).map(mapAccessRole);
+}
+
+export async function getAccessRoleCatalog(): Promise<HrAccessRoleCatalog> {
+  const res = await apiClient<HrAccessRoleCatalog>("/hr/superadmin/access-roles/catalog");
+  return {
+    areas: Array.isArray(res.data?.areas) ? res.data.areas : [],
+    nav_keys: Array.isArray(res.data?.nav_keys) ? res.data.nav_keys.map(String) : [],
+  };
+}
+
+export async function createAccessRole(body: {
+  role_name: string;
+  description?: string | null;
+  area_actions: Record<string, HrAccessAreaActions>;
+  nav_keys?: string[] | null;
+}): Promise<HrAccessRoleRecord> {
+  const res = await apiClient<HrAccessRoleRecord>("/hr/superadmin/access-roles", {
+    method: "POST",
+    body,
+  });
+  if (!res.data) throw new Error(res.message || "Create role failed");
+  return mapAccessRole(res.data);
+}
+
+export async function updateAccessRole(
+  roleId: string,
+  body: {
+    role_name?: string | null;
+    description?: string | null;
+    area_actions?: Record<string, HrAccessAreaActions> | null;
+    nav_keys?: string[] | null;
+  },
+): Promise<HrAccessRoleRecord> {
+  const res = await apiClient<HrAccessRoleRecord>(`/hr/superadmin/access-roles/${roleId}`, {
+    method: "PATCH",
+    body,
+  });
+  if (!res.data) throw new Error(res.message || "Update role failed");
+  return mapAccessRole(res.data);
+}
+
+export async function deleteAccessRole(roleId: string): Promise<void> {
+  await apiClient<null>(`/hr/superadmin/access-roles/${roleId}`, { method: "DELETE" });
+}
+
+export async function setHrAdminAccessRole(
+  employeeId: string,
+  accessRoleId: string,
+): Promise<HrAdminRecord> {
+  const res = await apiClient<HrAdminRecord>(`/hr/superadmin/admins/${employeeId}/access-role`, {
+    method: "PATCH",
+    body: { access_role_id: accessRoleId },
+  });
+  if (!res.data) throw new Error(res.message || "Role assign failed");
   return mapAdmin(res.data);
 }
 

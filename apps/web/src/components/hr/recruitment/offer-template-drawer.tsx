@@ -81,6 +81,9 @@ export function OfferTemplateDrawer({ open, initial, onClose, onSave }: Props) {
           const url = await composeOfferLetterPdf({
             letterheadDataUrl: pdfDataUrl,
             body: merged,
+            // Sample preview CTC so Compensation Sheet table appears in template editor
+            annualCtc: 12_00_000,
+            candidateName: "Raj Singh",
           });
           if (composeGen.current !== gen) return;
           setComposedUrl(url);
@@ -427,6 +430,8 @@ export function PdfBodyOverlayPreview({
     void composeOfferLetterPdf({
       letterheadDataUrl: pdfDataUrl,
       body: applyOfferMergeFields(body, sampleOfferMergeValues()),
+      annualCtc: 12_00_000,
+      candidateName: "Raj Singh",
     })
       .then((u) => {
         if (!cancelled) setUrl(u);

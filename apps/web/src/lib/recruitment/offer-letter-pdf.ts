@@ -1,9 +1,9 @@
 import { jsPDF } from "jspdf";
 
 import {
-  computeSplitFromAnnualCtc,
-  salaryBreakdownLines,
-  type CtcSplit,
+  buildCompensationSheet,
+  stripCompensationAppendix,
+  type CompensationSheet,
 } from "@/lib/salary-structure-excel";
 
 /** Helvetica is WinAnsi — replace glyphs it cannot encode (e.g. ₹). */
@@ -19,7 +19,121 @@ function pdfSafeText(text: string): string {
 }
 
 function fmtInr(n: number): string {
-  return `Rs.${n.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+  return Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+}
+
+const HEADER_RGB: [number, number, number] = [15, 61, 110];
+const SECTION_RGB: [number, number, number] = [84, 141, 212];
+const ALT_RGB: [number, number, number] = [220, 230, 242];
+const WHITE: [number, number, number] = [255, 255, 255];
+const BLACK: [number, number, number] = [20, 20, 20];
+
+/**
+ * Draw Compensation Sheet table (Fixed / Statutory / Monthly / Yearly).
+ * Returns the Y position after the table.
+ */
+export function drawCompensationSheetTable(
+  doc: jsPDF,
+  sheet: CompensationSheet,
+  opts: { marginX: number; startY: number; pageW: number; pageH: number },
+): number {
+  const { marginX, pageW, pageH } = opts;
+  let y = opts.startY;
+  const tableW = pageW - marginX * 2;
+  const colAmt = 32;
+  const colLabel = tableW - colAmt * 2;
+  const x0 = marginX;
+  const x1 = marginX + colLabel;
+  const x2 = marginX + colLabel + colAmt;
+  const rowH = 7;
+  const titleH = 9;
+
+  const ensureSpace = (need: number) => {
+    if (y + need <= pageH - 16) return;
+    doc.addPage();
+    y = 20;
+  };
+
+  const fillRect = (
+    x: number,
+    top: number,
+    w: number,
+    h: number,
+    rgb: [number, number, number],
+  ) => {
+    doc.setFillColor(...rgb);
+    doc.rect(x, top, w, h, "F");
+  };
+
+  const strokeGrid = (top: number, h: number) => {
+    doc.setDrawColor(40, 70, 120);
+    doc.setLineWidth(0.25);
+    doc.rect(x0, top, tableW, h);
+    doc.line(x1, top, x1, top + h);
+    doc.line(x2, top, x2, top + h);
+  };
+
+  ensureSpace(titleH + rowH * 3);
+  // Title bar
+  fillRect(x0, y, tableW, titleH, HEADER_RGB);
+  doc.setTextColor(...WHITE);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.text(pdfSafeText(sheet.title), x0 + 2, y + 6);
+  y += titleH;
+
+  // Column headers
+  fillRect(x0, y, tableW, rowH, SECTION_RGB);
+  strokeGrid(y, rowH);
+  doc.setTextColor(...BLACK);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.text("Monthly", x1 + colAmt / 2, y + 4.8, { align: "center" });
+  doc.text("Yearly", x2 + colAmt / 2, y + 4.8, { align: "center" });
+  y += rowH;
+
+  let alt = false;
+  for (const row of sheet.rows) {
+    ensureSpace(rowH + 2);
+    if (row.kind === "section") {
+      fillRect(x0, y, tableW, rowH, SECTION_RGB);
+      strokeGrid(y, rowH);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(...BLACK);
+      doc.text(pdfSafeText(row.label), x0 + 2, y + 4.8);
+      y += rowH;
+      alt = false;
+      continue;
+    }
+
+    const bg =
+      row.kind === "subtotal" || row.kind === "total"
+        ? SECTION_RGB
+        : alt
+          ? ALT_RGB
+          : WHITE;
+    fillRect(x0, y, tableW, rowH, bg);
+    strokeGrid(y, rowH);
+    doc.setFont(
+      "helvetica",
+      row.kind === "subtotal" || row.kind === "total" ? "bold" : "normal",
+    );
+    doc.setFontSize(row.kind === "total" ? 9 : 8.5);
+    doc.setTextColor(...BLACK);
+    doc.text(pdfSafeText(row.label), x0 + 2, y + 4.8);
+    doc.text(fmtInr(row.monthly ?? 0), x1 + colAmt - 2, y + 4.8, {
+      align: "right",
+    });
+    doc.text(fmtInr(row.yearly ?? 0), x2 + colAmt - 2, y + 4.8, {
+      align: "right",
+    });
+    y += rowH;
+    if (row.kind === "line") alt = !alt;
+  }
+
+  doc.setTextColor(...BLACK);
+  return y + 2;
 }
 
 /** Build a simple A4 PDF data URL from offer letter plain text. */
@@ -27,9 +141,9 @@ export function buildOfferLetterPdfDataUrl(opts: {
   title?: string;
   offerCode?: string;
   body: string;
-  /** Annual CTC — when set, appends monthly Excel 60/50 salary structure table. */
+  /** Annual CTC — when set, appends Compensation Sheet table. */
   annualCtc?: number;
-  salarySplit?: CtcSplit | null;
+  candidateName?: string;
 }): string {
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
   const marginX = 18;
@@ -65,12 +179,10 @@ export function buildOfferLetterPdfDataUrl(opts: {
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
-  // Strip a duplicated salary-structure appendix if body already contains one —
-  // we render a proper table below from annualCtc.
-  const bodyText = (opts.body || "")
-    .replace(/^\s*(INTERNSHIP\s+)?OFFER\s+LETTER\s*(\r?\n)+/i, "")
-    .replace(/\n*Salary structure \(monthly[\s\S]*$/i, "")
-    .trimEnd();
+  const bodyText = stripCompensationAppendix(opts.body || "").replace(
+    /^\s*(INTERNSHIP\s+)?OFFER\s+LETTER\s*(\r?\n)+/i,
+    "",
+  );
   const lines = doc.splitTextToSize(pdfSafeText(bodyText), maxW) as string[];
   for (const line of lines) {
     if (y > pageH - 20) {
@@ -81,59 +193,21 @@ export function buildOfferLetterPdfDataUrl(opts: {
     y += 6;
   }
 
-  const annual = Number(opts.annualCtc) || 0;
-  const split =
-    opts.salarySplit ??
-    (annual > 0 ? computeSplitFromAnnualCtc(annual) : null);
-  if (split && split.valid && annual > 0) {
-    y += 4;
-    if (y > pageH - 60) {
+  const sheet = buildCompensationSheet(Number(opts.annualCtc) || 0, opts.candidateName);
+  if (sheet) {
+    y += 6;
+    if (y > pageH - 70) {
       doc.addPage();
       y = 20;
     }
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.text("Salary structure (monthly)", marginX, y);
-    y += 6;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(90);
-    doc.text(
-      pdfSafeText(`Annual CTC ${fmtInr(Math.round(annual))}  ·  Excel 60/50 split`),
+    drawCompensationSheetTable(doc, sheet, {
       marginX,
-      y,
-    );
-    doc.setTextColor(0);
-    y += 5;
-
-    const colLabel = marginX;
-    const colAmt = pageW - marginX;
-    const rows = salaryBreakdownLines(split).filter(
-      (r) => r.label !== "Structure CTC" || r.amount !== split.monthlyCtc,
-    );
-    for (const row of rows) {
-      if (y > pageH - 16) {
-        doc.addPage();
-        y = 20;
-      }
-      const emphasize = row.label === "Monthly CTC" || row.label === "Employee gross";
-      doc.setFont("helvetica", emphasize ? "bold" : "normal");
-      doc.setFontSize(10);
-      doc.text(pdfSafeText(row.label), colLabel, y);
-      doc.text(pdfSafeText(fmtInr(row.amount)), colAmt, y, { align: "right" });
-      y += 5;
-      if (row.hint) {
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(8);
-        doc.setTextColor(120);
-        doc.text(pdfSafeText(row.hint), colLabel, y);
-        doc.setTextColor(0);
-        y += 4;
-      }
-    }
+      startY: y,
+      pageW,
+      pageH,
+    });
   }
 
-  // Clean data URL — avoid `;filename=…` which breaks Chrome iframe PDF preview
   const raw = doc.output("datauristring");
   const comma = raw.indexOf(",");
   if (comma < 0) return raw;

@@ -236,28 +236,41 @@ async function tryRefreshAccessToken(): Promise<boolean> {
     return true;
   }
 
-  const refreshToken = getRefreshToken();
-
   if (!refreshInFlight) {
     refreshInFlight = (async () => {
       try {
         await ensureApiBase();
-        const response = await fetch(buildUrl("/auth/refresh"), {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify(refreshToken ? { refresh_token: refreshToken } : {}),
-          credentials: "include",
-          cache: "no-store",
-        });
-        const payload = (await response.json()) as ApiResponse<TokenData> | ErrorResponse;
-        if (!response.ok || payload.success === false || !payload.data?.access_token) {
-          return false;
+
+        const postRefresh = async (body: Record<string, string>) => {
+          const response = await fetch(buildUrl("/auth/refresh"), {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify(body),
+            credentials: "include",
+            cache: "no-store",
+          });
+          const payload = (await response.json()) as ApiResponse<TokenData> | ErrorResponse;
+          if (!response.ok || payload.success === false || !payload.data?.access_token) {
+            return false;
+          }
+          setTokens(payload.data.access_token, payload.data.refresh_token);
+          return true;
+        };
+
+        // Cookie-first. A stale in-memory refresh_token must NOT override the
+        // HttpOnly cookie — the API used to prefer body, and refresh rotation
+        // + reuse detection then revoked the whole session (surprise logout).
+        if (await postRefresh({})) {
+          return true;
         }
-        setTokens(payload.data.access_token, payload.data.refresh_token);
-        return true;
+        const refreshToken = getRefreshToken();
+        if (refreshToken) {
+          return postRefresh({ refresh_token: refreshToken });
+        }
+        return false;
       } catch {
         return false;
       } finally {
@@ -388,11 +401,14 @@ async function apiClientExecute<T>(
     if (sentBearer && !_cookieOnly) {
       return apiClient<T>(path, { ...options, _retried: true, _cookieOnly: true });
     }
+    // Refresh failed and there is no bearer to strip — session is gone.
+    clearTokens();
   }
 
   if (!response.ok || payload.success === false) {
     const errorPayload = payload as ErrorResponse;
-    if (auth && response.status === 401) {
+    // After a refresh/cookie-only retry still 401, drop the client session.
+    if (auth && response.status === 401 && _retried) {
       clearTokens();
     }
     throw new ApiClientError(

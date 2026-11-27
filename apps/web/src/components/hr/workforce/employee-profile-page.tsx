@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
   type Dispatch,
+  type InputHTMLAttributes,
   type ReactNode,
   type SetStateAction,
 } from "react";
@@ -71,7 +72,11 @@ import {
 } from "@/services/employee-management-service";
 import type { BgDocumentDisplay } from "@/services/bg-check-portal-service";
 import { ApiClientError, resourceService, formatApiError } from "@/services/api-client";
-import { listSalaryRevisionsForEmployee } from "@/services/payroll-management-service";
+import {
+  assignEmployeeSalary,
+  listSalaryRevisionsForEmployee,
+  loadPayrollDirectory,
+} from "@/services/payroll-management-service";
 import { formatInr } from "@/services/payroll-service";
 import { listEntityOptions } from "@/services/hr-setup-service";
 import type { SalaryRevision } from "@/types/payroll-management";
@@ -96,7 +101,23 @@ import type {
   GovernmentIds,
   PersonalInfo,
 } from "@/types/employee-management";
-import { emptyBank } from "@/types/employee-management";
+import { emptyBank, emptyEducationEntry } from "@/types/employee-management";
+import {
+  amountOnly,
+  digitsOnly,
+  lettersOnly,
+  validateAadhaar,
+  validateBankAccount,
+  validateEmail,
+  validateIfsc,
+  validateMobile,
+  validatePan,
+  validatePincode,
+  validateUan,
+  validateEsic,
+  validateYear,
+} from "@/lib/employee-validators";
+import { listSalaryStructureOptions } from "@/services/hr-master-connector";
 import {
   looksMasked,
   maskAadhaar,
@@ -309,17 +330,25 @@ function wizardDraftFromRecord(record: EmployeeRecord): EmployeeWizardDraft {
 }
 
 function validatePersonalEdit(p: PersonalInfo): string | null {
-  if (!p.firstName.trim()) return "First name is required";
-  if (!p.lastName.trim()) return "Last name is required";
+  if (!lettersOnly(p.firstName).trim()) return "First name is required";
+  if (!lettersOnly(p.lastName).trim()) return "Last name is required";
   if (!p.gender.trim()) return "Gender is required";
   if (!p.maritalStatus.trim()) return "Marital status is required";
-  if (!p.mobile.trim()) return "Emp. Contact No. is required";
-  if (!p.officialEmail.trim()) return "cache email id is required";
-  if (!p.personalEmail.trim()) return "Email id is required";
+  const mobileErr = validateMobile(p.mobile, { required: true, label: "Emp. Contact No." });
+  if (mobileErr) return mobileErr;
+  const officialErr = validateEmail(p.officialEmail, { required: true, label: "Official email" });
+  if (officialErr) return officialErr;
+  const personalErr = validateEmail(p.personalEmail, { required: true, label: "Personal email" });
+  if (personalErr) return personalErr;
   if (!p.currentAddress.line1.trim()) return "Current address is required";
+  const pinCur = validatePincode(p.currentAddress.pincode || "", { required: true });
+  if (pinCur) return `Current address: ${pinCur}`;
   if (!p.permanentAddress.line1.trim()) return "Permanent address is required";
-  if (!p.emergency.name.trim()) return "Family Member Name is required";
-  if (!p.emergency.phone.trim()) return "Contact No. is required";
+  const pinPer = validatePincode(p.permanentAddress.pincode || "", { required: true });
+  if (pinPer) return `Permanent address: ${pinPer}`;
+  if (!lettersOnly(p.emergency.name || "").trim()) return "Family Member Name is required";
+  const emPhone = validateMobile(p.emergency.phone, { required: true, label: "Emergency contact" });
+  if (emPhone) return emPhone;
   if (!p.profilePhotoDataUrl) return "Profile photo is required";
   return null;
 }
@@ -337,16 +366,28 @@ function validateEmploymentEdit(e: EmploymentInfo): string | null {
 }
 
 function validateGovernmentEdit(g: GovernmentIds): string | null {
-  if (!g.aadhaar.trim()) return "Aadhaar is required";
-  if (!g.pan.trim()) return "PAN is required";
+  const aad = validateAadhaar(g.aadhaar, { required: true });
+  if (aad) return aad;
+  const pan = validatePan(g.pan, { required: true });
+  if (pan) return pan;
+  const uan = validateUan(g.uan || "");
+  if (uan) return uan;
+  const esic = validateEsic(g.esic || "");
+  if (esic) return esic;
   return null;
 }
 
 function validateBankEdit(b: BankDetails, label: string): string | null {
-  if (!b.accountHolderName.trim()) return `${label}: account holder name is required`;
+  if (!lettersOnly(b.accountHolderName || "").trim()) {
+    return `${label}: account holder name is required`;
+  }
   if (!b.bankName.trim()) return `${label}: bank name is required`;
-  if (!b.accountNumber.trim()) return `${label}: account number is required`;
-  if (!b.ifsc.trim()) return `${label}: IFSC is required`;
+  const acc = validateBankAccount(b.accountNumber, b.confirmAccountNumber || b.accountNumber, {
+    required: true,
+  });
+  if (acc) return `${label}: ${acc}`;
+  const ifsc = validateIfsc(b.ifsc, { required: true });
+  if (ifsc) return `${label}: ${ifsc}`;
   return null;
 }
 
@@ -356,7 +397,16 @@ function validateEducationEdit(rows: EmployeeWizardDraft["education"]): string |
     const n = i + 1;
     if (!row.degree.trim()) return `Qualification ${n}: degree is required`;
     if (!row.institution.trim()) return `Qualification ${n}: institution is required`;
+    if (!row.grade.trim()) return `Qualification ${n}: grade / marks is required`;
+    const yr = validateYear(row.year || "");
+    if (yr) return `Qualification ${n}: ${yr}`;
   }
+  return null;
+}
+
+function validateSalaryEdit(s: EmployeeWizardDraft["salary"]): string | null {
+  if (!s.salaryStructure.trim()) return "Select a payroll salary structure";
+  if (!s.ctc.trim() && !s.basicSalary.trim()) return "Enter CTC or basic salary";
   return null;
 }
 
@@ -392,6 +442,14 @@ function validateEditSection(
     if (personalErr) return personalErr;
     if (bankFilled(draft.companyBank)) {
       return validateBankEdit(draft.companyBank, "Company salary account");
+    }
+    return null;
+  }
+  if (section === "salary") {
+    const salaryErr = validateSalaryEdit(draft.salary);
+    if (salaryErr) return salaryErr;
+    if (bankFilled(draft.companyBank)) {
+      return validateBankEdit(draft.companyBank, "Salary credit account");
     }
     return null;
   }
@@ -585,8 +643,69 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
     }
     try {
       await updateEmployeeRecord(record, draft);
+
+      // Wire salary + company bank into Payroll assign when editing those sections
+      if (editSection === "salary" || editSection === "bank") {
+        const structureName = draft.salary.salaryStructure.trim();
+        const annualCtc = Number(String(draft.salary.ctc || "").replace(/,/g, "")) || 0;
+        const monthlyFromCtc = annualCtc > 0 ? Math.round(annualCtc / 12) : 0;
+        const monthlyBasic =
+          Number(String(draft.salary.basicSalary || "").replace(/,/g, "")) || 0;
+        const monthlyCtc = monthlyFromCtc || monthlyBasic;
+        if (structureName && monthlyCtc > 0) {
+          try {
+            const dir = await loadPayrollDirectory();
+            const structure =
+              dir.structures.find(
+                (s) =>
+                  s.name === structureName ||
+                  s.id === structureName ||
+                  s.name.toLowerCase() === structureName.toLowerCase(),
+              ) ?? null;
+            if (structure?.id) {
+              const bank = draft.companyBank?.accountNumber
+                ? draft.companyBank
+                : draft.bank;
+              await assignEmployeeSalary({
+                employeeId: record.id,
+                hrEmployeeUuid: record.id,
+                employeeCode: record.employeeCode,
+                employeeName: record.displayName,
+                structureId: structure.id,
+                structureName: structure.name,
+                effectiveDate:
+                  draft.employment.joiningDate || new Date().toISOString().slice(0, 10),
+                monthlyCtc,
+                annualCtc: monthlyCtc * 12,
+                payrollGroup: draft.salary.payrollGroup || "",
+                bankAccount: bank.accountNumber || "",
+                bankName: bank.bankName || "",
+                taxRegime: (draft.salary.incomeTaxRegime === "old" ? "old" : "new") as
+                  | "old"
+                  | "new",
+                salaryStatus: "active",
+                department: draft.employment.departmentName || record.departmentName || "",
+                employmentId: record.employmentId,
+                branchId: draft.employment.branchId || record.branchId,
+                departmentId: draft.employment.departmentId || record.departmentId,
+                companyId: record.companyId,
+              });
+            }
+          } catch (syncErr) {
+            toast(
+              formatApiError(
+                syncErr,
+                "Employee saved, but Payroll salary assign needs a server salary structure.",
+              ),
+              "error",
+            );
+          }
+        }
+      }
+
       toast("Employee updated", "success");
       setEditOpen(false);
+      setEditSection("choose");
       void load();
     } catch (err) {
       toast(formatApiError(err, "Couldn't update. Try again."), "error");
@@ -644,14 +763,11 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
       <SetupToastHost />
       <PageHeader
         title={record.displayName}
+        description={`${record.employeeCode}${record.departmentName ? ` · ${record.departmentName}` : ""}`}
+        backHref="/hr/workforce"
+        backLabel="Employees"
         actions={
           <div className="flex flex-wrap gap-2">
-            <Link href="/hr/workforce">
-              <Button variant="outline" size="sm" className="cursor-pointer transition-colors duration-200">
-                <ArrowLeft className="size-3.5" />
-                Directory
-              </Button>
-            </Link>
             <Button
               size="sm"
               className="cursor-pointer transition-colors duration-200"
@@ -1009,7 +1125,23 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
 
       <SetupDrawer
         open={editOpen}
-        title={editSection === "choose" ? "Edit Employee" : `Edit · ${EDIT_SECTIONS.find((section) => section.id === editSection)?.title ?? "Employee"}`}
+        title={
+          <span className="flex items-center gap-2">
+            {editSection !== "choose" ? (
+              <button
+                type="button"
+                className="inline-flex size-7 cursor-pointer items-center justify-center rounded-md border border-border/70 text-muted-foreground transition-colors duration-200 hover:bg-muted/40 hover:text-foreground"
+                aria-label="Back to all sections"
+                onClick={() => setEditSection("choose")}
+              >
+                <ArrowLeft className="size-3.5" />
+              </button>
+            ) : null}
+            {editSection === "choose"
+              ? "Edit Employee"
+              : `Edit · ${EDIT_SECTIONS.find((section) => section.id === editSection)?.title ?? "Employee"}`}
+          </span>
+        }
         description={
           editSection === "choose"
             ? "Choose the details you want to update."
@@ -1153,9 +1285,29 @@ function EmployeeEditForm({
           </div>
         </SetupField>
         <EmsFormGrid>
-          <Field label="First name" required value={p.firstName} onChange={(firstName) => patchPersonal({ firstName })} />
-          <Field label="Middle name" value={p.middleName} onChange={(middleName) => patchPersonal({ middleName })} />
-          <Field label="Last name" required value={p.lastName} onChange={(lastName) => patchPersonal({ lastName })} />
+          <Field
+            label="First name"
+            required
+            maxLength={80}
+            value={p.firstName}
+            transform={lettersOnly}
+            onChange={(firstName) => patchPersonal({ firstName })}
+          />
+          <Field
+            label="Middle name"
+            maxLength={80}
+            value={p.middleName}
+            transform={lettersOnly}
+            onChange={(middleName) => patchPersonal({ middleName })}
+          />
+          <Field
+            label="Last name"
+            required
+            maxLength={80}
+            value={p.lastName}
+            transform={lettersOnly}
+            onChange={(lastName) => patchPersonal({ lastName })}
+          />
           <SetupField label="Gender" required>
             <SetupSelect value={p.gender} onChange={(e) => patchPersonal({ gender: e.target.value })}>
               <option value="">Select gender</option>
@@ -1177,7 +1329,15 @@ function EmployeeEditForm({
           <Field label="Nationality" value={p.nationality} onChange={(nationality) => patchPersonal({ nationality })} />
           <Field label="cache email id" required type="email" value={p.officialEmail} onChange={(officialEmail) => patchPersonal({ officialEmail })} />
           <Field label="Email id" required type="email" value={p.personalEmail} onChange={(personalEmail) => patchPersonal({ personalEmail })} />
-          <Field label="Emp. Contact No." required value={p.mobile} onChange={(mobile) => patchPersonal({ mobile })} />
+          <Field
+            label="Emp. Contact No."
+            required
+            inputMode="numeric"
+            maxLength={10}
+            value={p.mobile}
+            transform={(v) => digitsOnly(v, 10)}
+            onChange={(mobile) => patchPersonal({ mobile })}
+          />
         </EmsFormGrid>
         <SectionHeading title="Current address" />
         <AddressFields required value={p.currentAddress} onChange={(currentAddress) => patchPersonal({ currentAddress })} />
@@ -1185,8 +1345,23 @@ function EmployeeEditForm({
         <AddressFields required value={p.permanentAddress} onChange={(permanentAddress) => patchPersonal({ permanentAddress })} />
         <SectionHeading title="Family / emergency contact" />
         <EmsFormGrid>
-          <Field label="Family Member Name" required value={p.emergency.name} onChange={(name) => patchPersonal({ emergency: { ...p.emergency, name } })} />
-          <Field label="Contact No." required value={p.emergency.phone} onChange={(phone) => patchPersonal({ emergency: { ...p.emergency, phone } })} />
+          <Field
+            label="Family Member Name"
+            required
+            maxLength={80}
+            value={p.emergency.name}
+            transform={lettersOnly}
+            onChange={(name) => patchPersonal({ emergency: { ...p.emergency, name } })}
+          />
+          <Field
+            label="Contact No."
+            required
+            inputMode="numeric"
+            maxLength={10}
+            value={p.emergency.phone}
+            transform={(v) => digitsOnly(v, 10)}
+            onChange={(phone) => patchPersonal({ emergency: { ...p.emergency, phone } })}
+          />
           <SetupField label="Relation">
             <SetupSelect value={p.emergency.relationship} onChange={(e) => patchPersonal({ emergency: { ...p.emergency, relationship: e.target.value } })}>
               <option value="">Select relationship</option>
@@ -1197,7 +1372,9 @@ function EmployeeEditForm({
           </SetupField>
           <Field
             label="Fathers name"
+            maxLength={80}
             value={p.fatherName || ""}
+            transform={lettersOnly}
             onChange={(fatherName) => patchPersonal({ fatherName })}
           />
         </EmsFormGrid>
@@ -1421,10 +1598,24 @@ function EmploymentForm({
           </SetupSelect>
         </SetupField>
         {employmentDurationKind(e.employmentType) === "probation" ? (
-          <Field label="Probation period (days)" value={e.probationPeriodDays} onChange={(probationPeriodDays) => update({ probationPeriodDays })} />
+          <Field
+            label="Probation period (days)"
+            inputMode="numeric"
+            maxLength={4}
+            value={e.probationPeriodDays}
+            transform={(v) => digitsOnly(v, 4)}
+            onChange={(probationPeriodDays) => update({ probationPeriodDays })}
+          />
         ) : null}
         {employmentDurationKind(e.employmentType) === "training" ? (
-          <Field label="Training duration (days)" value={e.trainingDurationDays} onChange={(trainingDurationDays) => update({ trainingDurationDays })} />
+          <Field
+            label="Training duration (days)"
+            inputMode="numeric"
+            maxLength={4}
+            value={e.trainingDurationDays}
+            transform={(v) => digitsOnly(v, 4)}
+            onChange={(trainingDurationDays) => update({ trainingDurationDays })}
+          />
         ) : null}
         <Field label="Confirmation date" type="date" value={e.confirmationDate} onChange={(confirmationDate) => update({ confirmationDate })} />
         <SetupField label="Status" required>
@@ -1443,16 +1634,34 @@ function Field({
   onChange,
   type = "text",
   required,
+  maxLength,
+  inputMode,
+  transform,
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
   required?: boolean;
+  maxLength?: number;
+  inputMode?: InputHTMLAttributes<HTMLInputElement>["inputMode"];
+  transform?: (value: string) => string;
+  placeholder?: string;
 }) {
   return (
     <SetupField label={label} required={required}>
-      <SetupInput type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+      <SetupInput
+        type={type}
+        value={value}
+        maxLength={maxLength}
+        inputMode={inputMode}
+        placeholder={placeholder}
+        onChange={(event) => {
+          const next = transform ? transform(event.target.value) : event.target.value;
+          onChange(next);
+        }}
+      />
     </SetupField>
   );
 }
@@ -1493,7 +1702,15 @@ function AddressFields({
           searchPlaceholder="Search country…"
         />
       </SetupField>
-      <Field label="Pincode" required={required} value={value.pincode} onChange={(pincode) => onChange({ ...value, pincode })} />
+      <Field
+        label="Pincode"
+        required={required}
+        inputMode="numeric"
+        maxLength={6}
+        value={value.pincode}
+        transform={(v) => digitsOnly(v, 6)}
+        onChange={(pincode) => onChange({ ...value, pincode })}
+      />
     </EmsFormGrid>
   );
 }
@@ -1502,27 +1719,68 @@ function GovernmentForm({ draft, update }: EditFormProps) {
   const g = draft.governmentIds;
   const set = (governmentIds: Partial<typeof g>) =>
     update({ governmentIds: { ...g, ...governmentIds } });
-  const fields: { label: string; key: keyof typeof g; type?: string; required?: boolean }[] = [
-    { label: "Aadhaar", key: "aadhaar", required: true },
-    { label: "PAN", key: "pan", required: true },
-    { label: "Passport", key: "passport" },
-    { label: "UAN", key: "uan" },
-    { label: "Driving licence", key: "drivingLicense" },
-  ];
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">Aadhaar and PAN are required (same as onboarding).</p>
       <EmsFormGrid>
-        {fields.map(({ label, key, type, required }) => (
-          <Field
-            key={key}
-            label={label}
-            type={type}
-            required={required}
-            value={String(g[key] ?? "")}
-            onChange={(value) => set({ [key]: value })}
-          />
-        ))}
+        <Field
+          label="Aadhaar"
+          required
+          inputMode="numeric"
+          maxLength={12}
+          placeholder="12-digit Aadhaar"
+          value={g.aadhaar}
+          transform={(v) => digitsOnly(v, 12)}
+          onChange={(aadhaar) => set({ aadhaar })}
+        />
+        <Field
+          label="PAN"
+          required
+          maxLength={10}
+          placeholder="ABCDE1234F"
+          value={g.pan}
+          transform={(v) => v.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10)}
+          onChange={(pan) => set({ pan })}
+        />
+        <Field
+          label="Passport"
+          maxLength={20}
+          value={g.passport}
+          transform={(v) => v.toUpperCase().slice(0, 20)}
+          onChange={(passport) => set({ passport })}
+        />
+        <Field
+          label="Driving licence"
+          maxLength={20}
+          value={g.drivingLicense}
+          transform={(v) => v.toUpperCase().slice(0, 20)}
+          onChange={(drivingLicense) => set({ drivingLicense })}
+        />
+        <Field
+          label="UAN"
+          inputMode="numeric"
+          maxLength={12}
+          placeholder="12-digit PF UAN"
+          value={g.uan}
+          transform={(v) => digitsOnly(v, 12)}
+          onChange={(uan) => set({ uan })}
+        />
+        <Field
+          label="ESIC"
+          inputMode="numeric"
+          maxLength={17}
+          placeholder="10–17 digit ESIC"
+          value={g.esic}
+          transform={(v) => digitsOnly(v, 17)}
+          onChange={(esic) => set({ esic })}
+        />
+        <Field
+          label="Voter ID"
+          maxLength={20}
+          value={g.voterId}
+          transform={(v) => v.toUpperCase().slice(0, 20)}
+          onChange={(voterId) => set({ voterId })}
+        />
       </EmsFormGrid>
     </div>
   );
@@ -1541,35 +1799,56 @@ function BankFields({
     <div className="space-y-3">
       <EmsFormGrid>
         <Field
+          label="Account holder"
+          required={required}
+          maxLength={80}
+          value={value.accountHolderName}
+          transform={lettersOnly}
+          onChange={(accountHolderName) => onChange({ ...value, accountHolderName })}
+        />
+        <Field
           label="Bank name"
           required={required}
+          maxLength={80}
           value={value.bankName}
+          transform={(v) => v.slice(0, 80)}
           onChange={(bankName) => onChange({ ...value, bankName })}
         />
         <Field
-          label="Account holder"
-          required={required}
-          value={value.accountHolderName}
-          onChange={(accountHolderName) => onChange({ ...value, accountHolderName })}
+          label="Branch"
+          maxLength={80}
+          value={value.branchName}
+          transform={(v) => v.slice(0, 80)}
+          onChange={(branchName) => onChange({ ...value, branchName })}
         />
         <Field
           label="Account number"
           required={required}
+          inputMode="numeric"
+          maxLength={18}
           value={value.accountNumber}
+          transform={(v) => digitsOnly(v, 18)}
           onChange={(accountNumber) =>
             onChange({ ...value, accountNumber, confirmAccountNumber: accountNumber })
           }
         />
         <Field
-          label="IFSC"
+          label="Confirm account number"
           required={required}
-          value={value.ifsc}
-          onChange={(ifsc) => onChange({ ...value, ifsc })}
+          inputMode="numeric"
+          maxLength={18}
+          value={value.confirmAccountNumber || value.accountNumber}
+          transform={(v) => digitsOnly(v, 18)}
+          onChange={(confirmAccountNumber) => onChange({ ...value, confirmAccountNumber })}
         />
         <Field
-          label="Branch"
-          value={value.branchName}
-          onChange={(branchName) => onChange({ ...value, branchName })}
+          label="IFSC"
+          required={required}
+          maxLength={11}
+          placeholder="e.g. HDFC0001234"
+          value={value.ifsc}
+          transform={(v) => v.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 11)}
+          onChange={(ifsc) => onChange({ ...value, ifsc })}
         />
       </EmsFormGrid>
     </div>
@@ -1592,7 +1871,8 @@ function BankForm({ draft, update }: EditFormProps) {
         <div>
           <h3 className="text-sm font-semibold text-foreground">Company salary account</h3>
           <p className="text-xs text-muted-foreground">
-            Account opened by the company for salary credit. Optional until available.
+            Account opened by the company for salary credit. Synced to Payroll when a salary
+            structure is already assigned.
           </p>
         </div>
         <BankFields
@@ -1607,30 +1887,94 @@ function BankForm({ draft, update }: EditFormProps) {
 function SalaryForm({ draft, update }: EditFormProps) {
   const s = draft.salary;
   const set = (salary: Partial<typeof s>) => update({ salary: { ...s, ...salary } });
+  const [structures, setStructures] = useState(() => listSalaryStructureOptions());
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadPayrollDirectory()
+      .then((dir) => {
+        if (cancelled) return;
+        const fromApi = dir.structures.map((row) => ({
+          id: row.id,
+          label: row.name,
+          code: row.id,
+        }));
+        if (fromApi.length) setStructures(fromApi);
+      })
+      .catch(() => {
+        /* keep cached listSalaryStructureOptions */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selectedStructureId =
+    structures.find(
+      (st) =>
+        st.label === s.salaryStructure ||
+        st.id === s.salaryStructure ||
+        st.label.toLowerCase() === s.salaryStructure.toLowerCase(),
+    )?.id ?? "";
+
   return (
     <div className="space-y-6">
       <div className="space-y-3">
         <p className="text-xs text-muted-foreground">
-          Optional — same as hire wizard salary step. Revised amounts from Payroll appear on the
-          Payroll tab.
+          Optional — same as hire wizard salary step. Saving syncs structure and company bank into
+          Payroll salary assign. Revised amounts appear on the Payroll tab.
         </p>
         <EmsFormGrid>
-          <Field label="CTC" value={s.ctc} onChange={(ctc) => set({ ctc })} />
           <Field
             label="Basic salary"
+            inputMode="decimal"
+            placeholder="e.g. 35000"
             value={s.basicSalary}
+            transform={amountOnly}
             onChange={(basicSalary) => set({ basicSalary })}
           />
           <Field
-            label="Salary structure"
-            value={s.salaryStructure}
-            onChange={(salaryStructure) => set({ salaryStructure })}
+            label="CTC"
+            inputMode="decimal"
+            placeholder="e.g. 600000"
+            value={s.ctc}
+            transform={amountOnly}
+            onChange={(ctc) => set({ ctc })}
           />
-          <Field
-            label="Income tax regime"
-            value={s.incomeTaxRegime}
-            onChange={(incomeTaxRegime) => set({ incomeTaxRegime })}
-          />
+          <SetupField label="Salary structure">
+            {structures.length > 0 ? (
+              <SetupSelect
+                value={selectedStructureId}
+                onChange={(event) => {
+                  const id = event.target.value;
+                  const opt = structures.find((x) => x.id === id || x.label === id);
+                  set({ salaryStructure: opt?.label || id });
+                }}
+              >
+                <option value="">Select payroll structure…</option>
+                {structures.map((st) => (
+                  <option key={st.id} value={st.id}>
+                    {st.label}
+                  </option>
+                ))}
+              </SetupSelect>
+            ) : (
+              <SetupInput
+                value={s.salaryStructure}
+                onChange={(event) => set({ salaryStructure: event.target.value })}
+                placeholder="Create structures in Payroll first"
+              />
+            )}
+          </SetupField>
+          <SetupField label="Income tax regime">
+            <SetupSelect
+              value={s.incomeTaxRegime || "new"}
+              onChange={(event) => set({ incomeTaxRegime: event.target.value })}
+            >
+              <option value="new">New</option>
+              <option value="old">Old</option>
+            </SetupSelect>
+          </SetupField>
           <Toggle label="Provident fund (PF)" checked={s.pf} onChange={(pf) => set({ pf })} />
           <Toggle
             label="Employee state insurance (ESI)"
@@ -1648,7 +1992,7 @@ function SalaryForm({ draft, update }: EditFormProps) {
         <div>
           <h3 className="text-sm font-semibold text-foreground">Salary credit account</h3>
           <p className="text-xs text-muted-foreground">
-            Company-opened account used for salary credit.
+            Company-opened account used for salary credit (synced to Payroll on save).
           </p>
         </div>
         <BankFields
@@ -1808,46 +2152,50 @@ function EducationForm({ draft, update }: EditFormProps) {
     update({
       education: draft.education.map((row, i) => (i === index ? { ...row, ...patch } : row)),
     });
+
+  async function onCertificate(index: number, file: File | undefined) {
+    if (!file) return;
+    if (!ALLOWED_DOC_TYPES.includes(file.type) && !file.name.match(/\.(pdf|png|jpe?g)$/i)) {
+      toast("Supported: PDF, PNG, JPEG", "error");
+      return;
+    }
+    if (file.size > MAX_DOCUMENT_BYTES) {
+      toast("Max file size 5 MB", "error");
+      return;
+    }
+    const certificateDataUrl = await readFileAsDataUrl(file);
+    updateRow(index, { certificateFileName: file.name, certificateDataUrl });
+    toast("Certificate uploaded", "success");
+  }
+
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        Optional overall - if you add a qualification, degree and institution are required.
+        Optional — add qualifications and upload marksheets / certificates (PDF or image). Degree and
+        institution are required on each row you add.
       </p>
       <Button
         type="button"
         size="sm"
         variant="outline"
         className="cursor-pointer"
-        onClick={() =>
-          update({
-            education: [
-              ...draft.education,
-              {
-                id: `education-${Date.now()}`,
-                degree: "",
-                institution: "",
-                field: "",
-                year: "",
-                grade: "",
-              },
-            ],
-          })
-        }
+        onClick={() => update({ education: [...draft.education, emptyEducationEntry()] })}
       >
         Add qualification
       </Button>
       {draft.education.map((row, index) => (
         <EditableRow
           key={row.id}
-          title={`Qualification ${index + 1}`}
+          title={`Qualification ${index + 1}${index === 0 ? " · e.g. 10th / 12th / Graduation" : ""}`}
           onRemove={() =>
             update({ education: draft.education.filter((_, i) => i !== index) })
           }
         >
           <EmsFormGrid>
             <Field
-              label="Degree"
+              label="Degree / qualification"
               required
+              placeholder="e.g. B.Tech / MBA"
               value={row.degree}
               onChange={(degree) => updateRow(index, { degree })}
             />
@@ -1862,12 +2210,49 @@ function EducationForm({ draft, update }: EditFormProps) {
               value={row.field}
               onChange={(field) => updateRow(index, { field })}
             />
-            <Field label="Year" value={row.year} onChange={(year) => updateRow(index, { year })} />
             <Field
-              label="Grade"
+              label="Year"
+              inputMode="numeric"
+              maxLength={4}
+              value={row.year}
+              transform={(v) => digitsOnly(v, 4)}
+              onChange={(year) => updateRow(index, { year })}
+            />
+            <Field
+              label="Grade / marks"
+              required
               value={row.grade}
               onChange={(grade) => updateRow(index, { grade })}
             />
+            <SetupField label="Certificate / marksheet" hint="PDF or image · max 5 MB">
+              <div className="space-y-1.5">
+                <input
+                  type="file"
+                  accept=".pdf,image/*,.jpg,.jpeg,.png"
+                  className="block w-full cursor-pointer text-xs file:mr-2 file:cursor-pointer file:rounded-md file:border-0 file:bg-muted file:px-2 file:py-1"
+                  onChange={(event) => {
+                    void onCertificate(index, event.target.files?.[0]);
+                    event.target.value = "";
+                  }}
+                />
+                {row.certificateFileName ? (
+                  <div className="flex items-center justify-between gap-2 rounded-md border border-border/60 bg-muted/30 px-2 py-1 text-[11px]">
+                    <span className="truncate">{row.certificateFileName}</span>
+                    <button
+                      type="button"
+                      className="cursor-pointer shrink-0 text-destructive underline-offset-2 hover:underline"
+                      onClick={() =>
+                        updateRow(index, { certificateFileName: "", certificateDataUrl: "" })
+                      }
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">No file chosen</p>
+                )}
+              </div>
+            </SetupField>
           </EmsFormGrid>
         </EditableRow>
       ))}
@@ -1952,7 +2337,9 @@ function EmploymentHistoryForm({ draft, update }: EditFormProps) {
             />
             <Field
               label="Last CTC"
+              inputMode="decimal"
               value={row.lastCtc}
+              transform={amountOnly}
               onChange={(lastCtc) => updateRow(index, { lastCtc })}
             />
           </EmsFormGrid>
@@ -1972,6 +2359,22 @@ function EmploymentHistoryForm({ draft, update }: EditFormProps) {
 }
 
 const REQUIRED_DOC_TYPES = ["Photo", "PAN", "Aadhaar", "Cancelled Cheque"] as const;
+const DOC_TYPE_OPTIONS = [
+  "Photo",
+  "PAN",
+  "Aadhaar",
+  "Cancelled Cheque",
+  "Resume",
+  "Graduation Certificate",
+  "Appointment Letter",
+  "Relieving Letter",
+  "Salary Slips",
+  "Previous Employer Certificate",
+  "Work Experience",
+  "Signature",
+  "Passport",
+  "Other",
+] as const;
 
 function DocumentsForm({ draft, update }: EditFormProps) {
   const updateRow = (index: number, patch: Partial<EmployeeWizardDraft["documents"][number]>) =>
@@ -2069,12 +2472,24 @@ function DocumentsForm({ draft, update }: EditFormProps) {
             }
           >
             <EmsFormGrid>
-              <Field
-                label="Document type"
-                required={isRequiredType || !row.documentType}
-                value={row.documentType}
-                onChange={(documentType) => updateRow(index, { documentType })}
-              />
+              <SetupField label="Document type" required={isRequiredType || !row.documentType}>
+                <SetupSelect
+                  value={row.documentType}
+                  onChange={(event) => updateRow(index, { documentType: event.target.value })}
+                >
+                  <option value="">Select type…</option>
+                  {!DOC_TYPE_OPTIONS.includes(
+                    row.documentType as (typeof DOC_TYPE_OPTIONS)[number],
+                  ) && row.documentType ? (
+                    <option value={row.documentType}>{row.documentType}</option>
+                  ) : null}
+                  {DOC_TYPE_OPTIONS.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </SetupSelect>
+              </SetupField>
               <Field
                 label="Document number"
                 value={row.documentNumber}
@@ -2092,19 +2507,22 @@ function DocumentsForm({ draft, update }: EditFormProps) {
                 value={row.expiryDate}
                 onChange={(expiryDate) => updateRow(index, { expiryDate })}
               />
-              <Field
-                label="File name"
-                required={isRequiredType}
-                value={row.fileName}
-                onChange={(fileName) => updateRow(index, { fileName })}
-              />
-              <SetupField label="Replace file" required={isRequiredType && !row.fileName}>
+              <SetupField
+                label="File"
+                required={isRequiredType && !row.fileName}
+                hint={row.fileName ? `On file: ${row.fileName}` : "PDF or image · max 5 MB"}
+              >
                 <input
                   type="file"
-                  className="block w-full cursor-pointer text-xs"
+                  accept=".pdf,image/*,.jpg,.jpeg,.png,.doc,.docx"
+                  className="block w-full cursor-pointer text-xs file:mr-2 file:cursor-pointer file:rounded-md file:border-0 file:bg-muted file:px-2 file:py-1"
                   onChange={(event) => {
                     const file = event.target.files?.[0];
                     if (!file) return;
+                    if (file.size > MAX_DOCUMENT_BYTES) {
+                      toast("Max file size 5 MB", "error");
+                      return;
+                    }
                     void readFileAsDataUrl(file).then((fileDataUrl) =>
                       updateRow(index, { fileName: file.name, fileDataUrl }),
                     );

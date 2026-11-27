@@ -100,15 +100,17 @@ export function AuthGate({ children }: { children: ReactNode }) {
     };
   }, [mounted, checking, authed, pathname, searchParams, router]);
 
-  // Soft session check on tab focus — only log out on confirmed 401, never on
-  // transient network / API-restart blips (those were causing surprise logouts).
+  // Soft session check on tab focus — only log out on confirmed 401 after the
+  // api-client refresh path failed. Ignore network / API-restart blips.
   useEffect(() => {
     if (!mounted || !authed) return;
     let lastCheckAt = 0;
+    let focusInFlight = false;
     function onFocus() {
       const now = Date.now();
-      if (now - lastCheckAt < 15_000) return;
+      if (now - lastCheckAt < 30_000 || focusInFlight) return;
       lastCheckAt = now;
+      focusInFlight = true;
       void apiClient("/auth/me", { auth: true })
         .then(() => {
           markSessionPresent();
@@ -118,6 +120,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
             clearTokens();
             setAuthed(false);
           }
+        })
+        .finally(() => {
+          focusInFlight = false;
         });
     }
     function onAuthChange() {

@@ -83,6 +83,13 @@ export const OFFER_MERGE_FIELDS: OfferMergeField[] = [
     sample: "₹12,00,000",
   },
   {
+    id: "compensation_sheet",
+    label: "Compensation Sheet",
+    token: "[Compensation Sheet]",
+    sample:
+      "(Compensation Sheet table — Fixed Basic/HRA/Special + Statutory PF — fills from CTC on offer generate)",
+  },
+  {
     id: "joining_date",
     label: "Joining date",
     token: "[Joining Date]",
@@ -119,7 +126,10 @@ export type OfferMergeValues = Partial<Record<(typeof OFFER_MERGE_FIELDS)[number
 /** Sample values for template editor preview. */
 export function sampleOfferMergeValues(): OfferMergeValues {
   const out: OfferMergeValues = {};
-  for (const f of OFFER_MERGE_FIELDS) out[f.id] = f.sample;
+  for (const f of OFFER_MERGE_FIELDS) {
+    // Keep compensation token so PDF compose draws the real table (not sample prose).
+    out[f.id] = f.id === "compensation_sheet" ? f.token : f.sample;
+  }
   return out;
 }
 
@@ -163,6 +173,8 @@ We are pleased to offer you the position of [Role] in the [Department] departmen
 
 1. Compensation
 Your annual CTC will be [CTC].
+
+[Compensation Sheet]
 
 2. Joining Date
 Your proposed date of joining is [Joining Date].

@@ -323,22 +323,167 @@ export function salaryBreakdownLines(split: CtcSplit): SalaryBreakdownLine[] {
   ];
 }
 
-/** Plain-text block appended to offer letter body. */
+/** Plain-text block appended to offer letter body (legacy). Prefer compensation sheet. */
 export function formatSalaryBreakdownText(annualCtc: number): string {
-  const split = computeSplitFromAnnualCtc(annualCtc);
-  if (!(annualCtc > 0) || !split.valid) return "";
+  return formatCompensationSheetText(annualCtc);
+}
+
+/** Marker inserted via offer-template merge field — replaced by drawn table in PDF. */
+export const COMPENSATION_SHEET_TOKEN = "[Compensation Sheet]";
+
+export type CompensationSheetRowKind =
+  | "section"
+  | "line"
+  | "subtotal"
+  | "total";
+
+export type CompensationSheetRow = {
+  kind: CompensationSheetRowKind;
+  label: string;
+  monthly?: number;
+  yearly?: number;
+};
+
+export type CompensationSheet = {
+  title: string;
+  annualCtc: number;
+  split: CtcSplit;
+  employeePf: number;
+  employerPf: number;
+  fixedMonthly: number;
+  statutoryMonthly: number;
+  totalMonthly: number;
+  rows: CompensationSheetRow[];
+};
+
+/**
+ * Compensation Sheet matching offer annexure layout:
+ * Fixed (Basic / HRA / Special) → Statutory (EE PF / ER PF) → Total (I − II).
+ */
+export function buildCompensationSheet(
+  annualCtc: number,
+  candidateName?: string,
+): CompensationSheet | null {
+  const annual = rupee(Math.max(0, Number(annualCtc) || 0));
+  if (!(annual > 0)) return null;
+  const split = computeSplitFromAnnualCtc(annual);
+  if (!split.valid) return null;
+
+  const basic = split.basic;
+  const hra = split.hra;
+  const special = Math.max(0, split.specialAllowance);
+  const telephone = Math.max(0, split.telephoneAllowance);
+  const fixedMonthly = rupee(basic + hra + special + telephone);
+  const amounts = amountsFromSplit(split);
+  const employeePf = amounts.pf;
+  const employerPf = rupee(split.employerContribution);
+  const statutoryMonthly = rupee(employeePf + employerPf);
+  /** Same as sample annexure: Fixed − Statutory. */
+  const totalMonthly = rupee(fixedMonthly - statutoryMonthly);
+
+  const name = String(candidateName || "").trim();
+  const title = name
+    ? `Compensation Sheet for ${name}`
+    : "Compensation Sheet";
+
+  const rows: CompensationSheetRow[] = [
+    { kind: "section", label: "Total Fixed Component" },
+    { kind: "line", label: "a) Basic Salary", monthly: basic, yearly: basic * 12 },
+    {
+      kind: "line",
+      label: "b) House Rent Allowance",
+      monthly: hra,
+      yearly: hra * 12,
+    },
+    {
+      kind: "line",
+      label: "c) Special Allowance",
+      monthly: special,
+      yearly: special * 12,
+    },
+  ];
+  if (telephone > 0) {
+    rows.push({
+      kind: "line",
+      label: "d) Telephone Allowance",
+      monthly: telephone,
+      yearly: telephone * 12,
+    });
+  }
+  rows.push(
+    {
+      kind: "subtotal",
+      label: `Sub Total (I) = (${telephone > 0 ? "a + b + c + d" : "a + b + c"})`,
+      monthly: fixedMonthly,
+      yearly: fixedMonthly * 12,
+    },
+    { kind: "section", label: "Statutory" },
+    {
+      kind: "line",
+      label: "e) Employee Contribution to Provident Fund",
+      monthly: employeePf,
+      yearly: employeePf * 12,
+    },
+    {
+      kind: "line",
+      label: "f) Employer's Contribution to Provident Fund",
+      monthly: employerPf,
+      yearly: employerPf * 12,
+    },
+    {
+      kind: "subtotal",
+      label: "Sub Total (II)",
+      monthly: statutoryMonthly,
+      yearly: statutoryMonthly * 12,
+    },
+    {
+      kind: "total",
+      label: "TOTAL COMPENSATION (I − II)",
+      monthly: totalMonthly,
+      yearly: totalMonthly * 12,
+    },
+  );
+
+  return {
+    title,
+    annualCtc: annual,
+    split,
+    employeePf,
+    employerPf,
+    fixedMonthly,
+    statutoryMonthly,
+    totalMonthly,
+    rows,
+  };
+}
+
+/** Plain-text Compensation Sheet (fallback / merge preview). */
+export function formatCompensationSheetText(
+  annualCtc: number,
+  candidateName?: string,
+): string {
+  const sheet = buildCompensationSheet(annualCtc, candidateName);
+  if (!sheet) return "";
   const fmt = (n: number) =>
     n.toLocaleString("en-IN", { maximumFractionDigits: 0 });
-  const lines = [
-    "",
-    "Salary structure (monthly, Excel 60/50 split):",
-    `  Annual CTC: Rs.${fmt(rupee(annualCtc))}`,
-    `  Monthly CTC: Rs.${fmt(split.monthlyCtc)}`,
-    `  Basic (60%): Rs.${fmt(split.basic)}`,
-    `  HRA (50% of Basic): Rs.${fmt(split.hra)}`,
-    `  Special allowance: Rs.${fmt(Math.max(0, split.specialAllowance))}`,
-    `  Employer contribution: Rs.${fmt(split.employerContribution)}`,
-    `  Employee gross: Rs.${fmt(split.employeeGross)}`,
-  ];
+  const lines = ["", sheet.title, "Component\tMonthly\tYearly"];
+  for (const row of sheet.rows) {
+    if (row.kind === "section") {
+      lines.push(row.label);
+      continue;
+    }
+    lines.push(
+      `${row.label}\t${fmt(row.monthly ?? 0)}\t${fmt(row.yearly ?? 0)}`,
+    );
+  }
   return lines.join("\n");
+}
+
+/** Strip prior salary / compensation appendix so PDF can re-draw the table. */
+export function stripCompensationAppendix(body: string): string {
+  return (body || "")
+    .replace(/\n*Salary structure \(monthly[\s\S]*$/i, "")
+    .replace(/\n*Compensation Sheet[^\n]*[\s\S]*$/i, "")
+    .replace(new RegExp(COMPENSATION_SHEET_TOKEN.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), "")
+    .trimEnd();
 }

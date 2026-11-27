@@ -1,9 +1,17 @@
 /**
  * Stamp offer body text onto a single-page PDF letterhead.
  * Extra pages are auto-created by copying the letterhead page.
+ * Optional Compensation Sheet table is drawn after the body.
  */
 
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+
+import {
+  buildCompensationSheet,
+  stripCompensationAppendix,
+  type CompensationSheet,
+  type CompensationSheetRow,
+} from "@/lib/salary-structure-excel";
 
 export type LetterheadMargins = {
   /** Content starts below header (pt from top of page) */
@@ -48,8 +56,7 @@ function stripOfferLetterHeading(text: string): string {
 
 function wrapLines(
   text: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  font: { widthOfTextAtSize: (t: string, size: number) => number },
+  font: PDFFont,
   fontSize: number,
   maxWidth: number,
 ): string[] {
@@ -76,6 +83,186 @@ function wrapLines(
   return lines;
 }
 
+function fmtInr(n: number): string {
+  return Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+}
+
+const C_HEADER = rgb(15 / 255, 61 / 255, 110 / 255);
+const C_SECTION = rgb(84 / 255, 141 / 255, 212 / 255);
+const C_ALT = rgb(220 / 255, 230 / 255, 242 / 255);
+const C_WHITE = rgb(1, 1, 1);
+const C_BLACK = rgb(0.08, 0.08, 0.08);
+const C_GRID = rgb(0.2, 0.3, 0.45);
+
+async function drawCompensationOnPages(
+  out: PDFDocument,
+  letterheadDoc: PDFDocument,
+  sheet: CompensationSheet,
+  margins: LetterheadMargins,
+  startPageIndex: number,
+  startYFromTop: number,
+  fonts: { regular: PDFFont; bold: PDFFont },
+): Promise<void> {
+  const srcPage = letterheadDoc.getPage(0);
+  const { width, height } = srcPage.getSize();
+  const contentBottom = margins.bottom;
+  const tableLeft = margins.left;
+  const tableW = Math.max(40, width - margins.left - margins.right);
+  const colAmt = 72;
+  const colLabel = tableW - colAmt * 2;
+  const x1 = tableLeft + colLabel;
+  const x2 = tableLeft + colLabel + colAmt;
+  const rowH = 16;
+  const titleH = 20;
+
+  let page = out.getPage(startPageIndex);
+  // pdf-lib y is from bottom
+  let yTop = height - startYFromTop;
+
+  const newPage = async () => {
+    const [copied] = await out.copyPages(letterheadDoc, [0]);
+    out.addPage(copied);
+    page = out.getPage(out.getPageCount() - 1);
+    yTop = height - margins.top;
+  };
+
+  const ensure = async (need: number) => {
+    if (yTop - need >= contentBottom) return;
+    await newPage();
+  };
+
+  const drawRowBg = (
+    p: PDFPage,
+    yBottom: number,
+    h: number,
+    color: ReturnType<typeof rgb>,
+  ) => {
+    p.drawRectangle({
+      x: tableLeft,
+      y: yBottom,
+      width: tableW,
+      height: h,
+      color,
+      borderColor: C_GRID,
+      borderWidth: 0.6,
+    });
+    p.drawLine({
+      start: { x: x1, y: yBottom },
+      end: { x: x1, y: yBottom + h },
+      thickness: 0.6,
+      color: C_GRID,
+    });
+    p.drawLine({
+      start: { x: x2, y: yBottom },
+      end: { x: x2, y: yBottom + h },
+      thickness: 0.6,
+      color: C_GRID,
+    });
+  };
+
+  const paintTextRow = (
+    p: PDFPage,
+    row: CompensationSheetRow,
+    yBottom: number,
+    h: number,
+    bg: ReturnType<typeof rgb>,
+    bold: boolean,
+  ) => {
+    drawRowBg(p, yBottom, h, bg);
+    const font = bold ? fonts.bold : fonts.regular;
+    const size = bold ? 9 : 8.5;
+    const textY = yBottom + 5;
+    p.drawText(pdfSafeText(row.label), {
+      x: tableLeft + 4,
+      y: textY,
+      size,
+      font,
+      color: C_BLACK,
+      maxWidth: colLabel - 8,
+    });
+    if (row.kind !== "section") {
+      const m = fmtInr(row.monthly ?? 0);
+      const yr = fmtInr(row.yearly ?? 0);
+      p.drawText(m, {
+        x: x1 + colAmt - 4 - font.widthOfTextAtSize(m, size),
+        y: textY,
+        size,
+        font,
+        color: C_BLACK,
+      });
+      p.drawText(yr, {
+        x: x2 + colAmt - 4 - font.widthOfTextAtSize(yr, size),
+        y: textY,
+        size,
+        font,
+        color: C_BLACK,
+      });
+    }
+  };
+
+  await ensure(titleH + rowH * 2);
+  // Title
+  {
+    const yBottom = yTop - titleH;
+    page.drawRectangle({
+      x: tableLeft,
+      y: yBottom,
+      width: tableW,
+      height: titleH,
+      color: C_HEADER,
+      borderColor: C_GRID,
+      borderWidth: 0.6,
+    });
+    page.drawText(pdfSafeText(sheet.title), {
+      x: tableLeft + 6,
+      y: yBottom + 6,
+      size: 10,
+      font: fonts.bold,
+      color: C_WHITE,
+      maxWidth: tableW - 12,
+    });
+    yTop = yBottom;
+  }
+
+  // Column headers
+  await ensure(rowH);
+  {
+    const yBottom = yTop - rowH;
+    drawRowBg(page, yBottom, rowH, C_SECTION);
+    page.drawText("Monthly", {
+      x: x1 + (colAmt - fonts.bold.widthOfTextAtSize("Monthly", 9)) / 2,
+      y: yBottom + 5,
+      size: 9,
+      font: fonts.bold,
+      color: C_BLACK,
+    });
+    page.drawText("Yearly", {
+      x: x2 + (colAmt - fonts.bold.widthOfTextAtSize("Yearly", 9)) / 2,
+      y: yBottom + 5,
+      size: 9,
+      font: fonts.bold,
+      color: C_BLACK,
+    });
+    yTop = yBottom;
+  }
+
+  let alt = false;
+  for (const row of sheet.rows) {
+    await ensure(rowH);
+    const yBottom = yTop - rowH;
+    if (row.kind === "section") {
+      paintTextRow(page, row, yBottom, rowH, C_SECTION, true);
+      alt = false;
+    } else if (row.kind === "subtotal" || row.kind === "total") {
+      paintTextRow(page, row, yBottom, rowH, C_SECTION, true);
+    } else {
+      paintTextRow(page, row, yBottom, rowH, alt ? C_ALT : C_WHITE, false);
+      alt = !alt;
+    }
+    yTop = yBottom;
+  }
+}
+
 /**
  * Build a multi-page PDF: each page is the uploaded letterhead with body text
  * flowing through the content area. Returns a clean data:application/pdf;base64,… URL.
@@ -86,6 +273,9 @@ export async function composeOfferLetterPdf(opts: {
   margins?: Partial<LetterheadMargins>;
   fontSize?: number;
   lineHeight?: number;
+  /** When set, draws Compensation Sheet table after body. */
+  annualCtc?: number;
+  candidateName?: string;
 }): Promise<string> {
   const margins = { ...DEFAULT_MARGINS, ...opts.margins };
   const fontSize = opts.fontSize ?? 10.5;
@@ -101,6 +291,7 @@ export async function composeOfferLetterPdf(opts: {
 
   const out = await PDFDocument.create();
   const font = await out.embedFont(StandardFonts.Helvetica);
+  const fontBold = await out.embedFont(StandardFonts.HelveticaBold);
   const srcPage = letterheadDoc.getPage(0);
   const { width, height } = srcPage.getSize();
 
@@ -112,12 +303,10 @@ export async function composeOfferLetterPdf(opts: {
     Math.floor((contentTop - contentBottom) / lineHeight),
   );
 
-  const lines = wrapLines(
-    pdfSafeText(stripOfferLetterHeading(opts.body || "")),
-    font,
-    fontSize,
-    maxWidth,
+  const cleanedBody = stripCompensationAppendix(
+    stripOfferLetterHeading(opts.body || ""),
   );
+  const lines = wrapLines(pdfSafeText(cleanedBody), font, fontSize, maxWidth);
   const pageChunks: string[][] = [];
   for (let i = 0; i < lines.length; i += linesPerPage) {
     pageChunks.push(lines.slice(i, i + linesPerPage));
@@ -142,6 +331,25 @@ export async function composeOfferLetterPdf(opts: {
       y -= lineHeight;
       if (y < contentBottom) break;
     }
+  }
+
+  const sheet = buildCompensationSheet(
+    Number(opts.annualCtc) || 0,
+    opts.candidateName,
+  );
+  if (sheet) {
+    const lastIdx = out.getPageCount() - 1;
+    const usedLines = pageChunks[pageChunks.length - 1]?.length ?? 0;
+    const startYFromTop = margins.top + usedLines * lineHeight + 18;
+    await drawCompensationOnPages(
+      out,
+      letterheadDoc,
+      sheet,
+      margins,
+      lastIdx,
+      startYFromTop,
+      { regular: font, bold: fontBold },
+    );
   }
 
   const pdfBytes = await out.save();

@@ -10,10 +10,7 @@ import {
   SetupInput,
 } from "@/components/hr/setup/setup-drawer";
 import { Button } from "@/components/ui/button";
-import {
-  computeSplitFromAnnualCtc,
-  salaryBreakdownLines,
-} from "@/lib/salary-structure-excel";
+import { buildCompensationSheet } from "@/lib/salary-structure-excel";
 import {
   formatInrGrouping,
   parseInrInput,
@@ -54,15 +51,11 @@ export function NegotiationSalaryDrawer({
   }, [open, application, job]);
 
   const amount = parseInrInput(display);
-  const split = useMemo(
-    () => (amount > 0 ? computeSplitFromAnnualCtc(amount) : null),
-    [amount],
+  const sheet = useMemo(
+    () => (amount > 0 ? buildCompensationSheet(amount, candidate?.fullName) : null),
+    [amount, candidate?.fullName],
   );
-  const breakdown = useMemo(
-    () => (split && split.valid ? salaryBreakdownLines(split) : []),
-    [split],
-  );
-  const canSave = Boolean(application?.id) && amount > 0 && !saving && (split?.valid ?? false);
+  const canSave = Boolean(application?.id) && amount > 0 && !saving && Boolean(sheet);
 
   async function handleSave() {
     if (!application?.id) return;
@@ -70,7 +63,7 @@ export function NegotiationSalaryDrawer({
       setError("Enter the salary / CTC discussed with the candidate.");
       return;
     }
-    if (split && !split.valid) {
+    if (!sheet) {
       setError("Special allowance would be negative — check the annual CTC.");
       return;
     }
@@ -128,7 +121,7 @@ export function NegotiationSalaryDrawer({
               ? `Job band max ₹${formatInrGrouping(job.salaryMax)}${
                   job.salaryMin ? ` · min ₹${formatInrGrouping(job.salaryMin)}` : ""
                 }`
-              : "Used on the offer letter and auto-assigned to payroll on onboarding complete"
+              : "Used on the offer letter Compensation Sheet and auto-assigned to payroll on onboarding complete"
           }
         >
           <SetupInput
@@ -143,39 +136,69 @@ export function NegotiationSalaryDrawer({
           />
         </SetupField>
 
-        {amount > 0 && split ? (
-          <div className="space-y-2 rounded-lg border border-border bg-muted/30 px-3 py-3">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Monthly structure preview (Excel 60/50)
-            </p>
-            {!split.valid ? (
-              <p className="text-xs text-destructive">
+        {amount > 0 ? (
+          <div className="overflow-hidden rounded-lg border border-border">
+            {!sheet ? (
+              <p className="px-3 py-3 text-xs text-destructive">
                 Special allowance would be negative for this CTC.
               </p>
             ) : (
-              <ul className="space-y-1.5 text-sm">
-                {breakdown.map((row) => (
-                  <li
-                    key={row.label}
-                    className="flex items-baseline justify-between gap-3 border-b border-border/60 py-1 last:border-0"
-                  >
-                    <span className="text-muted-foreground">
-                      {row.label}
-                      {row.hint ? (
-                        <span className="ml-1 text-[10px] opacity-80">({row.hint})</span>
-                      ) : null}
-                    </span>
-                    <span className="font-mono tabular-nums text-foreground">
-                      ₹{formatInrGrouping(row.amount)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <div className="bg-[#0f3d6e] px-3 py-2 text-sm font-semibold text-white">
+                  {sheet.title}
+                </div>
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="bg-[#548dd4] text-[10px] uppercase tracking-wide text-slate-900">
+                      <th className="px-2 py-1.5 font-semibold" />
+                      <th className="px-2 py-1.5 text-right font-semibold">Monthly</th>
+                      <th className="px-2 py-1.5 text-right font-semibold">Yearly</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sheet.rows.map((row, idx) => {
+                      if (row.kind === "section") {
+                        return (
+                          <tr key={`s-${row.label}-${idx}`} className="bg-[#548dd4]">
+                            <td
+                              colSpan={3}
+                              className="px-2 py-1.5 text-[11px] font-semibold text-slate-900"
+                            >
+                              {row.label}
+                            </td>
+                          </tr>
+                        );
+                      }
+                      const strong = row.kind === "subtotal" || row.kind === "total";
+                      return (
+                        <tr
+                          key={`r-${row.label}-${idx}`}
+                          className={
+                            strong
+                              ? "bg-[#548dd4] font-semibold"
+                              : idx % 2 === 0
+                                ? "bg-white"
+                                : "bg-[#dce6f2]"
+                          }
+                        >
+                          <td className="px-2 py-1.5 text-foreground">{row.label}</td>
+                          <td className="px-2 py-1.5 text-right font-mono tabular-nums">
+                            {formatInrGrouping(row.monthly ?? 0)}
+                          </td>
+                          <td className="px-2 py-1.5 text-right font-mono tabular-nums">
+                            {formatInrGrouping(row.yearly ?? 0)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                <p className="border-t border-border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+                  Same table is stamped on the offer letter PDF. On onboarding complete it becomes
+                  the employee salary structure in Payroll.
+                </p>
+              </>
             )}
-            <p className="pt-1 text-[11px] text-muted-foreground">
-              Offer letter PDF will include this breakdown. On onboarding complete it becomes the
-              employee salary structure in Payroll.
-            </p>
           </div>
         ) : null}
 
