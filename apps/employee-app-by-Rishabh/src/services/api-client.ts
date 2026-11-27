@@ -1,5 +1,6 @@
 import { clearTokens, getAccessToken, setTokens } from "@/lib/auth";
 import { clearFaceVerified } from "@/lib/face-auth";
+import { essUnreachableMessage, warmEssApi } from "@/lib/api-warmup";
 import { fetchWithRetry } from "@/lib/fetch-retry";
 import { mockApi } from "@/data/mock-ess";
 import type {
@@ -60,10 +61,8 @@ export async function apiClient<T>(
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch {
-    throw new ApiClientError(
-      "Cannot reach the API. Check that the ERP server is running and EXPO_PUBLIC_API_URL is correct.",
-      0,
-    );
+    await warmEssApi();
+    throw new ApiClientError(essUnreachableMessage(), 0);
   }
 
   const text = await response.text();
@@ -106,10 +105,8 @@ export async function apiClientBytes(path: string): Promise<Uint8Array> {
       },
     });
   } catch {
-    throw new ApiClientError(
-      "Cannot reach the API. Check that the ERP server is running.",
-      0,
-    );
+    await warmEssApi();
+    throw new ApiClientError(essUnreachableMessage(), 0);
   }
   if (!response.ok) {
     throw new ApiClientError(

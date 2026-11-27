@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -21,7 +21,8 @@ import { StoryComposer } from "@/components/feed/StoryComposer";
 import { StoryViewer } from "@/components/feed/StoryViewer";
 import { useFeedPullRefresh } from "@/components/feed/useFeedPullRefresh";
 import { IconFeed } from "@/components/icons";
-import { EmptyState, Screen } from "@/components/ui";
+import { Button, EmptyState, Screen } from "@/components/ui";
+import { getBlockedAuthorIds } from "@/lib/feed-safety";
 import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
 import { colors } from "@/theme/colors";
@@ -31,6 +32,7 @@ import type { EssFeedPost, EssStoryTrayAuthor } from "@/types/api";
 export default function FeedScreen() {
   const insets = useSafeAreaInsets();
   const [posts, setPosts] = useState<EssFeedPost[]>([]);
+  const [blockedAuthors, setBlockedAuthors] = useState<Set<string>>(new Set());
   const [storyAuthors, setStoryAuthors] = useState<EssStoryTrayAuthor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +44,11 @@ export default function FeedScreen() {
   );
   const [unreadCount, setUnreadCount] = useState(0);
   const listBottomPad = TAB_CLEARANCE + Math.max(0, insets.bottom);
+
+  const loadBlocked = useCallback(async () => {
+    const ids = await getBlockedAuthorIds();
+    setBlockedAuthors(new Set(ids));
+  }, []);
 
   const loadStories = useCallback(async () => {
     try {
@@ -59,6 +66,7 @@ export default function FeedScreen() {
       const [feedRes] = await Promise.all([
         essService.feedPosts({ limit: 30 }),
         loadStories(),
+        loadBlocked(),
       ]);
       setPosts(feedRes.data ?? []);
     } catch (err) {
@@ -70,16 +78,37 @@ export default function FeedScreen() {
     } finally {
       setLoading(false);
     }
-  }, [loadStories]);
+  }, [loadStories, loadBlocked]);
 
   const refreshPosts = useCallback(async () => {
     setError(null);
     const [feedRes] = await Promise.all([
       essService.feedPosts({ limit: 30 }),
       loadStories(),
+      loadBlocked(),
     ]);
     setPosts(feedRes.data ?? []);
-  }, [loadStories]);
+  }, [loadStories, loadBlocked]);
+
+  const visiblePosts = useMemo(
+    () =>
+      posts.filter((p) => !blockedAuthors.has(p.author_employee_id)),
+    [posts, blockedAuthors],
+  );
+
+  const visibleStoryAuthors = useMemo(
+    () =>
+      storyAuthors.filter((a) => !blockedAuthors.has(a.author_employee_id)),
+    [storyAuthors, blockedAuthors],
+  );
+
+  function onAuthorBlocked(authorEmployeeId: string) {
+    setBlockedAuthors((prev) => {
+      const next = new Set(prev);
+      next.add(authorEmployeeId);
+      return next;
+    });
+  }
 
   const pull = useFeedPullRefresh({ onRefresh: refreshPosts });
 
@@ -209,7 +238,7 @@ export default function FeedScreen() {
 
           <FlatList
             style={styles.list}
-            data={posts}
+            data={visiblePosts}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
             showsHorizontalScrollIndicator={false}
@@ -238,14 +267,14 @@ export default function FeedScreen() {
               )
             }
             contentContainerStyle={
-              posts.length
+              visiblePosts.length
                 ? [styles.listContent, { paddingBottom: listBottomPad }]
                 : [styles.listEmpty, { paddingBottom: listBottomPad }]
             }
             ListHeaderComponent={
               <View>
                 <StoriesTray
-                  authors={storyAuthors}
+                  authors={visibleStoryAuthors}
                   onOpenAuthor={setViewerAuthor}
                   onAddStory={() => setStoryComposerOpen(true)}
                 />
@@ -253,17 +282,26 @@ export default function FeedScreen() {
               </View>
             }
             ListEmptyComponent={
-              <EmptyState
-                title="No posts yet"
-                description="Share a photo or short video with your workplace. Up to 10 photos (1:1, 3:4, 4:3) or one 60s video."
-                icon={<IconFeed size={28} color={colors.primary} />}
-              />
+              <View style={styles.emptyBody}>
+                <EmptyState
+                  title="Start the conversation"
+                  description="Share a photo or short video with your team. Up to 10 photos or one 60s video."
+                  icon={<IconFeed size={28} color={colors.primary} />}
+                  action={
+                    <Button
+                      title="Create post"
+                      onPress={() => setComposerOpen(true)}
+                    />
+                  }
+                />
+              </View>
             }
             renderItem={({ item }) => (
               <FeedPostCard
                 post={item}
                 onLike={onLike}
                 onOpenComments={setCommentPost}
+                onAuthorBlocked={onAuthorBlocked}
               />
             )}
           />
@@ -289,12 +327,12 @@ export default function FeedScreen() {
         }}
         onFinishedAuthor={() => {
           if (!viewerAuthor) return;
-          const idx = storyAuthors.findIndex(
+          const idx = visibleStoryAuthors.findIndex(
             (a) => a.author_employee_id === viewerAuthor.author_employee_id,
           );
           const next =
-            idx >= 0 && idx + 1 < storyAuthors.length
-              ? storyAuthors[idx + 1]
+            idx >= 0 && idx + 1 < visibleStoryAuthors.length
+              ? visibleStoryAuthors[idx + 1]
               : null;
           if (next) setViewerAuthor(next);
           else {
@@ -324,7 +362,15 @@ const styles = StyleSheet.create({
   listShell: { flex: 1 },
   list: { flex: 1 },
   listContent: { flexGrow: 1 },
-  listEmpty: { flexGrow: 1, justifyContent: "center", paddingHorizontal: 24 },
+  // Keep stories pinned under the header — do not vertically center the
+  // whole FlatList content (that was pushing the tray mid-screen).
+  listEmpty: { flexGrow: 1, paddingHorizontal: 0 },
+  emptyBody: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    minHeight: 220,
+  },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   webPull: {
     alignItems: "center",

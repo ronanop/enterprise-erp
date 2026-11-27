@@ -647,6 +647,35 @@ class EssService:
         if getattr(current, "status", None) == "locked":
             raise ConflictException("Today's attendance is locked")
         if getattr(current, "check_out_at", None) is not None:
+            from core.config import settings as app_settings
+
+            # Store-review staging / App Review demo accounts: let reviewers
+            # re-open a session after checkout so Check In → Check Out can be
+            # demonstrated more than once per day.
+            review_emails = {
+                "review.employee@iconnectplus.in",
+                "review.manager@iconnectplus.in",
+            }
+            email = (getattr(emp, "email", None) or "").strip().lower()
+            allow_repunch = (
+                app_settings.ess_store_review_mode or email in review_emails
+            )
+            if allow_repunch:
+                reopened = self._attendance.update(
+                    ctx,
+                    current.id,
+                    check_in_at=now_utc,
+                    check_out_at=None,
+                    total_hours=None,
+                    source=punch_source,
+                    check_in_selfie_hash=selfie_hash,
+                    status="recorded",
+                    **check_in_fields,
+                    **geo_fields,
+                )
+                return EssPunchResponse(
+                    action="check_in", attendance=_attendance_response(reopened)
+                )
             raise ConflictException("Already checked out for today")
 
         check_in = getattr(current, "check_in_at", None)

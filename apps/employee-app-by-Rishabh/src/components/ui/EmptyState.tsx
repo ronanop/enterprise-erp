@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { colors } from "@/theme/colors";
+import { colors, radii } from "@/theme/colors";
+import { elevation } from "@/theme/elevation";
 import { RADIUS_CARD, RADIUS_INPUT } from "@/theme/tokens";
 
 type Props = {
@@ -9,21 +10,24 @@ type Props = {
   message?: string;
   description?: string;
   icon?: ReactNode;
+  action?: ReactNode;
 };
 
-/** Mirrors the PWA EmptyState: dashed card, optional icon tile, title + copy. */
+/** Composed empty state: soft surface, icon well, title, copy, optional CTA. */
 export function EmptyState({
   title = "Nothing here yet",
   message,
   description,
   icon,
+  action,
 }: Props) {
   const copy = description ?? message;
   return (
     <View style={styles.box}>
-      {icon ? <View style={styles.iconTile}>{icon}</View> : null}
+      {icon ? <View style={styles.iconWell}>{icon}</View> : null}
       <Text style={styles.title}>{title}</Text>
       {copy ? <Text style={styles.message}>{copy}</Text> : null}
+      {action ? <View style={styles.action}>{action}</View> : null}
     </View>
   );
 }
@@ -31,31 +35,44 @@ export function EmptyState({
 const styles = StyleSheet.create({
   box: {
     borderRadius: RADIUS_CARD,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: "rgba(195,198,215,0.6)",
-    backgroundColor: "rgba(255,255,255,0.6)",
-    paddingHorizontal: 16,
-    paddingVertical: 36,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(200,206,220,0.55)",
+    backgroundColor: colors.surfaceLowest,
+    paddingHorizontal: 24,
+    paddingVertical: 40,
     alignItems: "center",
+    borderCurve: "continuous",
+    ...elevation("sm"),
   },
-  iconTile: {
-    width: 48,
-    height: 48,
-    borderRadius: RADIUS_CARD,
-    backgroundColor: colors.surfaceHigh,
+  iconWell: {
+    width: 64,
+    height: 64,
+    borderRadius: radii.lg,
+    backgroundColor: colors.primaryMuted,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
+    marginBottom: 16,
+    borderCurve: "continuous",
   },
-  title: { fontSize: 15, fontWeight: "600", color: colors.onSurface },
+  title: {
+    fontSize: 17,
+    fontWeight: "700",
+    letterSpacing: -0.3,
+    color: colors.onSurface,
+    textAlign: "center",
+  },
   message: {
-    marginTop: 4,
-    maxWidth: 256,
+    marginTop: 8,
+    maxWidth: 280,
     fontSize: 14,
-    lineHeight: 20,
+    lineHeight: 21,
     textAlign: "center",
     color: colors.onSurfaceVariant,
+  },
+  action: {
+    marginTop: 20,
+    width: "100%",
+    maxWidth: 240,
   },
 });
 
@@ -70,11 +87,12 @@ export function ErrorBox({ children }: { children: string }) {
 const errorStyles = StyleSheet.create({
   box: {
     borderRadius: RADIUS_INPUT,
-    borderWidth: 1,
-    borderColor: "#fecaca",
-    backgroundColor: "#fef2f2",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#FECACA",
+    backgroundColor: "#FEF2F2",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderCurve: "continuous",
   },
-  text: { color: "#991b1b", fontSize: 14, fontWeight: "500", lineHeight: 20 },
+  text: { color: "#991B1B", fontSize: 14, fontWeight: "500", lineHeight: 20 },
 });

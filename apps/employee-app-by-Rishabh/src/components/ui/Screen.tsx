@@ -61,7 +61,7 @@ export function Screen({
     entrance.setValue(0);
     Animated.timing(entrance, {
       toValue: 1,
-      duration: 220,
+      duration: 240,
       useNativeDriver: true,
     }).start();
   }, [animateEntrance, entrance]);

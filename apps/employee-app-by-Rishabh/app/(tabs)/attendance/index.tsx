@@ -151,8 +151,20 @@ export default function AttendanceScreen() {
     }
   }
 
+  const reviewRepunchAllowed =
+    done &&
+    (me?.email || "").toLowerCase().startsWith("review.") &&
+    (me?.email || "").toLowerCase().endsWith("@iconnectplus.in");
+
   function openPunchSheet(kind: "in" | "out") {
-    if ((kind === "in" && punchedIn) || (kind === "out" && !isOut)) return;
+    // App Review demo accounts may re-open a session after checkout
+    // (API allows re-punch for review.*@iconnectplus.in after deploy).
+    if (
+      (kind === "in" && punchedIn && !reviewRepunchAllowed) ||
+      (kind === "out" && !isOut)
+    ) {
+      return;
+    }
     setSelfie(null);
     setPunchSheet(kind);
   }
@@ -285,10 +297,10 @@ export default function AttendanceScreen() {
         </View>
         <View style={styles.punchButtons}>
           <Button
-            title="Check In"
+            title={reviewRepunchAllowed ? "Check In again" : "Check In"}
             icon={<IconLogin size={18} color="#ffffff" />}
             loading={loading && !isOut}
-            disabled={punchedIn}
+            disabled={punchedIn && !reviewRepunchAllowed}
             onPress={() => openPunchSheet("in")}
             style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 8 }}
           />
@@ -352,7 +364,7 @@ export default function AttendanceScreen() {
       </Modal>
 
       <View style={styles.statGrid}>
-        <Metric icon={<IconClock size={20} color={colors.secondary} />} label="Overtime" value={overtimeH > 0 ? `${overtimeH.toFixed(1)}h` : "0h"} track="#eaddff" accent={colors.secondary} pct={overtimeH * 20} hint={overtimeH > 0 ? `+${Math.round((overtimeH / DAILY_GOAL_H) * 100)}%` : undefined} />
+        <Metric icon={<IconClock size={20} color={colors.primary} />} label="Overtime" value={overtimeH > 0 ? `${overtimeH.toFixed(1)}h` : "0h"} track={colors.primaryFixed} accent={colors.primaryContainer} pct={overtimeH * 20} hint={overtimeH > 0 ? `+${Math.round((overtimeH / DAILY_GOAL_H) * 100)}%` : undefined} />
         <Metric icon={<IconAlert size={20} color={colors.error} />} label="Late Days" value={String(lateDays)} track={colors.surfaceHighest} accent={colors.primaryContainer} pct={lateDays === 0 ? 100 : 40} hint={lateDays === 0 ? "Perfect" : "This month"} />
       </View>
 
@@ -379,7 +391,7 @@ export default function AttendanceScreen() {
               state === "late"
                 ? colors.error
                 : state === "work_from_home"
-                  ? colors.secondary
+                  ? colors.primary
                   : state === "absent"
                     ? colors.outlineVariant
                     : row?.check_in_at
@@ -419,7 +431,7 @@ export default function AttendanceScreen() {
             <Text style={styles.legendText}>Present</Text>
           </View>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: colors.secondary }]} />
+            <View style={[styles.legendDot, { backgroundColor: colors.primary }]} />
             <Text style={styles.legendText}>WFH</Text>
           </View>
         </View>
@@ -487,7 +499,7 @@ function Metric({
     <Card style={styles.metric}>
       <View style={styles.metricTop}>
         {icon}
-        {hint ? <Text style={[styles.metricHint, { color: hint === "Perfect" ? colors.success : colors.secondary }]}>{hint}</Text> : null}
+        {hint ? <Text style={[styles.metricHint, { color: hint === "Perfect" ? colors.success : colors.primary }]}>{hint}</Text> : null}
       </View>
       <Text style={styles.metricLabel}>{label}</Text>
       <Text style={styles.metricValue}>{value}</Text>
@@ -525,7 +537,7 @@ const styles = StyleSheet.create({
   content: { paddingTop: 20, paddingBottom: 32, gap: 24 },
   headerLinks: { flexDirection: "row", justifyContent: "flex-end", gap: 12 },
   headerLink: { fontSize: 14, fontWeight: "600", color: colors.primary },
-  hero: { alignItems: "center", gap: 16, padding: 24 },
+  hero: { alignItems: "center", gap: 18, paddingVertical: 26 },
   ring: {
     width: RING_SIZE,
     height: RING_SIZE,
@@ -534,10 +546,10 @@ const styles = StyleSheet.create({
   },
   ringSvg: { position: "absolute" },
   ringCopy: { alignItems: "center" },
-  ringValue: { fontSize: 30, fontWeight: "700", color: colors.onSurface, fontVariant: ["tabular-nums"] },
-  ringLabel: { fontSize: 10, fontWeight: "700", letterSpacing: 0.8, textTransform: "uppercase", color: colors.onSurfaceVariant },
+  ringValue: { fontSize: 32, fontWeight: "700", letterSpacing: -0.6, color: colors.onSurface, fontVariant: ["tabular-nums"] },
+  ringLabel: { fontSize: 10, fontWeight: "700", letterSpacing: 0.9, textTransform: "uppercase", color: colors.onSurfaceVariant },
   greetingBlock: { alignItems: "center", gap: 8 },
-  greeting: { fontSize: 20, fontWeight: "700", color: colors.onSurface },
+  greeting: { fontSize: 22, fontWeight: "700", letterSpacing: -0.4, color: colors.onSurface },
   locationRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   meta: { fontSize: 13, color: colors.onSurfaceVariant },
   hint: { fontSize: 12, color: colors.onSurfaceVariant },
@@ -551,24 +563,25 @@ const styles = StyleSheet.create({
   },
   punchSheet: {
     gap: 16,
-    borderRadius: 20,
-    backgroundColor: colors.surface,
-    padding: 20,
+    borderRadius: 24,
+    backgroundColor: colors.surfaceLowest,
+    padding: 22,
+    borderCurve: "continuous",
   },
-  punchTitle: { fontSize: 20, fontWeight: "700", color: colors.onSurface },
-  punchCopy: { fontSize: 14, lineHeight: 20, color: colors.onSurfaceVariant },
+  punchTitle: { fontSize: 22, fontWeight: "700", letterSpacing: -0.4, color: colors.onSurface },
+  punchCopy: { fontSize: 14, lineHeight: 21, color: colors.onSurfaceVariant },
   punchActions: { flexDirection: "row", gap: 12 },
   statGrid: { flexDirection: "row", gap: 12 },
   metric: { flex: 1, gap: 4 },
   metricTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   metricLabel: { marginTop: 4, fontSize: 14, color: colors.onSurfaceVariant },
-  metricValue: { fontSize: 24, fontWeight: "700", color: colors.onSurface },
+  metricValue: { fontSize: 24, fontWeight: "700", letterSpacing: -0.4, color: colors.onSurface, fontVariant: ["tabular-nums"] },
   metricHint: { borderRadius: RADIUS_FULL, backgroundColor: "#d1fae5", paddingHorizontal: 8, paddingVertical: 2, fontSize: 10, fontWeight: "700", overflow: "hidden" },
   metricTrack: { height: 6, overflow: "hidden", borderRadius: RADIUS_FULL, marginTop: 8 },
   metricFill: { height: "100%", borderRadius: RADIUS_FULL },
   calendarCard: { padding: 20, gap: 8 },
   calendarHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
-  calendarTitle: { fontSize: 15, fontWeight: "600", color: colors.onSurface },
+  calendarTitle: { fontSize: 15, fontWeight: "700", letterSpacing: -0.2, color: colors.onSurface },
   calendarHint: { fontSize: 12, color: colors.onSurfaceVariant },
   weekdays: { flexDirection: "row", marginBottom: 4 },
   weekday: { width: "14.28%", textAlign: "center", fontSize: 10, fontWeight: "700", textTransform: "uppercase", color: colors.onSurfaceVariant },
@@ -584,27 +597,27 @@ const styles = StyleSheet.create({
   legendDot: { width: 8, height: 8, borderRadius: RADIUS_FULL },
   legendText: { fontSize: 12, color: colors.onSurfaceVariant },
   recentCard: { gap: 12 },
-  sectionHeading: { fontSize: 18, fontWeight: "600", color: colors.onSurface },
-  activity: { flexDirection: "row", alignItems: "center", gap: 12, borderTopWidth: 1, borderTopColor: "rgba(195,198,215,0.2)", paddingTop: 12 },
-  activityIcon: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: RADIUS_FULL, backgroundColor: colors.surfaceLow },
+  sectionHeading: { fontSize: 17, fontWeight: "700", letterSpacing: -0.2, color: colors.onSurface },
+  activity: { flexDirection: "row", alignItems: "center", gap: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "rgba(200,206,220,0.45)", paddingTop: 12 },
+  activityIcon: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: RADIUS_FULL, backgroundColor: colors.primaryMuted },
   activityCopy: { flex: 1 },
   activityTitle: { fontSize: 14, fontWeight: "600", color: colors.onSurface },
   activityMeta: { marginTop: 2, fontSize: 12, color: colors.onSurfaceVariant },
   activityVerified: { fontSize: 12, fontWeight: "600", color: colors.success },
   reportLink: { paddingTop: 4, textAlign: "center", fontSize: 14, fontWeight: "600", color: colors.primary },
   requests: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  requestPill: { width: "48%", borderRadius: 12, backgroundColor: colors.surfaceLow, paddingHorizontal: 12, paddingVertical: 12 },
+  requestPill: { width: "48%", borderRadius: 14, backgroundColor: colors.surfaceLowest, borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(200,206,220,0.55)", paddingHorizontal: 12, paddingVertical: 14, borderCurve: "continuous" },
   requestText: { fontSize: 13, fontWeight: "600", color: colors.primary },
   successScreen: { justifyContent: "center" },
   successContent: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 24, gap: 12 },
   successCheck: { width: 128, height: 128, marginBottom: 12, alignItems: "center", justifyContent: "center", borderRadius: RADIUS_FULL, backgroundColor: colors.success },
-  successTitle: { fontSize: 28, fontWeight: "700", color: colors.onSurface, textAlign: "center" },
+  successTitle: { fontSize: 28, fontWeight: "700", letterSpacing: -0.5, color: colors.onSurface, textAlign: "center" },
   successCopy: { maxWidth: 280, textAlign: "center", fontSize: 16, lineHeight: 22, color: colors.onSurfaceVariant },
   fact: { width: "100%", flexDirection: "row", alignItems: "center", gap: 16 },
-  factIcon: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: 12, backgroundColor: colors.surfaceHigh },
+  factIcon: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: colors.primaryMuted, borderCurve: "continuous" },
   factLabel: { fontSize: 12, fontWeight: "600", color: colors.onSurfaceVariant },
   factValue: { marginTop: 2, fontSize: 18, fontWeight: "600", color: colors.onSurface },
-  activeSession: { width: "100%", backgroundColor: "rgba(37,99,235,0.05)", borderColor: "rgba(0,74,198,0.1)" },
+  activeSession: { width: "100%", backgroundColor: colors.primaryMuted, borderColor: "rgba(11,87,208,0.12)" },
   activeSessionRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   activeDotCopy: { flexDirection: "row", alignItems: "center", gap: 8 },
   activeDot: { width: 8, height: 8, borderRadius: RADIUS_FULL, backgroundColor: colors.success },

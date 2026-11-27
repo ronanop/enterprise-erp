@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { NotificationBell } from "@/components/AppHeader";
 import { IconPlus } from "@/components/icons";
 import { colors } from "@/theme/colors";
@@ -11,7 +11,7 @@ type Props = {
   unreadCount?: number;
 };
 
-/** Feed top bar: create (+) · centered iConnect+ text · notifications. */
+/** Feed top bar: create (+) · centered iConnect+ · notifications. */
 export function FeedHeader({ onCreate, unreadCount = 0 }: Props) {
   return (
     <View style={styles.header}>
@@ -23,7 +23,9 @@ export function FeedHeader({ onCreate, unreadCount = 0 }: Props) {
           style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
           hitSlop={8}
         >
-          <IconPlus size={24} color={INK} />
+          <View style={styles.createWell}>
+            <IconPlus size={20} color={colors.primary} />
+          </View>
         </Pressable>
       </View>
 
@@ -50,9 +52,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: GUTTER,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(195,198,215,0.3)",
-    backgroundColor: colors.background,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(200,206,220,0.4)",
+    backgroundColor: colors.surfaceLowest,
+    ...Platform.select({
+      web: {
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        backgroundColor: "rgba(255,255,255,0.92)",
+      } as object,
+      default: {},
+    }),
   },
   side: {
     width: 48,
@@ -67,9 +77,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   brand: {
-    fontSize: 18,
-    fontWeight: "700",
-    letterSpacing: -0.3,
+    fontSize: 20,
+    fontWeight: "800",
+    letterSpacing: -0.5,
     color: INK,
   },
   iconBtn: {
@@ -78,6 +88,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 20,
+    ...Platform.select({
+      web: { cursor: "pointer" } as object,
+      default: {},
+    }),
   },
-  pressed: { opacity: 0.7 },
+  createWell: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.primaryMuted,
+  },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.96 }] },
 });

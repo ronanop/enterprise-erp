@@ -17,15 +17,14 @@ Scan the QR code with Expo Go (Android) or the Camera app (iOS).
 
 ## Environment
 
+Backend is fixed to **`https://ess-api.iconnectplus.in/api/v1`** (health: `/health`).
+
 | Variable | Purpose |
 |----------|---------|
-| `EXPO_PUBLIC_API_URL` | ERP API base used on the phone, e.g. `http://<PC LAN IP>:8000/api/v1` |
-| `EXPO_PUBLIC_API_URL_WEB` | ERP API base for browser preview on the dev PC |
-| `EXPO_PUBLIC_USE_MOCK` | `true` = in-memory demo API (`demo@company.com` / `demo123`) |
 | `EXPO_PUBLIC_APP_NAME` | Display name |
+| Legal URLs | Privacy / Terms / Data deletion / Support email |
 
-The Expo tunnel only carries the JS bundle. API calls still go to
-`EXPO_PUBLIC_API_URL`, so the phone must be able to reach that address.
+Do not point this app at localhost, Render, or other hosts.
 
 ## HRMS connectivity
 

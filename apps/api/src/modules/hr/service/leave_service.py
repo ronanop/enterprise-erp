@@ -757,6 +757,10 @@ class LeaveRequestService:
             start_date=start_date,
             end_date=end_date,
         )
+        if fields["days_count"] <= 0:
+            raise AppException(
+                "Selected dates have no working days. Choose weekdays to apply leave."
+            )
         # Leave cycle: calendar months only (past/current). Posted balance only - no early credit.
         assert_no_future_calendar_month_leave(start_date, end_date)
         balance = self._find_open_balance(

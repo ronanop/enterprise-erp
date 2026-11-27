@@ -41,11 +41,12 @@ export function TextField({ label, hint, style, accessibilityLabel, ...rest }: P
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: 6 },
+  wrap: { gap: 8 },
   label: {
     fontSize: 13,
     fontWeight: "600",
+    letterSpacing: -0.1,
     color: colors.onSurfaceVariant,
   },
-  hint: { fontSize: 12, color: colors.onSurfaceVariant },
+  hint: { fontSize: 12, lineHeight: 16, color: colors.onSurfaceVariant },
 });

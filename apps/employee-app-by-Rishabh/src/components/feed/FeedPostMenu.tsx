@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import * as Sharing from "expo-sharing";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { blockAuthor, reportPost } from "@/lib/feed-safety";
 import { resolveFeedMediaUri } from "@/lib/feed-media";
 import { colors, radii } from "@/theme/colors";
 import type { EssFeedPost } from "@/types/api";
@@ -19,11 +20,18 @@ type Props = {
   post: EssFeedPost | null;
   visible: boolean;
   onClose: () => void;
+  /** Called after the author is blocked so the feed can hide their posts. */
+  onAuthorBlocked?: (authorEmployeeId: string) => void;
 };
 
-type MenuAction = "download" | "report" | "complain" | "copy";
+type MenuAction = "download" | "report" | "block" | "complain" | "copy";
 
-export function FeedPostMenu({ post, visible, onClose }: Props) {
+export function FeedPostMenu({
+  post,
+  visible,
+  onClose,
+  onAuthorBlocked,
+}: Props) {
   const insets = useSafeAreaInsets();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -85,10 +93,51 @@ export function FeedPostMenu({ post, visible, onClose }: Props) {
     }
 
     if (action === "report") {
+      setBusy(true);
+      try {
+        await reportPost(post.id);
+        Alert.alert(
+          "Report submitted",
+          "Thanks — this post was flagged for workplace admin review. You can also block the author to hide their posts.",
+          [{ text: "OK", onPress: onClose }],
+        );
+      } catch {
+        Alert.alert("Could not report", "Please try again.");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    if (action === "block") {
       Alert.alert(
-        "Report post",
-        "Thanks — this post was flagged for review by workplace admins.",
-        [{ text: "OK", onPress: onClose }],
+        `Block ${post.author_name}?`,
+        "Their posts and stories will be hidden on this device. You can contact HR if you need the block lifted.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Block",
+            style: "destructive",
+            onPress: () => {
+              void (async () => {
+                setBusy(true);
+                try {
+                  await blockAuthor(post.author_employee_id);
+                  onAuthorBlocked?.(post.author_employee_id);
+                  Alert.alert(
+                    "Author blocked",
+                    `${post.author_name}'s content is hidden.`,
+                    [{ text: "OK", onPress: onClose }],
+                  );
+                } catch {
+                  Alert.alert("Could not block", "Please try again.");
+                } finally {
+                  setBusy(false);
+                }
+              })();
+            },
+          },
+        ],
       );
       return;
     }
@@ -136,6 +185,13 @@ export function FeedPostMenu({ post, visible, onClose }: Props) {
             label="Report"
             description="Flag inappropriate or policy-breaking content"
             onPress={() => void run("report")}
+            disabled={busy}
+            destructive
+          />
+          <MenuRow
+            label="Block author"
+            description="Hide this person's posts and stories on this device"
+            onPress={() => void run("block")}
             disabled={busy}
             destructive
           />

@@ -1,5 +1,7 @@
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { colors } from "@/theme/colors";
+import { elevation } from "@/theme/elevation";
 import { gradients } from "@/theme/tokens";
 
 type Size = "sm" | "md" | "lg" | "xl";
@@ -64,16 +66,10 @@ export function Avatar({
 
 const styles = StyleSheet.create({
   fill: { flex: 1, alignItems: "center", justifyContent: "center" },
-  initials: { color: "#ffffff", fontWeight: "700" },
+  initials: { color: "#ffffff", fontWeight: "700", letterSpacing: -0.2 },
   ring: {
     borderWidth: 2,
-    borderColor: "rgba(37,99,235,0.3)",
+    borderColor: colors.primaryFixed,
   },
-  shadow: {
-    shadowColor: "#2563eb",
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
-  },
+  shadow: elevation("sm"),
 });

@@ -62,11 +62,19 @@ if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
       fi
     fi
   else
+    # Revision ids in this repo often exceed Alembic's default VARCHAR(32)
+    # (e.g. 0687_prj_site_install_split_checkboxes → StringDataRightTruncation).
+    echo "Ensuring alembic_version.version_num fits long revision ids…"
+    if ! python -m scripts.widen_alembic_version; then
+      echo "ERROR: could not widen alembic_version.version_num." >&2
+      exit 1
+    fi
     echo "Running Alembic migrations (connect_timeout=10)…"
     if ! alembic upgrade head; then
       echo "ERROR: alembic upgrade head failed." >&2
       echo "Most common Coolify cause: RDS security group does not allow this EC2 on port 5432." >&2
       echo "Also verify DATABASE_URL user/password/db name and sslmode=require." >&2
+      echo "If you see StringDataRightTruncation on alembic_version, re-run widen_alembic_version." >&2
       exit 1
     fi
   fi

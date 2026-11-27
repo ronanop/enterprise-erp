@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { WebDeviceFrame } from "@/components/WebDeviceFrame";
 import { AuthProvider, useAuth } from "@/context/auth-context";
+import { warmEssApi } from "@/lib/api-warmup";
 import { colors } from "@/theme/colors";
 
 export { ErrorBoundary } from "expo-router";
@@ -12,6 +13,11 @@ SplashScreen.preventAutoHideAsync();
 
 function RootNavigator() {
   const { status } = useAuth();
+
+  useEffect(() => {
+    // Start ESS API wake as soon as the shell mounts (before login).
+    void warmEssApi();
+  }, []);
 
   useEffect(() => {
     if (status !== "loading") {

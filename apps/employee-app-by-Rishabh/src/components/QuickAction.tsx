@@ -1,49 +1,62 @@
 import type { ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { colors } from "@/theme/colors";
+import { elevation } from "@/theme/elevation";
 import { RADIUS_QUICK, text } from "@/theme/tokens";
 
-/** Matches the PWA quickIconPremium* variants in theme/classes.ts. */
+/**
+ * Tone lock — single blue accent family.
+ * `mint` / `sand` are soft semantic tints (success / time), not competing accents.
+ */
 export type QuickTone =
   | "default"
   | "primary"
   | "violet"
   | "emerald"
-  | "amber";
+  | "amber"
+  | "mint"
+  | "sand";
 
 const TONES: Record<
   QuickTone,
-  { colors: readonly [string, string, string]; fg: string; shadow: string; border: string }
+  { colors: readonly [string, string]; fg: string; border: string }
 > = {
   default: {
-    colors: ["#ffffff", "#f5f8ff", "#dce9ff"],
-    fg: "#004ac6",
-    shadow: "rgba(37,99,235,0.14)",
-    border: "rgba(255,255,255,0.7)",
+    colors: ["#FFFFFF", "#EEF3FC"],
+    fg: colors.primary,
+    border: "rgba(255,255,255,0.9)",
   },
   primary: {
-    colors: ["#2563eb", "#3b6ef0", "#6366f1"],
-    fg: "#ffffff",
-    shadow: "rgba(37,99,235,0.38)",
-    border: "rgba(255,255,255,0.25)",
+    colors: ["#2563EB", "#3B82F6"],
+    fg: "#FFFFFF",
+    border: "rgba(255,255,255,0.28)",
   },
+  // Legacy aliases → blue-family soft tiles (no purple accent).
   violet: {
-    colors: ["#f3edff", "#ffffff", "#eaddff"],
-    fg: "#712ae2",
-    shadow: "rgba(113,42,226,0.12)",
-    border: "rgba(255,255,255,0.7)",
+    colors: ["#FFFFFF", "#EAF0FB"],
+    fg: colors.primary,
+    border: "rgba(255,255,255,0.9)",
   },
   emerald: {
-    colors: ["#ecfdf5", "#ffffff", "#d1fae5"],
-    fg: "#007d55",
-    shadow: "rgba(0,125,85,0.1)",
-    border: "rgba(255,255,255,0.7)",
+    colors: ["#F0FDF7", "#E6F7F0"],
+    fg: colors.tertiary,
+    border: "rgba(255,255,255,0.9)",
   },
   amber: {
-    colors: ["#fffbeb", "#ffffff", "#fef3c7"],
-    fg: "#b45309",
-    shadow: "rgba(180,83,9,0.1)",
-    border: "rgba(255,255,255,0.7)",
+    colors: ["#FFFBEB", "#FEF3C7"],
+    fg: colors.warning,
+    border: "rgba(255,255,255,0.9)",
+  },
+  mint: {
+    colors: ["#F0FDF7", "#E6F7F0"],
+    fg: colors.tertiary,
+    border: "rgba(255,255,255,0.9)",
+  },
+  sand: {
+    colors: ["#FFFBEB", "#FEF3C7"],
+    fg: colors.warning,
+    border: "rgba(255,255,255,0.9)",
   },
 };
 
@@ -52,8 +65,8 @@ export function quickToneColor(tone: QuickTone): string {
 }
 
 /**
- * A single home-screen quick action: gradient icon well above a small label.
- * Sized to fit a 4-column grid like the PWA.
+ * Home / Hub quick action: soft tile above a compact label.
+ * Sized for a 4-column grid.
  */
 export function QuickAction({
   label,
@@ -78,12 +91,7 @@ export function QuickAction({
         pressed ? styles.pressed : null,
       ]}
     >
-      <View
-        style={[
-          styles.tileShadow,
-          { shadowColor: t.shadow.replace(/rgba?\(([^,]+,[^,]+,[^,]+).*/, "rgb($1)") },
-        ]}
-      >
+      <View style={styles.tileShadow}>
         <LinearGradient
           colors={t.colors}
           start={{ x: 0, y: 0 }}
@@ -105,24 +113,31 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     gap: 10,
-    padding: 6,
+    padding: 4,
+    ...Platform.select({
+      web: { cursor: "pointer" } as object,
+      default: {},
+    }),
   },
-  pressed: { opacity: 0.9, transform: [{ scale: 0.96 }] },
+  pressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.96 }],
+  },
   tileShadow: {
     width: "100%",
-    maxWidth: 76,
+    maxWidth: 72,
     aspectRatio: 1,
     borderRadius: RADIUS_QUICK,
-    shadowOpacity: 0.9,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
+    borderCurve: "continuous",
+    ...elevation("md"),
   },
   tile: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: RADIUS_QUICK,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderCurve: "continuous",
+    overflow: "hidden",
   },
 });

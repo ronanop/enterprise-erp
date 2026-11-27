@@ -1,5 +1,6 @@
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -70,16 +71,23 @@ export function Button({
 }
 
 const styles = StyleSheet.create({
-  pressed: { opacity: 0.92, transform: [{ scale: 0.98 }] },
-  disabled: { opacity: 0.55 },
-  noShadow: { shadowOpacity: 0, elevation: 0 },
+  pressed: {
+    opacity: 0.94,
+    transform: [{ scale: 0.97 }],
+    ...Platform.select({
+      web: { transitionProperty: "transform, opacity", transitionDuration: "120ms" } as object,
+      default: {},
+    }),
+  },
+  disabled: { opacity: 0.5 },
+  noShadow: { shadowOpacity: 0, elevation: 0, boxShadow: "none" } as ViewStyle,
   icon: { marginRight: 2 },
 });
 
 const labels = StyleSheet.create({
-  primary: { fontSize: 15, fontWeight: "600", color: colors.onPrimary },
-  secondary: { fontSize: 15, fontWeight: "600", color: colors.onSurface },
+  primary: { fontSize: 15, fontWeight: "600", letterSpacing: -0.1, color: colors.onPrimary },
+  secondary: { fontSize: 15, fontWeight: "600", letterSpacing: -0.1, color: colors.onSurface },
   danger: { fontSize: 15, fontWeight: "700", color: colors.error },
-  ghost: { fontSize: 12.8, fontWeight: "600", color: colors.primary },
+  ghost: { fontSize: 13, fontWeight: "600", color: colors.primary },
   punchOut: { fontSize: 15, fontWeight: "600", color: colors.primary },
 });

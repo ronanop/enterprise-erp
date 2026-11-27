@@ -45,10 +45,17 @@ export default function TabsLayout() {
       <Tabs.Screen name="attendance" options={{ title: "Attendance" }} />
       <Tabs.Screen name="hub" options={{ title: "Hub" }} />
       <Tabs.Screen name="profile" options={{ title: "Profile" }} />
-      {/* Hidden from bottom nav — still reachable via Hub / deep links. */}
-      <Tabs.Screen name="home" options={{ title: "Home", href: null }} />
-      <Tabs.Screen name="leave" options={{ title: "Leave", href: null }} />
-      <Tabs.Screen name="payslips" options={{ title: "Salary", href: null }} />
+      {/*
+        Hidden from BottomNav via TAB_ORDER (not listed there).
+        Do NOT set href: null — on Expo Router web that breaks router.push
+        into these screens and drops reviewers onto Feed.
+      */}
+      <Tabs.Screen name="home" options={{ title: "Home", href: "/home" }} />
+      <Tabs.Screen name="leave" options={{ title: "Leave", href: "/leave" }} />
+      <Tabs.Screen
+        name="payslips"
+        options={{ title: "Salary", href: "/payslips" }}
+      />
     </Tabs>
   );
 }

@@ -55,10 +55,10 @@ export default function DataDeletionScreen() {
       contentStyle={styles.content}
     >
       <AlertBox tone="warn">
-        We do not collect deletion requests in the app. Tap the button to email
-        HR with a ready-made template. Your employee account is managed by your
-        organization; some employment records may be retained where required by
-        law.
+        Accounts are created by your employer (no in-app registration). Use this
+        screen to request deletion of your Employee App login and eligible
+        personal data. HR completes the deletion; some employment or payroll
+        records may be retained where required by law.
       </AlertBox>
 
       <Card style={styles.card}>
@@ -66,13 +66,19 @@ export default function DataDeletionScreen() {
         <Text style={styles.value}>{me?.email || "—"}</Text>
         <Text style={styles.value}>Code: {me?.employee_code || "—"}</Text>
 
-        <Button title="Email deletion request" onPress={() => void emailRequest()} />
         <Button
-          title="Open web instructions"
+          title="Request account deletion"
+          onPress={() => void emailRequest()}
+        />
+        <Button
+          title="Open web deletion instructions"
           variant="secondary"
           onPress={() => void openWebPage()}
         />
-        <Text style={styles.hint}>Sends to {env.supportEmail}</Text>
+        <Text style={styles.hint}>
+          In-app request emails {env.supportEmail}. Web form:{" "}
+          {env.dataDeletionUrl}
+        </Text>
       </Card>
     </Screen>
   );

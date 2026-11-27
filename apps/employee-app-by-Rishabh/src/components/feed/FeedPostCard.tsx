@@ -21,9 +21,15 @@ type Props = {
   post: EssFeedPost;
   onLike: (post: EssFeedPost) => void;
   onOpenComments: (post: EssFeedPost) => void;
+  onAuthorBlocked?: (authorEmployeeId: string) => void;
 };
 
-export function FeedPostCard({ post, onLike, onOpenComments }: Props) {
+export function FeedPostCard({
+  post,
+  onLike,
+  onOpenComments,
+  onAuthorBlocked,
+}: Props) {
   const [page, setPage] = useState(0);
   const [width, setWidth] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -137,6 +143,7 @@ export function FeedPostCard({ post, onLike, onOpenComments }: Props) {
         post={post}
         visible={menuOpen}
         onClose={() => setMenuOpen(false)}
+        onAuthorBlocked={onAuthorBlocked}
       />
     </View>
   );

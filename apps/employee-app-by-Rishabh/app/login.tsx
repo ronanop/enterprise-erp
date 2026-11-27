@@ -11,6 +11,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { BrandMark } from "@/components/brand-mark";
 import { Button, ErrorBox, Screen, TextField } from "@/components/ui";
 import { useAuth } from "@/context/auth-context";
@@ -19,10 +20,13 @@ import {
   isBiometricUnlockEnabled,
   requestAndEnableBiometricUnlock,
 } from "@/lib/biometric";
+import { warmEssApi } from "@/lib/api-warmup";
 import { clearFaceVerified } from "@/lib/face-auth";
 import { ApiClientError, authService } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
-import { colors } from "@/theme/colors";
+import { colors, radii } from "@/theme/colors";
+import { elevation } from "@/theme/elevation";
+import { gradients } from "@/theme/tokens";
 import { env } from "@/utils/env";
 
 /** Shared ESS portal company code — same for every employee. */
@@ -44,6 +48,8 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    // Wake staging API / tunnel before the reviewer taps Sign In.
+    void warmEssApi();
     (async () => {
       try {
         const raw = await AsyncStorage.getItem(REMEMBER_KEY);
@@ -170,68 +176,78 @@ export default function LoginScreen() {
   }
 
   return (
-    <Screen scroll contentStyle={styles.content}>
+    <Screen scroll contentStyle={styles.content} style={styles.screen}>
+      <LinearGradient
+        colors={gradients.heroWash}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={styles.wash}
+        pointerEvents="none"
+      />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.flex}
       >
         <View style={styles.hero}>
-          <BrandMark size={64} style={styles.logo} />
-          <Text style={styles.title}>Sign in</Text>
+          <BrandMark size={72} style={styles.logo} />
+          <Text style={styles.product}>iConnect+</Text>
+          <Text style={styles.title}>Welcome back</Text>
           <Text style={styles.subtitle}>
-            Log in with your work email to continue.
+            Sign in with your work email to continue.
           </Text>
         </View>
 
-        <View style={styles.form}>
-          <TextField
-            label="Company code"
-            value={ESS_COMPANY_CODE}
-            editable={false}
-            selectTextOnFocus={false}
-          />
-          <TextField
-            label="Work email"
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-            value={email}
-            onChangeText={setEmail}
-            placeholder="name@company.com"
-          />
-          <TextField
-            label="Password"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Enter your password"
-            onSubmitEditing={() => void onSignIn()}
-          />
-          <Text style={styles.hint}>
-            First-time password is your employee code + date of birth
-            (DDMMYYYY). You will be asked to change it after sign-in.
-          </Text>
+        <View style={styles.formCard}>
+          <View style={styles.form}>
+            <TextField
+              label="Company code"
+              value={ESS_COMPANY_CODE}
+              editable={false}
+              selectTextOnFocus={false}
+            />
+            <TextField
+              label="Work email"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              value={email}
+              onChangeText={setEmail}
+              placeholder="name@company.com"
+            />
+            <TextField
+              label="Password"
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Enter your password"
+              onSubmitEditing={() => void onSignIn()}
+            />
+            <Text style={styles.hint}>
+              First-time password is your employee code + date of birth
+              (DDMMYYYY). You will be asked to change it after sign-in.
+            </Text>
 
-          <View style={styles.row}>
-            <Pressable
-              onPress={() => setRememberMe((v) => !v)}
-              style={styles.remember}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: rememberMe }}
-            >
-              <View style={[styles.checkbox, rememberMe && styles.checkboxOn]}>
-                {rememberMe ? <Text style={styles.checkMark}>✓</Text> : null}
-              </View>
-              <Text style={styles.rememberLabel}>Remember me</Text>
-            </Pressable>
+            <View style={styles.row}>
+              <Pressable
+                onPress={() => setRememberMe((v) => !v)}
+                style={styles.remember}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: rememberMe }}
+              >
+                <View style={[styles.checkbox, rememberMe && styles.checkboxOn]}>
+                  {rememberMe ? <Text style={styles.checkMark}>✓</Text> : null}
+                </View>
+                <Text style={styles.rememberLabel}>Remember me</Text>
+              </Pressable>
+            </View>
+
+            {error ? <ErrorBox>{error}</ErrorBox> : null}
+            <Button
+              title="Sign In"
+              loading={loading}
+              onPress={() => void onSignIn()}
+            />
           </View>
-
-          {error ? <ErrorBox>{error}</ErrorBox> : null}
-          <Button
-            title="Sign In"
-            loading={loading}
-            onPress={() => void onSignIn()}
-          />
         </View>
 
         <View style={styles.footer}>
@@ -267,22 +283,51 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
+  screen: { backgroundColor: colors.background },
   flex: { flex: 1 },
-  content: { paddingTop: 40, justifyContent: "center" },
-  hero: { alignItems: "center", marginBottom: 28 },
-  logo: { marginBottom: 20 },
+  content: { paddingTop: 28, justifyContent: "center", position: "relative" },
+  wash: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 280,
+  },
+  hero: { alignItems: "center", marginBottom: 24 },
+  logo: {
+    marginBottom: 16,
+    ...elevation("md"),
+  },
+  product: {
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+    color: colors.primary,
+    marginBottom: 8,
+  },
   title: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: "700",
     color: colors.onSurface,
-    letterSpacing: -0.3,
+    letterSpacing: -0.6,
   },
   subtitle: {
     marginTop: 8,
     fontSize: 15,
+    lineHeight: 22,
     color: colors.onSurfaceVariant,
     textAlign: "center",
-    maxWidth: 280,
+    maxWidth: 300,
+  },
+  formCard: {
+    borderRadius: radii.xl,
+    backgroundColor: colors.surfaceLowest,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(200,206,220,0.55)",
+    padding: 20,
+    borderCurve: "continuous",
+    ...elevation("md"),
   },
   form: { gap: 14 },
   hint: {
@@ -296,15 +341,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  remember: { flexDirection: "row", alignItems: "center", gap: 8 },
+  remember: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    ...Platform.select({
+      web: { cursor: "pointer" } as object,
+      default: {},
+    }),
+  },
   checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 7,
     borderWidth: 1.5,
     borderColor: colors.outlineVariant,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: colors.surfaceLowest,
   },
   checkboxOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   checkMark: { color: "#fff", fontSize: 12, fontWeight: "700" },

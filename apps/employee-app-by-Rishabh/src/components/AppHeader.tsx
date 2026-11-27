@@ -1,15 +1,15 @@
 import type { ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { IconBack, IconBell } from "@/components/icons";
 import { Avatar } from "@/components/ui/Avatar";
 import { colors } from "@/theme/colors";
 import { GUTTER, HEADER_HEIGHT, text } from "@/theme/tokens";
 
-/** PWA notificationBellButton + badge (count) or Instagram-style red dot. */
+/** Notification bell — numeric badge or Instagram-style red dot. */
 export function NotificationBell({
   count = 0,
-  color = colors.primary,
+  color = colors.onSurface,
   indicator = "count",
 }: {
   count?: number;
@@ -26,7 +26,7 @@ export function NotificationBell({
         hasUnread ? `Notifications, ${count} unread` : "Notifications"
       }
       onPress={() => router.push("/notifications")}
-      style={styles.bell}
+      style={({ pressed }) => [styles.bell, pressed && styles.pressed]}
     >
       <IconBell size={22} color={color} />
       {hasUnread && indicator === "dot" ? <View style={styles.dot} /> : null}
@@ -40,8 +40,7 @@ export function NotificationBell({
 }
 
 /**
- * Mirrors the PWA AppHeader: sticky glass bar with avatar (→ profile),
- * brand title in primary blue, and the notification bell.
+ * Sticky header: avatar → profile, brand title, notification bell.
  */
 export function AppHeader({
   title = "Employee Portal",
@@ -61,6 +60,7 @@ export function AppHeader({
           accessibilityRole="button"
           accessibilityLabel="Open profile"
           onPress={() => router.push("/(tabs)/profile")}
+          style={({ pressed }) => [pressed && styles.pressed]}
         >
           <Avatar name={name ?? ""} size="sm" ring />
         </Pressable>
@@ -74,8 +74,7 @@ export function AppHeader({
 }
 
 /**
- * Mirrors the PWA SubHeader: back chevron + page title, with the bell
- * (or a caller-supplied node) on the right.
+ * Sub-header: back chevron + page title, optional right slot.
  */
 export function SubHeader({
   title,
@@ -105,7 +104,7 @@ export function SubHeader({
           accessibilityRole="button"
           accessibilityLabel="Back"
           onPress={goBack}
-          style={styles.backBtn}
+          style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}
         >
           <IconBack size={20} color={colors.onSurface} />
         </Pressable>
@@ -137,18 +136,26 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
     paddingHorizontal: GUTTER,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(195,198,215,0.3)",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(200,206,220,0.45)",
     backgroundColor: colors.background,
+    ...Platform.select({
+      web: {
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        backgroundColor: "rgba(244,246,250,0.88)",
+      } as object,
+      default: {},
+    }),
   },
   left: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
   leftTight: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
   brandTitle: {
     flex: 1,
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "700",
-    letterSpacing: -0.2,
-    color: colors.primary,
+    letterSpacing: -0.35,
+    color: colors.onSurface,
   },
   backBtn: {
     width: 40,
@@ -163,7 +170,13 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: "center",
     justifyContent: "center",
+    borderRadius: 20,
+    ...Platform.select({
+      web: { cursor: "pointer" } as object,
+      default: {},
+    }),
   },
+  pressed: { opacity: 0.7 },
   badge: {
     position: "absolute",
     right: 2,
@@ -171,7 +184,7 @@ const styles = StyleSheet.create({
     height: 18,
     minWidth: 18,
     borderRadius: 9,
-    backgroundColor: "#dc2626",
+    backgroundColor: colors.error,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 4,
@@ -191,7 +204,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#dc2626",
+    backgroundColor: colors.error,
     borderWidth: 1.5,
     borderColor: colors.background,
   },

@@ -15,14 +15,23 @@
       },
       "ios": {
         "simulator": false
+      },
+      "env": {
+        "EXPO_PUBLIC_APP_NAME": "iConnect+",
+        "EXPO_PUBLIC_API_URL": "https://ess-api.iconnectplus.in/api/v1",
+        "EXPO_PUBLIC_API_URL_WEB": "https://ess-api.iconnectplus.in/api/v1",
+        "EXPO_PUBLIC_PRIVACY_POLICY_URL": "https://iconnectplus.in/legal/privacy",
+        "EXPO_PUBLIC_TERMS_URL": "https://iconnectplus.in/legal/terms",
+        "EXPO_PUBLIC_DATA_DELETION_URL": "https://iconnectplus.in/legal/data-deletion",
+        "EXPO_PUBLIC_SUPPORT_EMAIL": "erp@iconnectplus.in"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_APP_NAME": "iConnect+",
-        "EXPO_PUBLIC_USE_MOCK": "false",
         "EXPO_PUBLIC_API_URL": "https://ess-api.iconnectplus.in/api/v1",
+        "EXPO_PUBLIC_API_URL_WEB": "https://ess-api.iconnectplus.in/api/v1",
         "EXPO_PUBLIC_PRIVACY_POLICY_URL": "https://iconnectplus.in/legal/privacy",
         "EXPO_PUBLIC_TERMS_URL": "https://iconnectplus.in/legal/terms",
         "EXPO_PUBLIC_DATA_DELETION_URL": "https://iconnectplus.in/legal/data-deletion",

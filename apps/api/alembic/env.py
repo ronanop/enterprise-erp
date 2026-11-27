@@ -57,6 +57,44 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def _ensure_wide_version_column(connection) -> None:
+    """Alembic defaults version_num to VARCHAR(32); many ERP revs are longer."""
+    from sqlalchemy import text
+
+    exists = connection.execute(
+        text(
+            """
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+              AND table_name = 'alembic_version'
+            """
+        )
+    ).scalar()
+    if not exists:
+        return
+    current = connection.execute(
+        text(
+            """
+            SELECT character_maximum_length
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'alembic_version'
+              AND column_name = 'version_num'
+            """
+        )
+    ).scalar()
+    if current is not None and int(current) >= 128:
+        return
+    connection.execute(
+        text(
+            "ALTER TABLE alembic_version "
+            "ALTER COLUMN version_num TYPE VARCHAR(128)"
+        )
+    )
+    connection.commit()
+
+
 def run_migrations_online() -> None:
     configuration = config.get_section(config.config_ini_section) or {}
     configuration["sqlalchemy.url"] = get_url()
@@ -67,6 +105,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        _ensure_wide_version_column(connection)
         context.configure(
             connection=connection,
             target_metadata=target_metadata,

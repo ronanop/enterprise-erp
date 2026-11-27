@@ -348,8 +348,8 @@ export function IconBrand({ size = 40 }: IconProps) {
     <Svg width={size} height={size} viewBox="0 0 48 48" fill="none">
       <Defs>
         <LinearGradient id="brandGrad" x1="0" y1="0" x2="48" y2="48">
-          <Stop offset="0" stopColor="#2563eb" />
-          <Stop offset="1" stopColor="#712ae2" />
+          <Stop offset="0" stopColor="#0B57D0" />
+          <Stop offset="1" stopColor="#2563EB" />
         </LinearGradient>
       </Defs>
       <Rect width="48" height="48" rx="14" fill="url(#brandGrad)" />

@@ -221,9 +221,13 @@ export default function LeaveScreen() {
       setMessage("Leave submitted");
       await refresh();
     } catch (err) {
-      setError(
-        err instanceof ApiClientError ? err.message : "Failed to submit leave",
-      );
+      const raw =
+        err instanceof ApiClientError ? err.message : "Failed to submit leave";
+      const friendly =
+        /status or value is not allowed|no working days/i.test(raw)
+          ? "Selected dates have no working days. Choose weekdays to apply leave."
+          : raw;
+      setError(friendly);
     } finally {
       setLoading(false);
     }

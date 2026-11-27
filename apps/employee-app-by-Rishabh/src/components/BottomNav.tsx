@@ -20,6 +20,7 @@ import {
   type IconProps,
 } from "@/components/icons";
 import { colors } from "@/theme/colors";
+import { elevation } from "@/theme/elevation";
 
 /** RN-web does not export useReducedMotion — match media safely. */
 function usePrefersReducedMotion(): boolean {
@@ -38,6 +39,13 @@ function usePrefersReducedMotion(): boolean {
 }
 
 const TAB_ORDER = ["feed", "task", "attendance", "hub", "profile"] as const;
+
+/** Nested Hub destinations (hidden from the dock) highlight Hub while open. */
+const TAB_PARENT: Record<string, (typeof TAB_ORDER)[number]> = {
+  home: "hub",
+  leave: "hub",
+  payslips: "hub",
+};
 
 const ICONS: Record<string, (p: IconProps) => React.ReactElement> = {
   feed: IconFeed,
@@ -59,13 +67,12 @@ const LABELS: Record<string, string> = {
 };
 
 const ACTIVE = colors.primary;
-const IDLE = "rgba(67,70,85,0.55)";
+const IDLE = "rgba(90,100,120,0.55)";
 const PILL_PAD_X = 6;
 const INDICATOR_INSET = 4;
 
 /**
- * Instagram-style floating pill dock.
- * Indicator uses equal-width slots + translateX only (native driver) to avoid width/layout jitter.
+ * Floating pill dock — equal-width slots + translateX indicator (native driver).
  */
 export function BottomNav({
   state,
@@ -87,7 +94,8 @@ export function BottomNav({
   );
 
   const activeRoute = state.routes[state.index];
-  const activeName = activeRoute?.name ?? visibleRoutes[0]?.name;
+  const rawActiveName = activeRoute?.name ?? visibleRoutes[0]?.name;
+  const activeName = TAB_PARENT[rawActiveName ?? ""] ?? rawActiveName;
   const activeIndex = Math.max(
     0,
     visibleRoutes.findIndex((r) => r.name === activeName),
@@ -105,13 +113,11 @@ export function BottomNav({
       settledIndex.current = activeIndex;
       return;
     }
-    // First layout: place without animation so the blob isn't off-screen.
     if (settledIndex.current < 0) {
       indicatorX.setValue(target);
       settledIndex.current = activeIndex;
       return;
     }
-    // Same tab (e.g. resize) — snap without restarting a spring.
     if (settledIndex.current === activeIndex) {
       indicatorX.setValue(target);
       return;
@@ -207,7 +213,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     alignItems: "center",
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingTop: 6,
     backgroundColor: "transparent",
     zIndex: 50,
@@ -218,27 +224,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     width: "100%",
     maxWidth: 420,
-    height: 56,
+    height: 58,
     paddingHorizontal: PILL_PAD_X,
     borderRadius: 999,
     backgroundColor: colors.surfaceLowest,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(195,198,215,0.65)",
+    borderColor: "rgba(200,206,220,0.7)",
     overflow: "hidden",
+    ...elevation("nav"),
     ...Platform.select({
-      ios: {
-        shadowColor: "#0b1c30",
-        shadowOpacity: 0.14,
-        shadowRadius: 18,
-        shadowOffset: { width: 0, height: 8 },
-      },
-      android: {
-        elevation: 12,
-      },
       web: {
-        boxShadow:
-          "0 12px 32px rgba(11,28,48,0.12), 0 2px 8px rgba(0,74,198,0.06)",
-        backgroundColor: colors.surfaceLowest,
+        backdropFilter: "blur(20px)",
+        WebkitBackdropFilter: "blur(20px)",
+        backgroundColor: "rgba(255,255,255,0.92)",
       } as object,
       default: {},
     }),
@@ -249,9 +247,9 @@ const styles = StyleSheet.create({
     bottom: INDICATOR_INSET,
     left: 0,
     borderRadius: 999,
-    backgroundColor: "rgba(0,74,198,0.12)",
+    backgroundColor: colors.primaryMuted,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(0,74,198,0.16)",
+    borderColor: "rgba(11,87,208,0.14)",
     zIndex: 0,
   },
   tab: {
@@ -263,7 +261,6 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         cursor: "pointer",
-        // Prevent press opacity flicker fighting the spring
         transitionProperty: "opacity",
         transitionDuration: "120ms",
       } as object,
@@ -274,10 +271,10 @@ const styles = StyleSheet.create({
     opacity: 0.72,
   },
   iconWell: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 16,
+    borderRadius: 18,
   },
 });

@@ -16,11 +16,13 @@ Use this when submitting `apps/employee-app-by-Rishabh` to Apple App Store and G
 
 ### Apple (App Review Guidelines)
 - **5.1.1** Privacy policy, consent, purpose strings, deletion  
-- **2.1** App completeness — label demo builds; don’t ship broken placeholders as “production” without disclosure  
+- **2.1** App completeness — live ESS API, working demo login, Review Notes + physical-device screen recording (see [ASC_REVIEW_NOTES_2_1.md](./ASC_REVIEW_NOTES_2_1.md))  
+- **1.2 / UGC** — Feed post menu: Report, Block author, Complain  
 - **5.1.5** Location only when relevant — we request/use GPS at attendance punch (and after rationale screen)  
 - **Encryption** — `ITSAppUsesNonExemptEncryption: false` (HTTPS only)  
 - **Privacy Nutrition Labels** in App Store Connect — declare location, photos, contact info, identifiers as collected from the app/API  
 - **Privacy Manifest** — configured under `ios.privacyManifests` for required-reason APIs  
+- **No IAP** — employer-licensed B2B ESS; no paid unlocks in-app
 
 ### Google Play
 - **Data safety** form — location (precise), photos (user-selected via picker), personal info, device IDs / push tokens  

@@ -4,12 +4,16 @@ Use with App Store Connect + Play Console. Package: `com.iconnectplusin.employee
 
 ## Demo login (Review Notes)
 
+Full Guideline 2.1 reply: [ASC_REVIEW_NOTES_2_1.md](./ASC_REVIEW_NOTES_2_1.md)
+
+Company: `CDPL0112`
+
 ```
-demo@company.com
-demo123
+Primary (employee): review.employee@iconnectplus.in / Review@2026  (REV001)
+Optional (manager): review.manager@iconnectplus.in / Review@2026  (RVM001)
 ```
 
-Mock ESS data — not connected to a live employer ERP. Employer-provisioned accounts in production.
+Staging ESS API (`ess-api.iconnectplus.in`). Accounts are employer-provisioned — no in-app registration.
 
 Privacy: https://iconnectplus.in/legal/privacy  
 Terms: https://iconnectplus.in/legal/terms  

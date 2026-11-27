@@ -5,7 +5,7 @@ import { gradients, tokens } from "@/theme/tokens";
 
 type Props = {
   children: ReactNode;
-  /** `flush` removes padding for edge-to-edge list cards (PWA cardFlush). */
+  /** `flush` removes padding for edge-to-edge list cards. */
   variant?: "default" | "flush" | "soft";
   style?: StyleProp<ViewStyle>;
 };
@@ -25,7 +25,7 @@ export function Card({ children, variant = "default", style }: Props) {
   );
 }
 
-/** PWA cardPeach - gradient hero card used for net pay / celebrations. */
+/** Gradient hero card — net pay, celebrations, primary status. */
 export function GradientCard({
   children,
   style,
@@ -48,7 +48,6 @@ export function GradientCard({
 }
 
 const styles = StyleSheet.create({
-  cardPad: { padding: 16 },
-  // PWA cardPeach uses p-5; gradient heroes retain that 20px rhythm.
+  cardPad: { padding: 18 },
   heroPad: { padding: 20 },
 });

@@ -11,7 +11,13 @@ import { colors } from "@/theme/colors";
 import { formatDateTime, formatDisplayDateDDMMYYYY } from "@/utils/datetime";
 
 function errorText(err: unknown, fallback: string): string {
-  return err instanceof ApiClientError ? err.message : fallback;
+  if (!(err instanceof ApiClientError)) return fallback;
+  const msg = err.message || fallback;
+  // Remote HRMS is optional enrichment — never surface raw socket errors to reviewers.
+  if (/no route to host|timed out|econnrefused|network|failed to fetch/i.test(msg)) {
+    return "HRMS sync is temporarily unavailable. Showing ESS profile details.";
+  }
+  return msg;
 }
 
 function displayDate(value: string | null | undefined): string {

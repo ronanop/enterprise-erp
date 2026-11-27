@@ -12,9 +12,10 @@ import {
   IconUser,
   IconWallet,
 } from "@/components/icons";
-import { Screen } from "@/components/ui";
+import { Card, Screen } from "@/components/ui";
 import { useAuth } from "@/context/auth-context";
 import { colors } from "@/theme/colors";
+import { text } from "@/theme/tokens";
 
 /** HR services hub — leaves, rooms, WFH, performance, and related tools. */
 export default function HubScreen() {
@@ -23,112 +24,126 @@ export default function HubScreen() {
 
   return (
     <Screen
-      header={<AppHeader name={me?.display_name} />}
+      scroll
+      tabClearance
+      header={<AppHeader name={me?.display_name} title="Hub" />}
       contentStyle={styles.content}
     >
-      <Text style={styles.heading}>HR services</Text>
-      <Text style={styles.sub}>
-        Leaves, rooms, WFH, performance, and other workplace tools.
-      </Text>
-
-      <View style={styles.grid}>
-        <QuickAction
-          label="Apply Leave"
-          tone="violet"
-          icon={<IconCalendar size={28} color={quickToneColor("violet")} />}
-          onPress={() => router.push("/(tabs)/leave")}
-        />
-        <QuickAction
-          label="WFH"
-          icon={<IconHome size={28} color={quickToneColor("default")} />}
-          onPress={() => router.push("/(tabs)/attendance/wfh")}
-        />
-        <QuickAction
-          label="Meeting rooms"
-          tone="violet"
-          icon={<IconLocation size={28} color={quickToneColor("violet")} />}
-          onPress={() => router.push("/rooms")}
-        />
-        <QuickAction
-          label="Performance"
-          tone="emerald"
-          icon={<IconSparkle size={28} color={quickToneColor("emerald")} />}
-          onPress={() => router.push("/performance")}
-        />
+      <View style={styles.intro}>
+        <Text style={styles.heading}>Workplace tools</Text>
+        <Text style={styles.sub}>
+          Leave, rooms, pay, and the rest of your day — one place.
+        </Text>
       </View>
 
-      <View style={styles.grid}>
-        <QuickAction
-          label="Payslip"
-          tone="emerald"
-          icon={<IconWallet size={28} color={quickToneColor("emerald")} />}
-          onPress={() => router.push("/(tabs)/payslips")}
-        />
-        <QuickAction
-          label="Timesheet"
-          tone="amber"
-          icon={<IconClock size={28} color={quickToneColor("amber")} />}
-          onPress={() => router.push("/timesheet")}
-        />
-        <QuickAction
-          label="Training"
-          icon={<IconUser size={28} color={quickToneColor("default")} />}
-          onPress={() => router.push("/training")}
-        />
-        <QuickAction
-          label="Policies"
-          tone="emerald"
-          icon={<IconWallet size={28} color={quickToneColor("emerald")} />}
-          onPress={() => router.push("/compliance")}
-        />
-      </View>
+      <Card style={styles.section}>
+        <Text style={text.sectionTitle}>Time & leave</Text>
+        <View style={styles.grid}>
+          <QuickAction
+            label="Apply Leave"
+            tone="default"
+            icon={<IconCalendar size={26} color={quickToneColor("default")} />}
+            onPress={() => router.push("/(tabs)/leave")}
+          />
+          <QuickAction
+            label="WFH"
+            icon={<IconHome size={26} color={quickToneColor("default")} />}
+            onPress={() => router.push("/(tabs)/attendance/wfh")}
+          />
+          <QuickAction
+            label="Timesheet"
+            tone="amber"
+            icon={<IconClock size={26} color={quickToneColor("amber")} />}
+            onPress={() => router.push("/timesheet")}
+          />
+          <QuickAction
+            label="Roster"
+            tone="default"
+            icon={<IconCalendar size={26} color={quickToneColor("default")} />}
+            onPress={() => router.push("/roster")}
+          />
+        </View>
+      </Card>
 
-      <View style={styles.grid}>
-        <QuickAction
-          label="Roster"
-          tone="violet"
-          icon={<IconCalendar size={28} color={quickToneColor("violet")} />}
-          onPress={() => router.push("/roster")}
-        />
-        <QuickAction
-          label="Help"
-          tone="amber"
-          icon={<IconHelp size={28} color={quickToneColor("amber")} />}
-          onPress={() => router.push("/support")}
-        />
-        <QuickAction
-          label="Announcements"
-          icon={<IconSparkle size={28} color={quickToneColor("default")} />}
-          onPress={() => router.push("/announcements")}
-        />
-        <QuickAction
-          label="Documents"
-          tone="emerald"
-          icon={<IconWallet size={28} color={quickToneColor("emerald")} />}
-          onPress={() => router.push("/documents")}
-        />
-      </View>
+      <Card style={styles.section}>
+        <Text style={text.sectionTitle}>Pay & growth</Text>
+        <View style={styles.grid}>
+          <QuickAction
+            label="Payslip"
+            tone="emerald"
+            icon={<IconWallet size={26} color={quickToneColor("emerald")} />}
+            onPress={() => router.push("/(tabs)/payslips")}
+          />
+          <QuickAction
+            label="Performance"
+            tone="emerald"
+            icon={<IconSparkle size={26} color={quickToneColor("emerald")} />}
+            onPress={() => router.push("/performance")}
+          />
+          <QuickAction
+            label="Training"
+            icon={<IconUser size={26} color={quickToneColor("default")} />}
+            onPress={() => router.push("/training")}
+          />
+          <QuickAction
+            label="Documents"
+            tone="emerald"
+            icon={<IconWallet size={26} color={quickToneColor("emerald")} />}
+            onPress={() => router.push("/documents")}
+          />
+        </View>
+      </Card>
+
+      <Card style={styles.section}>
+        <Text style={text.sectionTitle}>Workplace</Text>
+        <View style={styles.grid}>
+          <QuickAction
+            label="Meeting rooms"
+            tone="default"
+            icon={<IconLocation size={26} color={quickToneColor("default")} />}
+            onPress={() => router.push("/rooms")}
+          />
+          <QuickAction
+            label="Policies"
+            tone="emerald"
+            icon={<IconWallet size={26} color={quickToneColor("emerald")} />}
+            onPress={() => router.push("/compliance")}
+          />
+          <QuickAction
+            label="Announcements"
+            icon={<IconSparkle size={26} color={quickToneColor("default")} />}
+            onPress={() => router.push("/announcements")}
+          />
+          <QuickAction
+            label="Help"
+            tone="amber"
+            icon={<IconHelp size={26} color={quickToneColor("amber")} />}
+            onPress={() => router.push("/support")}
+          />
+        </View>
+      </Card>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { paddingTop: 8, gap: 14 },
+  content: { paddingTop: 16, gap: 16 },
+  intro: { gap: 6, paddingHorizontal: 2, marginBottom: 4 },
   heading: {
-    fontSize: 20,
+    fontSize: 28,
     fontWeight: "700",
+    letterSpacing: -0.6,
     color: colors.onSurface,
-    letterSpacing: -0.2,
   },
   sub: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 15,
+    lineHeight: 22,
     color: colors.onSurfaceVariant,
-    marginTop: -6,
-    marginBottom: 4,
+    maxWidth: 320,
   },
+  section: { gap: 14, paddingVertical: 18 },
   grid: {
     flexDirection: "row",
-    gap: 10,
+    gap: 6,
   },
 });
