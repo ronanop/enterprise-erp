@@ -435,6 +435,7 @@ export function EmployeeImportDrawer({
   }
 
   return (
+    <>
     <SetupDrawer
       open={open}
       title="Import Employees"
@@ -730,5 +731,6 @@ export function EmployeeImportDrawer({
         void runClearAll();
       }}
     />
+    </>
   );
 }

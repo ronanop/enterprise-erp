@@ -762,7 +762,7 @@ export function filterAttendanceRecords(
   });
 }
 
-export type AttendanceStatBucket = "present" | "absent" | "late" | "missing";
+export type AttendanceStatBucket = "present" | "absent" | "late" | "half_day";
 
 /** Counted as present for today's dashboard (punched / on site). */
 const PRESENT_LIKE_STATUSES = new Set([
@@ -798,8 +798,8 @@ export function matchesAttendanceStatBucket(
       return record.status === "absent";
     case "late":
       return record.status === "late" || record.extension.isLate;
-    case "missing":
-      return record.status === "missed_punch" || record.extension.missedPunch;
+    case "half_day":
+      return record.status === "half_day";
     default: {
       const _exhaustive: never = bucket;
       return _exhaustive;
@@ -912,13 +912,13 @@ export function computeDashboardStats(
 ): Record<AttendanceStatBucket, number> {
   const present = records.filter((r) => matchesAttendanceStatBucket(r, "present", date)).length;
   const late = records.filter((r) => matchesAttendanceStatBucket(r, "late", date)).length;
-  const missing = records.filter((r) => matchesAttendanceStatBucket(r, "missing", date)).length;
+  const half_day = records.filter((r) => matchesAttendanceStatBucket(r, "half_day", date)).length;
   const roster = rosterMatchingFilters(expectedEmployees, filters);
   const absent =
     roster.length > 0
       ? roster.filter((e) => !employeeIdsPresentOrExcused(records, date).has(e.id)).length
       : records.filter((r) => matchesAttendanceStatBucket(r, "absent", date)).length;
-  return { present, absent, late, missing };
+  return { present, absent, late, half_day };
 }
 
 export async function markAttendance(payload: MarkAttendancePayload): Promise<void> {

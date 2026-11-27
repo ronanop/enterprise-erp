@@ -55,7 +55,6 @@ import {
 } from "@/services/attendance-management-service";
 import type {
   AttendanceFilters,
-  AttendancePunch,
   AttendanceRecord,
   AttendanceStatusCode,
 } from "@/types/attendance-management";
@@ -68,16 +67,18 @@ type ViewMode = "table" | "employee" | "calendar" | "leave-adjust";
 const STAT_CARDS: { key: AttendanceStatBucket; label: string }[] = [
   { key: "present", label: "Today's Present" },
   { key: "absent", label: "Today's Absent" },
-  { key: "missing", label: "Missing Punches" },
+  { key: "half_day", label: "Half Day" },
   { key: "late", label: "Late Arrivals" },
 ];
 
 const STAT_LABELS: Record<AttendanceStatBucket, string> = {
   present: "Today's Present",
   absent: "Today's Absent",
-  missing: "Missing Punches",
+  half_day: "Half Day",
   late: "Late Arrivals",
 };
+
+const STAT_BUCKET_KEYS = new Set<string>(["present", "absent", "half_day", "late"]);
 
 function viewFromTab(tab: string | null): ViewMode {
   if (tab === "employee" || tab === "calendar" || tab === "leave-adjust") return tab;
@@ -113,19 +114,14 @@ export function AttendanceManagementPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [view, setView] = useState<ViewMode>(() => viewFromTab(tabParam));
   const [statsBucket, setStatsBucket] = useState<AttendanceStatBucket | null>(() => {
-    const allowed = new Set(["present", "absent", "missing", "late"]);
-    return statsParam && allowed.has(statsParam)
+    return statsParam && STAT_BUCKET_KEYS.has(statsParam)
       ? (statsParam as AttendanceStatBucket)
       : null;
   });
   const [correctionRecord, setCorrectionRecord] = useState<AttendanceRecord | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
   const [dayDetail, setDayDetail] = useState<{ date: string; rows: AttendanceRecord[] } | null>(null);
-  const [punchesPopup, setPunchesPopup] = useState<{
-    name: string;
-    code: string;
-    punches: AttendancePunch[];
-  } | null>(null);
+  const [detailRecord, setDetailRecord] = useState<AttendanceRecord | null>(null);
   const [confirm, setConfirm] = useState<{ title: string; message: string; action: () => Promise<void> } | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
   /** Refresh open-day hours (first punch → now) once a minute. */
@@ -197,8 +193,7 @@ export function AttendanceManagementPage() {
   }, [tabParam]);
 
   useEffect(() => {
-    const allowed = new Set(["present", "absent", "missing", "late"]);
-    if (statsParam && allowed.has(statsParam)) {
+    if (statsParam && STAT_BUCKET_KEYS.has(statsParam)) {
       setStatsBucket(statsParam as AttendanceStatBucket);
       setFilters((f) => ({
         ...f,
@@ -709,7 +704,7 @@ export function AttendanceManagementPage() {
                 ) : (
                   <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
                       <div className="erp-scroll min-h-0 flex-1 overflow-auto">
-                        <table className="w-full min-w-[960px] text-left text-sm">
+                        <table className="w-full min-w-[780px] text-left text-sm">
                           <thead className="sticky top-0 z-10 border-b border-border/70 bg-muted/90 backdrop-blur-sm">
                             <tr>
                               <th className="w-8 px-2 py-2">
@@ -733,8 +728,6 @@ export function AttendanceManagementPage() {
                                 "Punches",
                                 "Hours",
                                 "Status",
-                                "Location",
-                                "Device",
                                 "",
                               ].map((h) => (
                                 <th
@@ -760,9 +753,22 @@ export function AttendanceManagementPage() {
                               return (
                               <tr
                                 key={row.id}
-                                className="border-b border-border/50 transition-colors duration-200 hover:bg-muted/30"
+                                role="button"
+                                tabIndex={0}
+                                className="cursor-pointer border-b border-border/50 transition-colors duration-200 hover:bg-muted/30 focus-visible:bg-muted/40 focus-visible:outline-none"
+                                onClick={() => setDetailRecord(row)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" || e.key === " ") {
+                                    e.preventDefault();
+                                    setDetailRecord(row);
+                                  }
+                                }}
                               >
-                                <td className="px-2 py-2">
+                                <td
+                                  className="px-2 py-2"
+                                  onClick={(e) => e.stopPropagation()}
+                                  onKeyDown={(e) => e.stopPropagation()}
+                                >
                                   <input
                                     type="checkbox"
                                     className="cursor-pointer disabled:cursor-not-allowed"
@@ -810,34 +816,16 @@ export function AttendanceManagementPage() {
                                   {!punchTimes.length ? (
                                     <span className="text-muted-foreground">—</span>
                                   ) : punchTimes.length === 1 ? (
-                                    <span
-                                      title={[
-                                        punchTimes[0].deviceName || punchTimes[0].deviceCode,
-                                        punchTimes[0].deviceLocation,
-                                      ]
-                                        .filter(Boolean)
-                                        .join(" · ")}
-                                      className="inline-flex rounded-md border border-border/70 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-foreground"
-                                    >
+                                    <span className="inline-flex rounded-md border border-border/70 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-foreground">
                                       {formatTime(punchTimes[0].punchedAt)}
                                     </span>
                                   ) : (
-                                    <button
-                                      type="button"
-                                      className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-border/70 bg-background px-2 text-[11px] font-medium text-primary transition-colors duration-200 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                                      onClick={() =>
-                                        setPunchesPopup({
-                                          name: toTitleCase(row.extension.employeeName),
-                                          code: row.extension.employeeCode,
-                                          punches: punchTimes,
-                                        })
-                                      }
-                                    >
+                                    <span className="inline-flex h-7 items-center gap-1 rounded-md border border-border/70 bg-background px-2 text-[11px] font-medium text-primary">
                                       View
                                       <span className="rounded bg-muted px-1 py-px text-[10px] tabular-nums text-muted-foreground">
                                         {punchTimes.length}
                                       </span>
-                                    </button>
+                                    </span>
                                   )}
                                 </td>
                                 <td className="px-2 py-2 text-xs tabular-nums">
@@ -861,11 +849,11 @@ export function AttendanceManagementPage() {
                                     {toTitleCase(row.status)}
                                   </span>
                                 </td>
-                                <td className="px-2 py-2 text-xs">
-                                  {row.location ? toTitleCase(row.location) : "—"}
-                                </td>
-                                <td className="px-2 py-2 text-xs">{toTitleCase(row.device) || "—"}</td>
-                                <td className="px-2 py-2">
+                                <td
+                                  className="px-2 py-2"
+                                  onClick={(e) => e.stopPropagation()}
+                                  onKeyDown={(e) => e.stopPropagation()}
+                                >
                                   <Button
                                     type="button"
                                     variant="outline"
@@ -924,24 +912,26 @@ export function AttendanceManagementPage() {
         }}
       />
 
-      {punchesPopup ? (
+      {detailRecord ? (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="dialog" aria-modal="true">
           <button
             type="button"
             className="absolute inset-0 cursor-pointer bg-slate-950/40"
-            aria-label="Close punches"
-            onClick={() => setPunchesPopup(null)}
+            aria-label="Close attendance details"
+            onClick={() => setDetailRecord(null)}
           />
-          <div className="relative z-10 w-full max-w-sm rounded-2xl border border-border bg-card p-4 shadow-lg">
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-card p-4 shadow-lg">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h3 className="truncate text-sm font-semibold tracking-tight">
-                  {punchesPopup.name || "Employee"}
+                  Attendance details
                 </h3>
-                <p className="font-mono text-[10px] text-muted-foreground">{punchesPopup.code}</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  {punchesPopup.punches.length} punch
-                  {punchesPopup.punches.length === 1 ? "" : "es"}
+                <p className="mt-0.5 truncate text-sm font-medium">
+                  {toTitleCase(detailRecord.extension.employeeName) || "Employee"}
+                </p>
+                <p className="font-mono text-[10px] text-muted-foreground">
+                  {detailRecord.extension.employeeCode}
+                  {detailRecord.attendanceDate ? ` · ${detailRecord.attendanceDate}` : ""}
                 </p>
               </div>
               <Button
@@ -949,32 +939,96 @@ export function AttendanceManagementPage() {
                 variant="outline"
                 size="sm"
                 className="h-7 shrink-0 cursor-pointer transition-colors duration-200"
-                onClick={() => setPunchesPopup(null)}
+                onClick={() => setDetailRecord(null)}
               >
                 Close
               </Button>
             </div>
-            <ul className="mt-3 max-h-64 space-y-1.5 overflow-y-auto">
-              {punchesPopup.punches.map((p, index) => (
-                <li
-                  key={p.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-border/70 bg-muted/30 px-3 py-2"
+
+            <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded-lg border border-border/70 bg-muted/20 px-2.5 py-2">
+                <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Status</dt>
+                <dd className="mt-0.5 font-medium">{toTitleCase(detailRecord.status)}</dd>
+              </div>
+              <div className="rounded-lg border border-border/70 bg-muted/20 px-2.5 py-2">
+                <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Hours</dt>
+                <dd className="mt-0.5 font-medium tabular-nums">
+                  {formatHoursMinutes(detailRecord.workingHours)}
+                </dd>
+              </div>
+              <div className="rounded-lg border border-border/70 bg-muted/20 px-2.5 py-2">
+                <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Location</dt>
+                <dd className="mt-0.5 font-medium">
+                  {detailRecord.location ? toTitleCase(detailRecord.location) : "—"}
+                </dd>
+              </div>
+              <div className="rounded-lg border border-border/70 bg-muted/20 px-2.5 py-2">
+                <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Device</dt>
+                <dd className="mt-0.5 font-medium">
+                  {toTitleCase(detailRecord.device) || "—"}
+                </dd>
+              </div>
+              <div className="rounded-lg border border-border/70 bg-muted/20 px-2.5 py-2">
+                <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Department</dt>
+                <dd className="mt-0.5 font-medium">
+                  {toTitleCase(detailRecord.extension.departmentName) || "—"}
+                </dd>
+              </div>
+              <div className="rounded-lg border border-border/70 bg-muted/20 px-2.5 py-2">
+                <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Shift</dt>
+                <dd className="mt-0.5 font-medium">
+                  {toTitleCase(detailRecord.extension.shiftName) || "—"}
+                </dd>
+              </div>
+            </dl>
+
+            <div className="mt-3">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Punches ({(detailRecord.punches ?? []).length})
+              </p>
+              {(detailRecord.punches ?? []).length === 0 ? (
+                <p className="mt-2 text-xs text-muted-foreground">No punches recorded.</p>
+              ) : (
+                <ul className="mt-2 max-h-56 space-y-1.5 overflow-y-auto">
+                  {(detailRecord.punches ?? []).map((p, index) => (
+                    <li
+                      key={p.id}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-border/70 bg-muted/30 px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-mono text-xs tabular-nums text-foreground">
+                          {formatTime(p.punchedAt)}
+                        </p>
+                        <p className="truncate text-[10px] text-muted-foreground">
+                          {[p.deviceName || p.deviceCode, p.deviceLocation].filter(Boolean).join(" · ") ||
+                            `Punch ${index + 1}`}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-md bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                        #{index + 1}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {detailRecord.recordStatus !== "implied" ? (
+              <div className="mt-4 flex justify-end">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="cursor-pointer transition-colors duration-200"
+                  onClick={() => {
+                    setCorrectionRecord(detailRecord);
+                    setDetailRecord(null);
+                  }}
                 >
-                  <div className="min-w-0">
-                    <p className="font-mono text-xs tabular-nums text-foreground">
-                      {formatTime(p.punchedAt)}
-                    </p>
-                    <p className="truncate text-[10px] text-muted-foreground">
-                      {[p.deviceName || p.deviceCode, p.deviceLocation].filter(Boolean).join(" · ") ||
-                        `Punch ${index + 1}`}
-                    </p>
-                  </div>
-                  <span className="shrink-0 rounded-md bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                    #{index + 1}
-                  </span>
-                </li>
-              ))}
-            </ul>
+                  <Pencil className="size-3.5" />
+                  Correct
+                </Button>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
