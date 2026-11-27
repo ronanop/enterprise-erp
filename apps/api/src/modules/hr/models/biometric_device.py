@@ -1,8 +1,9 @@
 """Biometric device registry ORM."""
 
+from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, Integer, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,6 +19,10 @@ class HrBiometricDevice(Base, *HrDetailMixin):
         CheckConstraint(
             "device_model IN ('fingerprint_k40_timelabs', 'fingerprint_k40_zkteco_pro')",
             name="ck_hr_bio_device_model",
+        ),
+        CheckConstraint(
+            "sync_mode IN ('pull','adms','both')",
+            name="ck_hr_bio_device_sync_mode",
         ),
         {"schema": "hr"},
     )
@@ -35,4 +40,10 @@ class HrBiometricDevice(Base, *HrDetailMixin):
     comm_password: Mapped[str | None] = mapped_column(String(8), nullable=True)
     location_text: Mapped[str | None] = mapped_column(String(255), nullable=True)
     api_key_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # ZK serial for ADMS push (device → HRMS). Unique when set.
+    serial_number: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # pull = LAN/TCP only; adms = cloud push only; both = either path
+    sync_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="pull")
+    last_adms_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    adms_stamp: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="active", index=True)

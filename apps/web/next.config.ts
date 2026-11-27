@@ -46,6 +46,11 @@ const nextConfig: NextConfig = {
         source: "/api/v1/:path*",
         destination: `${apiInternalUrl}/api/v1/:path*`,
       },
+      // ZKTeco ADMS / iClock (device Cloud Server = same origin as HRMS UI)
+      {
+        source: "/iclock/:path*",
+        destination: `${apiInternalUrl}/iclock/:path*`,
+      },
     ];
   },
   async headers() {

@@ -1346,6 +1346,8 @@ class BiometricDeviceCreate(BaseModel):
     gateway: str | None = None
     comm_password: str | None = None
     location_text: str | None = None
+    serial_number: str | None = None
+    sync_mode: str = "pull"  # pull | adms | both
     status: str = "active"
     generate_api_key: bool = True
 
@@ -1361,6 +1363,8 @@ class BiometricDeviceUpdate(BaseModel):
     gateway: str | None = None
     comm_password: str | None = None
     location_text: str | None = None
+    serial_number: str | None = None
+    sync_mode: str | None = None
     status: str | None = None
     version: int | None = None
 
@@ -1378,11 +1382,24 @@ class BiometricDeviceResponse(OrmModel):
     gateway: str | None = None
     comm_password: str | None = None
     location_text: str | None = None
+    serial_number: str | None = None
+    sync_mode: str = "pull"
+    last_adms_at: datetime | None = None
+    adms_stamp: str | None = None
     status: str
     version: int
     api_key: str | None = None
     # Live TCP reachability when list/ping includes a probe.
     reachable: bool | None = None
+
+
+class AdmsSetupInfo(BaseModel):
+    """Copied onto the ZK Cloud/ADMS server field when HRMS is public."""
+
+    enabled: bool = True
+    server_url: str
+    path_hint: str = "/iclock"
+    instructions: list[str] = []
 
 
 class BiometricDevicePingResponse(BaseModel):

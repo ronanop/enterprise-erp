@@ -59,9 +59,34 @@ class CompoffRequestRepository(HrScopedRepository):
         return row
 
 
+_ENSURE_BIO_DEVICE_ADMS_SQL = """
+ALTER TABLE hr.hr_biometric_device
+    ADD COLUMN IF NOT EXISTS serial_number VARCHAR(64) NULL;
+ALTER TABLE hr.hr_biometric_device
+    ADD COLUMN IF NOT EXISTS sync_mode VARCHAR(20) NOT NULL DEFAULT 'pull';
+ALTER TABLE hr.hr_biometric_device
+    ADD COLUMN IF NOT EXISTS last_adms_at TIMESTAMPTZ NULL;
+ALTER TABLE hr.hr_biometric_device
+    ADD COLUMN IF NOT EXISTS adms_stamp VARCHAR(64) NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uk_hr_bio_device_serial
+    ON hr.hr_biometric_device (serial_number)
+    WHERE serial_number IS NOT NULL AND is_deleted = false;
+"""
+
+
 class BiometricDeviceRepository(HrScopedRepository):
     def __init__(self, db: Session) -> None:
         super().__init__(db)
+        self._adms_ensured = False
+
+    def ensure_adms_columns(self) -> None:
+        if self._adms_ensured:
+            return
+        from sqlalchemy import text
+
+        self.db.execute(text(_ENSURE_BIO_DEVICE_ADMS_SQL))
+        self.db.commit()
+        self._adms_ensured = True
 
     def get(self, ctx: TenantContext, row_id: UUID) -> HrBiometricDevice | None:
         stmt = select(HrBiometricDevice).where(
@@ -88,6 +113,20 @@ class BiometricDeviceRepository(HrScopedRepository):
         )
         stmt = self.apply_hr_filter(stmt, HrBiometricDevice, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
+
+    def get_by_serial(self, serial_number: str) -> HrBiometricDevice | None:
+        """ADMS lookup — device identifies itself by ZK serial (no JWT)."""
+        self.ensure_adms_columns()
+        sn = (serial_number or "").strip().upper()
+        if not sn:
+            return None
+        return self.db.scalar(
+            select(HrBiometricDevice).where(
+                func.upper(HrBiometricDevice.serial_number) == sn,
+                HrBiometricDevice.is_deleted.is_(False),
+                HrBiometricDevice.status == "active",
+            )
+        )
 
     def get_by_code_including_deleted(
         self, ctx: TenantContext, company_id: UUID, device_code: str

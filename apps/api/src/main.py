@@ -64,6 +64,12 @@ def create_app() -> FastAPI:
     register_exception_handlers(application)
     application.include_router(api_v1_router, prefix=API_V1_PREFIX)
 
+    # ZKTeco ADMS / iClock — devices POST to {CloudServer}/iclock/cdata (no JWT).
+    from modules.hr.routers.adms import adms_router
+
+    application.include_router(adms_router, prefix="/iclock")
+    application.include_router(adms_router, prefix=f"{API_V1_PREFIX}/iclock")
+
     return application
 
 

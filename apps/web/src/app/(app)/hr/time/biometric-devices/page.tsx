@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
+  Copy,
   Download,
   Loader2,
   Pencil,
@@ -52,6 +53,8 @@ const DEVICE_MODELS = [
   },
 ] as const;
 
+type SyncMode = "pull" | "adms" | "both";
+
 type Device = {
   id: string;
   device_code: string;
@@ -63,10 +66,20 @@ type Device = {
   gateway?: string | null;
   comm_password?: string | null;
   location_text?: string | null;
+  serial_number?: string | null;
+  sync_mode?: SyncMode | string | null;
+  last_adms_at?: string | null;
   status: string;
   branch_id: string;
   /** Live TCP probe from list API (Active / Inactive column). */
   reachable?: boolean | null;
+};
+
+type AdmsSetup = {
+  enabled: boolean;
+  server_url: string;
+  path_hint: string;
+  instructions: string[];
 };
 
 type Option = { id: string; label: string };
@@ -179,6 +192,9 @@ export default function BiometricDevicesPage() {
   const [gateway, setGateway] = useState("0.0.0.0");
   const [commPassword, setCommPassword] = useState("0");
   const [location, setLocation] = useState("");
+  const [serialNumber, setSerialNumber] = useState("");
+  const [syncMode, setSyncMode] = useState<SyncMode>("pull");
+  const [admsSetup, setAdmsSetup] = useState<AdmsSetup | null>(null);
   const [createdApiKey, setCreatedApiKey] = useState<string | null>(null);
   const [feedDevice, setFeedDevice] = useState<Device | null>(null);
   const [feed, setFeed] = useState<LiveFeed | null>(null);
@@ -291,6 +307,21 @@ export default function BiometricDevicesPage() {
     setFeedError(null);
   }, []);
 
+  const loadAdmsSetup = useCallback(async () => {
+    try {
+      const origin =
+        typeof window !== "undefined" ? window.location.origin.replace(/\/+$/, "") : "";
+      const res = await apiClient<AdmsSetup>("/hr/biometric-devices/adms-setup", {
+        method: "GET",
+        query: origin ? { public_base_url: origin } : undefined,
+        timeoutMs: 10_000,
+      });
+      if (res.data) setAdmsSetup(res.data);
+    } catch {
+      /* optional panel */
+    }
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -303,12 +334,13 @@ export default function BiometricDevicesPage() {
       const list = (Array.isArray(res.data) ? res.data : []) as Device[];
       setRows(list);
       void refreshConnectionStatus(list);
+      void loadAdmsSetup();
     } catch {
       toast("Failed to load biometric devices", "error");
     } finally {
       setLoading(false);
     }
-  }, [refreshConnectionStatus]);
+  }, [refreshConnectionStatus, loadAdmsSetup]);
 
   // Re-check connectivity every minute while the page is open.
   useEffect(() => {
@@ -481,6 +513,8 @@ export default function BiometricDevicesPage() {
     setGateway("0.0.0.0");
     setCommPassword("0");
     setLocation("");
+    setSerialNumber("");
+    setSyncMode("pull");
     setCreatedApiKey(null);
     setOpen(true);
     void loadBranches();
@@ -498,6 +532,12 @@ export default function BiometricDevicesPage() {
     setGateway(device.gateway ?? "0.0.0.0");
     setCommPassword(device.comm_password ?? "0");
     setLocation(device.location_text ?? "");
+    setSerialNumber(device.serial_number ?? "");
+    setSyncMode(
+      device.sync_mode === "adms" || device.sync_mode === "both" || device.sync_mode === "pull"
+        ? device.sync_mode
+        : "pull",
+    );
     setCreatedApiKey(null);
     setOpen(true);
     void loadBranches();
@@ -541,7 +581,10 @@ export default function BiometricDevicesPage() {
     const code = deviceCode.trim();
     const name = deviceName.trim();
     const ip = ipAddress.trim();
+    const serial = serialNumber.trim().toUpperCase();
     const portNum = Number(port);
+    const needsPull = syncMode === "pull" || syncMode === "both";
+    const needsAdms = syncMode === "adms" || syncMode === "both";
     if (!branchId) {
       toast("Select a branch", "error");
       return;
@@ -550,12 +593,16 @@ export default function BiometricDevicesPage() {
       toast("Device code and name are required", "error");
       return;
     }
-    if (!ip) {
-      toast("IP address is required", "error");
+    if (needsPull && !ip) {
+      toast("IP address is required for pull / both", "error");
       return;
     }
-    if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+    if (needsPull && (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535)) {
       toast("Enter a valid port (1-65535)", "error");
+      return;
+    }
+    if (needsAdms && !serial) {
+      toast("Serial number is required for ADMS / both", "error");
       return;
     }
     const mask = subnetMask.trim();
@@ -581,12 +628,14 @@ export default function BiometricDevicesPage() {
         device_code: code,
         device_name: name,
         device_model: deviceModel,
-        ip_address: ip,
-        port: portNum,
+        ip_address: ip || null,
+        port: needsPull ? portNum : portNum || null,
         subnet_mask: mask || null,
         gateway: gw || null,
         comm_password: comm || "0",
         location_text: location.trim() || null,
+        serial_number: serial || null,
+        sync_mode: syncMode,
         status: "active" as const,
       };
 
@@ -628,7 +677,7 @@ export default function BiometricDevicesPage() {
       <SetupToastHost />
       <PageHeader
         title="Biometric devices"
-        description="Register a ZKTeco K40 Pro with IP, port, and Comm password. A background worker pulls punches from all active machines; Live feed shows previous + new punches from ERP and refreshes every minute."
+        description="Use Pull (LAN IP:port) and/or ADMS push (serial → public HRMS). Delhi can stay on Pull; Mumbai can use ADMS when HRMS is on a public IP."
         actions={
           <div className="flex gap-2">
             <Button
@@ -646,7 +695,15 @@ export default function BiometricDevicesPage() {
               variant="outline"
               className="cursor-pointer transition-colors duration-200"
               onClick={() => void fetchAllActive()}
-              disabled={!!downloadingId || !rows.some((r) => r.status === "active" && r.ip_address)}
+              disabled={
+                !!downloadingId ||
+                !rows.some(
+                  (r) =>
+                    r.status === "active" &&
+                    r.ip_address &&
+                    (r.sync_mode === "pull" || r.sync_mode === "both" || !r.sync_mode),
+                )
+              }
             >
               <Download className="size-3.5" />
               {downloadingId ? "Fetching…" : "Fetch punches"}
@@ -663,6 +720,41 @@ export default function BiometricDevicesPage() {
         }
       />
 
+      {admsSetup ? (
+        <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-foreground">ADMS cloud setup</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                On the ZK machine set Cloud / ADMS Server to this URL. Register the device with
+                sync mode ADMS or Both and its serial number.
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 cursor-pointer gap-1.5 transition-colors duration-200"
+              onClick={() => {
+                void navigator.clipboard.writeText(admsSetup.server_url);
+                toast("ADMS server URL copied");
+              }}
+            >
+              <Copy className="size-3.5" />
+              Copy server URL
+            </Button>
+          </div>
+          <pre className="mt-3 overflow-x-auto rounded-md border border-border/70 bg-muted/40 px-3 py-2 font-mono text-xs text-foreground">
+            {admsSetup.server_url}
+          </pre>
+          <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+            {admsSetup.instructions.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <section className="overflow-hidden rounded-lg border border-border bg-card">
         {!rows.length ? (
           <p className="p-4 text-sm text-muted-foreground">No biometric devices registered</p>
@@ -674,8 +766,9 @@ export default function BiometricDevicesPage() {
                   <th className="px-3 py-2 font-medium">Code</th>
                   <th className="px-3 py-2 font-medium">Model</th>
                   <th className="px-3 py-2 font-medium">Name</th>
+                  <th className="px-3 py-2 font-medium">Sync</th>
                   <th className="px-3 py-2 font-medium">IP / Port</th>
-                  <th className="px-3 py-2 font-medium">Subnet / Gateway</th>
+                  <th className="px-3 py-2 font-medium">Serial</th>
                   <th className="px-3 py-2 font-medium">Location</th>
                   <th className="px-3 py-2 font-medium">Status</th>
                   <th className="sticky right-0 z-10 bg-muted px-3 py-2 text-right font-medium shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.2)]">
@@ -693,12 +786,14 @@ export default function BiometricDevicesPage() {
                     <td className="px-3 py-2 font-medium">{r.device_code}</td>
                     <td className="px-3 py-2 text-muted-foreground">{modelLabel(r.device_model)}</td>
                     <td className="px-3 py-2">{r.device_name}</td>
-                    <td className="px-3 py-2 font-mono text-xs">
-                      {r.ip_address ? `${r.ip_address}:${r.port ?? "-"}` : "-"}
+                    <td className="px-3 py-2 text-xs uppercase tracking-wide text-muted-foreground">
+                      {r.sync_mode || "pull"}
                     </td>
-                    <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
-                      {r.subnet_mask || "-"}
-                      <span className="mt-0.5 block">{r.gateway || "-"}</span>
+                    <td className="px-3 py-2 font-mono text-xs">
+                      {r.ip_address ? `${r.ip_address}:${r.port ?? "-"}` : "—"}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground">
+                      {r.serial_number || "—"}
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">
                       {r.location_text?.trim() ? r.location_text : "—"}
@@ -1020,8 +1115,41 @@ export default function BiometricDevicesPage() {
                 placeholder="ZKTeco K40 Pro"
               />
             </SetupField>
+            <SetupField
+              label="Sync mode"
+              required
+              hint="Pull = LAN TCP. ADMS = device pushes to public HRMS. Both = either."
+            >
+              <SetupSelect
+                value={syncMode}
+                onChange={(e) => setSyncMode(e.target.value as SyncMode)}
+              >
+                <option value="pull">Pull (LAN IP)</option>
+                <option value="adms">ADMS (cloud push)</option>
+                <option value="both">Both</option>
+              </SetupSelect>
+            </SetupField>
+            {(syncMode === "adms" || syncMode === "both") && (
+              <SetupField
+                label="Serial number"
+                required
+                hint="From the ZK machine System / About menu (ADMS SN)."
+              >
+                <SetupInput
+                  value={serialNumber}
+                  onChange={(e) => setSerialNumber(e.target.value)}
+                  placeholder="e.g. CKJG241234567"
+                  autoComplete="off"
+                  className="font-mono text-xs uppercase"
+                />
+              </SetupField>
+            )}
             <div className="grid grid-cols-2 gap-3">
-              <SetupField label="IP address" required hint="Device LAN / WAN IP">
+              <SetupField
+                label="IP address"
+                required={syncMode !== "adms"}
+                hint="Device LAN / public IP (not needed for ADMS-only)"
+              >
                 <SetupInput
                   value={ipAddress}
                   onChange={(e) => setIpAddress(e.target.value)}
@@ -1030,7 +1158,11 @@ export default function BiometricDevicesPage() {
                   autoComplete="off"
                 />
               </SetupField>
-              <SetupField label="Port" required hint="Default ZK / TimeLabs 4370">
+              <SetupField
+                label="Port"
+                required={syncMode !== "adms"}
+                hint="Default ZK / TimeLabs 4370"
+              >
                 <SetupInput
                   value={port}
                   onChange={(e) => setPort(e.target.value)}

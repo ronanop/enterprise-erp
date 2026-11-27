@@ -578,8 +578,35 @@ class BiometricDeviceService:
         return None
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
+        self._repo.ensure_adms_columns()
         cid = self._scope.resolve_company_id(ctx, company_id)
         return self._repo.list_rows(ctx, cid)
+
+    @staticmethod
+    def _normalize_sync_mode(value: str | None) -> str:
+        mode = (value or "pull").strip().lower()
+        if mode not in {"pull", "adms", "both"}:
+            raise AppException("Sync mode must be pull, adms, or both")
+        return mode
+
+    @staticmethod
+    def _normalize_serial(value: str | None) -> str | None:
+        sn = (value or "").strip().upper()
+        return sn or None
+
+    def _validate_sync_requirements(
+        self,
+        *,
+        sync_mode: str,
+        ip_address: str | None,
+        port: int | None,
+        serial_number: str | None,
+    ) -> None:
+        if sync_mode in {"pull", "both"}:
+            if not ip_address or not port:
+                raise AppException("IP and port are required for pull / both sync modes")
+        if sync_mode in {"adms", "both"} and not serial_number:
+            raise AppException("Serial number is required for ADMS / both sync modes")
 
     def create(
         self,
@@ -596,10 +623,13 @@ class BiometricDeviceService:
         gateway: str | None = None,
         comm_password: str | None = None,
         location_text: str | None = None,
+        serial_number: str | None = None,
+        sync_mode: str = "pull",
         status: str = "active",
         generate_api_key: bool = True,
     ):
         # Module-wide HR admins resolve company_id as None — create must use branch.company_id.
+        self._repo.ensure_adms_columns()
         self._scope.validate_branch_access(ctx, branch_id)
         cid = self._scope.resolve_create_company_id(
             ctx, branch_id=branch_id, company_id=company_id
@@ -616,6 +646,18 @@ class BiometricDeviceService:
         subnet_clean = _clean_ipv4(subnet_mask, "Subnet mask")
         gateway_clean = _clean_ipv4(gateway, "Gateway")
         comm_clean = _clean_comm_password(comm_password)
+        mode = self._normalize_sync_mode(sync_mode)
+        serial = self._normalize_serial(serial_number)
+        ip_clean = ip_address.strip() if ip_address else None
+        self._validate_sync_requirements(
+            sync_mode=mode, ip_address=ip_clean, port=port, serial_number=serial
+        )
+        if serial:
+            clash = self._repo.get_by_serial(serial)
+            if clash is not None:
+                raise ConflictException(
+                    f"Serial '{serial}' is already registered on device {clash.device_code}"
+                )
 
         existing = self._repo.get_by_code_including_deleted(ctx, cid, code)
         if existing is not None and not getattr(existing, "is_deleted", False):
@@ -629,8 +671,6 @@ class BiometricDeviceService:
         if generate_api_key:
             plaintext = secrets.token_urlsafe(32)
             api_key_hash = hash_token(plaintext)
-
-        ip_clean = ip_address.strip() if ip_address else None
 
         # Soft-deleted row still holds the unique (company_id, device_code) — revive it.
         if existing is not None and getattr(existing, "is_deleted", False):
@@ -646,6 +686,8 @@ class BiometricDeviceService:
             existing.gateway = gateway_clean
             existing.comm_password = comm_clean
             existing.location_text = location_text
+            existing.serial_number = serial
+            existing.sync_mode = mode
             existing.status = status
             if api_key_hash is not None:
                 existing.api_key_hash = api_key_hash
@@ -666,6 +708,8 @@ class BiometricDeviceService:
             gateway=gateway_clean,
             comm_password=comm_clean,
             location_text=location_text,
+            serial_number=serial,
+            sync_mode=mode,
             status=status,
             api_key_hash=api_key_hash,
         )
@@ -727,6 +771,33 @@ class BiometricDeviceService:
             else:
                 fields["location_text"] = str(loc).strip()
 
+        if "sync_mode" in fields and fields["sync_mode"] is not None:
+            fields["sync_mode"] = self._normalize_sync_mode(fields["sync_mode"])
+        if "serial_number" in fields:
+            fields["serial_number"] = self._normalize_serial(fields["serial_number"])
+            serial = fields["serial_number"]
+            if serial:
+                clash = self._repo.get_by_serial(serial)
+                if clash is not None and clash.id != row_id:
+                    raise ConflictException(
+                        f"Serial '{serial}' is already registered on device {clash.device_code}"
+                    )
+
+        next_mode = fields.get("sync_mode", row.sync_mode if row else "pull")
+        next_ip = fields["ip_address"] if "ip_address" in fields else (row.ip_address if row else None)
+        next_port = fields["port"] if "port" in fields else (row.port if row else None)
+        next_serial = (
+            fields["serial_number"]
+            if "serial_number" in fields
+            else (row.serial_number if row else None)
+        )
+        self._validate_sync_requirements(
+            sync_mode=self._normalize_sync_mode(str(next_mode or "pull")),
+            ip_address=str(next_ip).strip() if next_ip else None,
+            port=int(next_port) if next_port is not None else None,
+            serial_number=str(next_serial).strip().upper() if next_serial else None,
+        )
+
         updated = self._repo.update(ctx, row_id, **fields)
         if updated is None:
             raise NotFoundException("Biometric device not found")
@@ -753,12 +824,21 @@ class BiometricDeviceService:
     def download_logs(self, ctx: TenantContext, row_id: UUID) -> dict:
         """Pull attendance from the K40 over TCP and store it as biometric attendance."""
         device = self.get(ctx, row_id)
+        mode = str(getattr(device, "sync_mode", None) or "pull").lower()
+        if mode == "adms":
+            raise AppException(
+                "This device is ADMS-only. Punches arrive when the machine pushes to "
+                "the ADMS server URL — use Fetch only for pull / both modes."
+            )
         return self._fetch_punches_for_device(ctx, device)
 
     def _fetch_punches_for_device(self, ctx: TenantContext, device) -> dict:
         """TCP pull + ingest for one registered device row."""
         if device.status != "active":
             raise AppException("Biometric device is inactive")
+        mode = str(getattr(device, "sync_mode", None) or "pull").lower()
+        if mode == "adms":
+            raise AppException("ADMS-only device cannot be pulled over LAN")
         if ZK is None:
             raise AppException(
                 "Biometric ZK library (pyzk) is not installed on this API server. "
@@ -910,6 +990,8 @@ class BiometricDeviceService:
 
         from modules.hr.models.biometric_device import HrBiometricDevice
 
+        svc = cls(db)
+        svc._repo.ensure_adms_columns()
         devices = list(
             db.scalars(
                 select(HrBiometricDevice).where(
@@ -917,10 +999,10 @@ class BiometricDeviceService:
                     HrBiometricDevice.status == "active",
                     HrBiometricDevice.ip_address.is_not(None),
                     HrBiometricDevice.port.is_not(None),
+                    HrBiometricDevice.sync_mode.in_(("pull", "both")),
                 )
             ).all()
         )
-        svc = cls(db)
         system_user = uuid4()
         summary = {
             "devices": len(devices),
@@ -1322,3 +1404,154 @@ class BiometricDeviceService:
             **create_fields,
         )
         return "created"
+
+    def adms_setup_info(self, public_base_url: str | None = None) -> dict:
+        """URL + instructions for ZK Cloud/ADMS server field."""
+        from core.config import settings
+
+        base = (public_base_url or settings.frontend_url or "").rstrip("/")
+        # Devices hit the API host; prefer FRONTEND when same-origin, else API root.
+        # ZK appends /iclock/cdata itself when Cloud Server = http://host[:port]
+        server = base
+        return {
+            "enabled": True,
+            "server_url": server,
+            "path_hint": "/iclock",
+            "instructions": [
+                "Register the device with Sync mode = ADMS or Both and enter its Serial Number.",
+                f"On the ZK machine: Comm → Cloud / ADMS → Server address = {server}",
+                "Leave Cloud server path as /iclock (default). Port must reach this HRMS API.",
+                "Delhi LAN devices can stay on Pull; Mumbai remote devices use ADMS push.",
+            ],
+        }
+
+    def resolve_adms_device(self, serial_number: str):
+        self._repo.ensure_adms_columns()
+        device = self._repo.get_by_serial(serial_number)
+        if device is None:
+            return None
+        mode = str(getattr(device, "sync_mode", None) or "pull").lower()
+        if mode not in {"adms", "both"}:
+            return None
+        return device
+
+    def adms_handshake(self, serial_number: str) -> str:
+        """ZK GET /iclock/cdata?options=all — return option block."""
+        device = self.resolve_adms_device(serial_number)
+        sn = (serial_number or "").strip().upper() or "UNKNOWN"
+        if device is None:
+            # Still acknowledge so device retries; do not ingest until registered.
+            return (
+                f"GET OPTION FROM: {sn}\n"
+                "Stamp=0\nOpStamp=0\nErrorDelay=60\nDelay=30\n"
+                "TransTimes=00:00;14:05\nTransInterval=1\n"
+                "TransFlag=1111000000\nTimeZone=5.5\nRealtime=1\nEncrypt=0\n"
+            )
+        stamp = str(getattr(device, "adms_stamp", None) or "0")
+        return (
+            f"GET OPTION FROM: {sn}\n"
+            f"Stamp={stamp}\n"
+            f"OpStamp={stamp}\n"
+            "ErrorDelay=60\n"
+            "Delay=30\n"
+            "TransTimes=00:00;14:05\n"
+            "TransInterval=1\n"
+            "TransFlag=1111000000\n"
+            "TimeZone=5.5\n"
+            "Realtime=1\n"
+            "Encrypt=0\n"
+        )
+
+    def adms_getrequest(self, serial_number: str) -> str:
+        """ZK polls for commands — none queued yet."""
+        _ = self.resolve_adms_device(serial_number)
+        return "OK"
+
+    @staticmethod
+    def _parse_adms_attlog_line(line: str) -> tuple[str, datetime] | None:
+        raw = (line or "").strip()
+        if not raw:
+            return None
+        # Tab or multi-space separated: PIN TIME STATUS VERIFY ...
+        parts = re.split(r"[\t]+", raw) if "\t" in raw else raw.split()
+        if len(parts) < 2:
+            return None
+        pin = parts[0].strip()
+        # TIME may be "YYYY-MM-DD HH:MM:SS" (two tokens) or one ISO token
+        if len(parts) >= 3 and re.match(r"^\d{4}-\d{2}-\d{2}$", parts[1]):
+            time_raw = f"{parts[1]} {parts[2]}"
+        else:
+            time_raw = parts[1]
+        try:
+            stamped = datetime.fromisoformat(time_raw.replace("/", "-"))
+        except ValueError:
+            try:
+                stamped = datetime.strptime(time_raw, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                return None
+        if stamped.tzinfo is None:
+            stamped = stamped.replace(tzinfo=_DEVICE_LOCAL_TZ)
+        if not pin:
+            return None
+        return pin, stamped
+
+    def adms_ingest_attlog(
+        self,
+        *,
+        serial_number: str,
+        body: str,
+        stamp: str | None = None,
+    ) -> str:
+        """Ingest ATTLOG POST body; return ZK-style OK:N."""
+        from uuid import uuid4
+
+        from modules.hr.repository.base import utcnow
+
+        device = self.resolve_adms_device(serial_number)
+        if device is None:
+            return "OK:0"
+
+        punches: list[dict] = []
+        for line in (body or "").splitlines():
+            parsed = self._parse_adms_attlog_line(line)
+            if not parsed:
+                continue
+            pin, stamped = parsed
+            punches.append(
+                {
+                    "employee_code": pin.strip().upper(),
+                    "attendance_date": stamped.astimezone(_DEVICE_LOCAL_TZ).date(),
+                    "check_in_at": stamped,
+                    "check_out_at": None,
+                    "punch_events": [stamped],
+                    "notes": f"adms:{device.device_code}",
+                }
+            )
+
+        ctx = TenantContext(
+            tenant_id=device.tenant_id,
+            user_id=uuid4(),
+            user_type="system",
+            company_id=device.company_id,
+            branch_id=device.branch_id,
+            tenant_wide=True,
+            all_companies=True,
+        )
+        if punches:
+            self.device_sync(
+                ctx,
+                punches=punches,
+                device_code=device.device_code,
+                company_id=device.company_id,
+                device_id=device.id,
+                branch_id=device.branch_id,
+            )
+
+        device.last_adms_at = utcnow()
+        if stamp:
+            device.adms_stamp = str(stamp)[:64]
+        elif punches:
+            device.adms_stamp = str(int(datetime.now(timezone.utc).timestamp()))
+        self._db.flush()
+        self._db.commit()
+        return f"OK:{len(punches)}"

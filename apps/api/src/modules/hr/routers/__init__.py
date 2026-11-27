@@ -1456,6 +1456,20 @@ def biometric_devices_connectivity(
     )
 
 
+@biometric_devices_router.get("/adms-setup", response_model=APIResponse[dict])
+def biometric_adms_setup(
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.attendance:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    public_base_url: str | None = None,
+):
+    """ADMS Cloud Server URL + setup instructions (pull + ADMS can both be used)."""
+    _ = ctx
+    return APIResponse(
+        message="OK",
+        data=BiometricDeviceService(db).adms_setup_info(public_base_url),
+    )
+
+
 @biometric_devices_router.post("", response_model=APIResponse[BiometricDeviceResponse])
 def create_biometric_device(
     body: BiometricDeviceCreate,
