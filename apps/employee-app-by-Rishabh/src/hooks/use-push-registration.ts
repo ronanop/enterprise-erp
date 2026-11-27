@@ -67,7 +67,9 @@ export function usePushRegistration(enabled: boolean) {
       }
       if (finalStatus !== "granted") return;
 
-      const tokenData = await Notifications.getExpoPushTokenAsync();
+      // Must match app.json → expo.extra.eas.projectId (EAS / Expo push).
+      const projectId = "29a70c4a-fdf9-4483-b0cf-7ac1716d022d";
+      const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
       await essService.registerDeviceToken({
         token: tokenData.data,
         platform: Platform.OS === "ios" ? "ios" : "android",

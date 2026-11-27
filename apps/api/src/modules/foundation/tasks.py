@@ -10,6 +10,21 @@ from modules.foundation.service.engines.email_delivery_engine import EmailDelive
 from workers.celery_app import celery_app
 
 
+def _expo_ticket_failed(resp: dict | list | None) -> str | None:
+    """Return error message if Expo push ticket indicates failure."""
+    if resp is None:
+        return "empty_expo_response"
+    data = resp.get("data") if isinstance(resp, dict) else resp
+    tickets = data if isinstance(data, list) else [data] if isinstance(data, dict) else []
+    for ticket in tickets:
+        if not isinstance(ticket, dict):
+            continue
+        if ticket.get("status") == "error":
+            details = ticket.get("details") or {}
+            return str(ticket.get("message") or details.get("error") or "expo_push_error")
+    return None
+
+
 @celery_app.task(name="foundation.send_notification")
 def send_notification_task(
     event_id: str,
@@ -28,20 +43,76 @@ def send_notification_task(
             payload = event.payload_json if isinstance(event.payload_json, dict) else {}
             title = str(payload.get("title") or event.event_type or "Notification")
             body = str(payload.get("body") or "")
+            data = {k: v for k, v in payload.items() if k not in {"title", "body"}}
+            platform = push_platform or "web"
+
+            from modules.foundation.service.expo_push_client import (
+                is_expo_push_token,
+                send_expo_push,
+            )
             from modules.foundation.service.fcm_client import is_fcm_configured, send_fcm_push
 
-            if is_fcm_configured() and push_token:
+            # Employee app registers Expo tokens (iOS + Android EAS builds).
+            if push_token and is_expo_push_token(push_token):
+                try:
+                    expo_resp = send_expo_push(
+                        token=push_token,
+                        title=title,
+                        body=body,
+                        data=data,
+                        sound="default",
+                        priority="high",
+                        channel_id="ess-alerts",
+                    )
+                    ticket_error = _expo_ticket_failed(expo_resp)
+                    delivery.provider_response = json.dumps(
+                        {
+                            "provider": "expo",
+                            "platform": platform,
+                            "response": expo_resp,
+                        }
+                    )
+                    if ticket_error:
+                        delivery.status = "failed"
+                        delivery.delivered_at = None
+                        event.status = "failed"
+                        db.commit()
+                        return {
+                            "status": "failed",
+                            "event_id": event_id,
+                            "channel": "push",
+                            "error": ticket_error,
+                        }
+                except Exception as exc:
+                    delivery.provider_response = json.dumps(
+                        {
+                            "provider": "expo",
+                            "platform": platform,
+                            "error": str(exc),
+                        }
+                    )
+                    delivery.status = "failed"
+                    delivery.delivered_at = None
+                    event.status = "failed"
+                    db.commit()
+                    return {
+                        "status": "failed",
+                        "event_id": event_id,
+                        "channel": "push",
+                        "error": str(exc),
+                    }
+            elif is_fcm_configured() and push_token:
                 try:
                     fcm_resp = send_fcm_push(
                         token=push_token,
                         title=title,
                         body=body,
-                        data={k: v for k, v in payload.items() if k not in {"title", "body"}},
+                        data=data,
                     )
                     delivery.provider_response = json.dumps(
                         {
                             "provider": "fcm",
-                            "platform": push_platform or "web",
+                            "platform": platform,
                             "response": fcm_resp,
                         }
                     )
@@ -60,7 +131,7 @@ def send_notification_task(
                     delivery.provider_response = json.dumps(
                         {
                             "provider": "fcm",
-                            "platform": push_platform or "web",
+                            "platform": platform,
                             "error": str(exc),
                         }
                     )
@@ -78,9 +149,11 @@ def send_notification_task(
                 delivery.provider_response = json.dumps(
                     {
                         "provider": "stub",
-                        "platform": push_platform or "web",
+                        "platform": platform,
                         "token_suffix": (push_token or "")[-8:],
-                        "message": "Push queued (FCM_SERVER_KEY not configured)",
+                        "message": (
+                            "Push queued (no Expo token and FCM_SERVER_KEY not configured)"
+                        ),
                     }
                 )
 

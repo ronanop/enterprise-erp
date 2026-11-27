@@ -194,8 +194,19 @@ class NotificationService:
                             tok.token,
                             tok.platform,
                         )
-                    except Exception:  # noqa: BLE001 - broker optional in local
-                        pass
+                    except Exception as exc:  # noqa: BLE001 - broker optional in local
+                        # Fall back to in-process send so locked-device push still works
+                        # when Redis/Celery broker is briefly unavailable.
+                        try:
+                            send_notification_task(
+                                str(event.id),
+                                str(push_delivery.id),
+                                tok.token,
+                                tok.platform,
+                            )
+                        except Exception:  # noqa: BLE001
+                            push_delivery.status = "failed"
+                            push_delivery.provider_response = str(exc)[:500]
             except Exception:  # noqa: BLE001 - push fan-out must not break primary send
                 pass
 
