@@ -14,12 +14,13 @@ import {
   ShoppingCart,
 } from "lucide-react";
 
-import { PageHeader } from "@/components/layout/page-header";
+import { FinanceSelect } from "@/components/finance/journals/finance-form-field";
 import {
   ProjectsErrorBanner,
   ProjectsListPanel,
   ProjectsListToolbar,
   ProjectsPage,
+  ProjectsPageHeader,
 } from "@/components/projects/projects-ui";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,7 @@ import { ApiClientError } from "@/services/api-client";
 import {
   createCloudProjectFromHandoff,
   formatDate,
+  listProjectManagementTeamOptions,
   listProjectPoQueue,
   type ProjectPoQueueItem,
 } from "@/services/projects-portal-service";
@@ -166,12 +168,17 @@ export function ProjectPoQueuePage() {
   const [rfaiOpen, setRfaiOpen] = useState(false);
   const [rfaiNumber, setRfaiNumber] = useState("");
   const [rfaiBusy, setRfaiBusy] = useState(false);
+  const [pmOptions, setPmOptions] = useState<Array<{ id: string; label: string }>>([]);
+  const [selectedPmId, setSelectedPmId] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const apiQueue = await listProjectPoQueue();
+      const [apiQueue, team] = await Promise.all([
+        listProjectPoQueue(),
+        listProjectManagementTeamOptions().catch(() => []),
+      ]);
       setRows(
         apiQueue
           .map((row) => ({
@@ -184,6 +191,7 @@ export function ProjectPoQueuePage() {
             ),
           ),
       );
+      setPmOptions(Array.isArray(team) ? team : []);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to load purchase orders");
       setRows([]);
@@ -218,10 +226,18 @@ export function ProjectPoQueuePage() {
   const createCloudProject = useCallback(
     async (cloud: CloudGroup, options?: { rfai_number?: string }) => {
       if (creatingCloudKey) return;
+      const pmId = selectedPmId.trim();
+      if (!pmId) {
+        setError("Select a project manager before creating the project.");
+        return;
+      }
       setCreatingCloudKey(cloud.key);
       setError(null);
       try {
-        const project = await createCloudProjectFromHandoff(cloud.createHandoffId, options);
+        const project = await createCloudProjectFromHandoff(cloud.createHandoffId, {
+          ...options,
+          project_manager_employee_id: pmId,
+        });
         router.push(`/projects/projects/${project.id}`);
       } catch (err) {
         setError(
@@ -233,7 +249,7 @@ export function ProjectPoQueuePage() {
         setRfaiBusy(false);
       }
     },
-    [creatingCloudKey, router],
+    [creatingCloudKey, router, selectedPmId],
   );
 
   const submitRfai = useCallback(async () => {
@@ -243,9 +259,13 @@ export function ProjectPoQueuePage() {
       setError("Enter an RFAI number before creating the project.");
       return;
     }
+    if (!selectedPmId.trim()) {
+      setError("Select a project manager before creating the project.");
+      return;
+    }
     setRfaiBusy(true);
     await createCloudProject(selectedCloud, { rfai_number: number });
-  }, [createCloudProject, rfaiNumber, selectedCloud]);
+  }, [createCloudProject, rfaiNumber, selectedCloud, selectedPmId]);
 
   const cloudActions = (cloud: CloudGroup) => {
     const busy = creatingCloudKey === cloud.key;
@@ -287,7 +307,7 @@ export function ProjectPoQueuePage() {
 
   return (
     <ProjectsPage>
-      <PageHeader
+      <ProjectsPageHeader
         title="PO Queue"
         description="One project per cloud. Open a cloud to see every PO, or create the project directly."
         actions={
@@ -317,6 +337,7 @@ export function ProjectPoQueuePage() {
                 setSelectedCloudKey(null);
                 setRfaiOpen(false);
                 setRfaiNumber("");
+                setSelectedPmId("");
               }}
             >
               Clouds
@@ -333,6 +354,7 @@ export function ProjectPoQueuePage() {
               setSelectedCloudKey(null);
               setRfaiOpen(false);
               setRfaiNumber("");
+              setSelectedPmId("");
             }}
           >
             <ArrowLeft className="size-3.5" aria-hidden />
@@ -410,6 +432,31 @@ export function ProjectPoQueuePage() {
               placeholder: "Filter PO, type, circle, site…",
             }}
           />
+          <div className="border-b border-border/70 bg-muted/20 px-3 py-3 sm:px-4">
+            <div className="flex max-w-md flex-col gap-1.5">
+              <label
+                htmlFor="cloud-project-manager"
+                className="text-xs font-medium text-foreground"
+              >
+                Project Manager
+              </label>
+              <FinanceSelect
+                id="cloud-project-manager"
+                value={selectedPmId}
+                className="h-8"
+                aria-label="Select project manager"
+                disabled={rfaiBusy || Boolean(creatingCloudKey)}
+                onChange={(event) => setSelectedPmId(event.target.value)}
+              >
+                <option value="">Select project manager…</option>
+                {pmOptions.map((pm) => (
+                  <option key={pm.id} value={pm.id}>
+                    {pm.label || pm.id}
+                  </option>
+                ))}
+              </FinanceSelect>
+            </div>
+          </div>
           {rfaiOpen ? (
             <div className="border-b border-border/70 bg-muted/20 px-3 py-3 sm:px-4">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end">

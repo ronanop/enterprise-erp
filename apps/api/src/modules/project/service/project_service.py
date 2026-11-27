@@ -306,10 +306,23 @@ class ProjectService:
                 site["circle"] = (prefill.entity_state or prefill.circle_name or "").strip() or None
             site_fields = site
         self._apply_intake_create_defaults(ctx, cid, branch_id, fields, site_fields)
+        from sqlalchemy.exc import IntegrityError
+
         doc = self._numbers.generate(PrjEntityType.PROJECT, cid, PrjProject, "project_code")
-        project = self._repo.create(
-            ctx, company_id=cid, branch_id=branch_id, project_code=doc, **fields
-        )
+        try:
+            project = self._repo.create(
+                ctx, company_id=cid, branch_id=branch_id, project_code=doc, **fields
+            )
+            self._db.flush()
+        except IntegrityError:
+            # Soft-deleted rows still hold project_code uniqueness — re-allocate once.
+            self._db.rollback()
+            doc = self._numbers.generate(
+                PrjEntityType.PROJECT, cid, PrjProject, "project_code"
+            )
+            project = self._repo.create(
+                ctx, company_id=cid, branch_id=branch_id, project_code=doc, **fields
+            )
         # Attach site installation workflow + seed WBS for every new project
         from modules.project.service.site_installation_service import SiteInstallationService
 

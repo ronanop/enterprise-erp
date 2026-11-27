@@ -50,7 +50,7 @@ const STAGE_META: Record<
   },
   material_handover: {
     title: "Material Handover",
-    description: "IM material, power-on material, and WH → site handover.",
+    description: "IM material and WH → site handover.",
     empty: "No sites in Material Handover.",
   },
   installation: {

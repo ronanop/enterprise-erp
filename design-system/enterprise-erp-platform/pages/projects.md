@@ -10,47 +10,52 @@
 
 ### Layout Overrides
 
-- **Structure:** App shell + projects workspace (page header → site KPIs → delivery pipeline → recent/attention panels)
+- **Structure:** App shell + projects workspace (page header → headline band → delivery flow → stage KPIs → charts → recent/attention)
 - **Max Width:** Full workspace (~1400px)
-- **Grid:** Dense KPI strip; stage funnel; site tables
+- **Grid:** Dense KPI strip; horizontal stage flow; site tables
 - **Do not** use portfolio marketing heroes, Archivo/Space Grotesk shouty type, or dark themes
 
 ### Spacing Overrides
 
-- **Content Density:** Very high (9/10) - KPI `p-3`, table rows ~36px, funnel gaps `8px`
+- **Content Density:** Very high (9/10) - KPI `p-3`, table rows ~36px, flow gaps `8px`
 
 ### Typography Overrides
 
-- Page title: medium weight ~1.5-1.65rem (Inter / system app font)
-- KPI values: tabular numerals ~1.5rem
-- Funnel labels: 11-12px uppercase tracking
+- Page title: medium weight ~1.5-1.65rem (Plus Jakarta Sans)
+- KPI / headline values: tabular numerals
+- Flow labels: 12px medium
 
 ### Color Overrides
 
 - Keep MASTER light shell
 - Pipeline stages: sky → teal → emerald → amber → slate
-- Status: completed green · draft/submitted/in_progress amber · cancelled/on_hold red
+- Status: completed green · need owner amber · cancelled/on_hold red
 - No purple gradients; no oversized display type
 
 ### Component Overrides
 
-- Dashboard focus: **site installation delivery** (not generic WBS / timesheets / budget burn)
-- KPI strip: total sites, in delivery, need owners, completed + stage queues
-- Secondary nav: Dashboard · Projects · All Sites · Delivery stages
-- Pipeline: Intake → Assign → Survey → SCM → Installation & Configuration → Acceptance → Completed
+- Dashboard focus: **site installation delivery** (PO Queue → Tracking)
+- Current flow: Intake → Survey → SCM → Onsite Delivery → Material Handover → Installation → Acceptance → Completed
+- Assignment is **not** a standalone stage — Survey owner from Project Tracking
+- Headline band: total sites, in delivery, need Survey owner, completed
+- Stage KPIs: Survey · SCM · Onsite Delivery · Material Handover · Installation · Acceptance
+- Quick tiles: PO Queue, Projects, All Sites, Need owners
 - Prefer Lucide; sticky headers; `overflow-x-auto` on wide tables
+- No muted section subtitles under Projects section titles
 
 ### Section Order
 
-1. Page header + actions (Refresh, New Site Request, All Sites)
-2. Headline band (total / in delivery / need owners / completed)
-3. Stage KPI cards (Survey, SCM, Installation, Acceptance)
-4. Delivery pipeline + delivery scope mix
-5. Recent sites + needs attention
-6. Quick stage tiles
+1. Page header + actions (PO Queue, Projects, Refresh)
+2. Headline band (total / in delivery / need Survey owner / completed)
+3. Delivery flow strip (clickable stage chips with counts)
+4. Stage KPI cards (6 active delivery steps)
+5. Quick tiles (PO Queue / Projects / All Sites / Need owners)
+6. Pipeline chart + delivery scope mix
+7. Recent sites + needs attention
 
 ### Avoid
 
+- Legacy “Assign owners” stage as a primary funnel step
 - Portfolio value / hours logged / timesheet approval as primary dashboard metrics
 - Task board / budget category as primary navigation from dashboard
 - Dark-mode-by-default

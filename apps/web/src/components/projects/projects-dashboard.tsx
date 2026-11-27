@@ -3,15 +3,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  ArrowUpRight,
   Building2,
   Cable,
+  Check,
   CheckCircle2,
   ClipboardCheck,
+  CloudUpload,
   MapPin,
   Package,
   PieChart,
   RefreshCw,
   Server,
+  ShoppingCart,
   Users,
 } from "lucide-react";
 
@@ -25,54 +29,76 @@ import {
   ProjectsActivityTile,
   ProjectsCountBarChart,
   ProjectsDonutChart,
+  ProjectsHeadlineBand,
+  ProjectsHeadlineStat,
   ProjectsIconBadge,
   ProjectsKpiCard,
   ProjectsListPanel,
   ProjectsPage,
+  ProjectsPageHeader,
   ProjectsSection,
   ProjectsViewAllLink,
   ProjectsWarnBanner,
 } from "@/components/projects/projects-ui";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
-import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { isAuthenticated } from "@/lib/auth";
+import { cn } from "@/lib/utils";
 import {
   formatDate,
+  listProjectPoQueue,
   loadProjectsOverview,
   type Project,
+  type ProjectPoQueueItem,
   type ProjectsOverview,
   type SiteInstallation,
 } from "@/services/projects-portal-service";
 
-/** Delivery workflow stages shown on the dashboard funnel. */
-const DELIVERY_STAGES = [
-  { key: "intake", label: "Intake & RFAI", href: "/projects/intake", icon: ClipboardCheck },
-  { key: "assignment", label: "Assign owners", href: "/projects/assignment", icon: Users },
-  { key: "survey", label: "Survey", href: "/projects/survey", icon: MapPin },
-  { key: "scm", label: "SCM / Logistics", href: "/projects/scm", icon: Package },
+/**
+ * Current delivery flow (Project Tracking / site workflow).
+ * Assignment is no longer a standalone stage — Survey owner is set from Tracking.
+ */
+const FLOW_STAGES = [
+  { key: "intake", label: "Intake", short: "Intake", href: "/projects/projects", icon: ClipboardCheck },
+  { key: "survey", label: "Survey", short: "Survey", href: "/projects/survey", icon: MapPin },
+  { key: "scm", label: "SCM / Logistics", short: "SCM", href: "/projects/scm", icon: Package },
   {
     key: "onsite_delivery",
     label: "Onsite Delivery",
+    short: "Onsite",
     href: "/projects/onsite_delivery",
-    icon: MapPin,
+    icon: CloudUpload,
   },
   {
     key: "material_handover",
     label: "Material Handover",
+    short: "Handover",
     href: "/projects/material_handover",
     icon: Package,
   },
   {
     key: "installation",
-    label: "Installation & Configuration",
+    label: "Installation",
+    short: "Install",
     href: "/projects/installation",
     icon: Server,
   },
-  { key: "acceptance", label: "Acceptance", href: "/projects/acceptance", icon: CheckCircle2 },
-  { key: "completed", label: "Completed", href: "/projects/completed", icon: CheckCircle2 },
+  {
+    key: "acceptance",
+    label: "Acceptance",
+    short: "Accept",
+    href: "/projects/acceptance",
+    icon: CheckCircle2,
+  },
+  {
+    key: "completed",
+    label: "Completed",
+    short: "Done",
+    href: "/projects/completed",
+    icon: CheckCircle2,
+  },
 ] as const;
 
 const STAGE_COLORS = [
@@ -83,6 +109,7 @@ const STAGE_COLORS = [
   PROJECTS_CHART_COLORS.slate,
   PROJECTS_CHART_COLORS.amber,
   PROJECTS_CHART_COLORS.emerald,
+  PROJECTS_CHART_COLORS.slate,
 ] as const;
 
 const ACTIVE_STAGES = new Set([
@@ -99,7 +126,15 @@ const ACTIVE_STAGES = new Set([
 ]);
 
 function normalizeStage(stage: string): string {
-  return stage === "configuration" ? "installation" : stage;
+  if (stage === "configuration") return "installation";
+  if (stage === "assignment") return "survey";
+  if (stage === "onsite") return "onsite_delivery";
+  return stage;
+}
+
+function needsSurveyOwner(site: SiteInstallation): boolean {
+  if (normalizeStage(site.workflow_stage) === "completed") return false;
+  return !site.survey_assignee_employee_id;
 }
 
 function newestSites(rows: SiteInstallation[], limit = 8): SiteInstallation[] {
@@ -130,13 +165,19 @@ export function ProjectsDashboard() {
 
 function ProjectsAdminDashboard() {
   const [data, setData] = useState<ProjectsOverview | null>(null);
+  const [poQueue, setPoQueue] = useState<ProjectPoQueueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const authenticated = typeof window !== "undefined" ? isAuthenticated() : false;
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setData(await loadProjectsOverview());
+      const [overview, queue] = await Promise.all([
+        loadProjectsOverview(),
+        listProjectPoQueue().catch(() => [] as ProjectPoQueueItem[]),
+      ]);
+      setData(overview);
+      setPoQueue(Array.isArray(queue) ? queue : []);
     } finally {
       setLoading(false);
     }
@@ -152,34 +193,36 @@ function ProjectsAdminDashboard() {
     const byStage = (key: string) =>
       sites.filter((s) => normalizeStage(s.workflow_stage) === key).length;
 
-    const active = sites.filter((s) => ACTIVE_STAGES.has(normalizeStage(s.workflow_stage))).length;
+    const active = sites.filter((s) =>
+      ACTIVE_STAGES.has(normalizeStage(s.workflow_stage)),
+    ).length;
     const completed = byStage("completed");
-    const needsOwners = byStage("assignment");
-    const inSurvey = byStage("survey");
-    const inScm = byStage("scm");
-    const inInstall = byStage("installation");
-    const inAcceptance = byStage("acceptance");
+    const needSurvey = sites.filter(needsSurveyOwner).length;
+    const poClouds = new Set(
+      poQueue
+        .map((row) => (row.cloud_name || "").trim().toLowerCase())
+        .filter(Boolean),
+    ).size;
 
     return {
       total: sites.length,
       active,
       completed,
-      needsOwners,
-      inSurvey,
-      inScm,
-      inInstall,
-      inAcceptance,
+      needSurvey,
+      poQueueLines: poQueue.length,
+      poClouds,
       projects: data?.projects.length ?? 0,
+      byStage,
     };
-  }, [data?.projects.length, sites]);
+  }, [data?.projects.length, poQueue, sites]);
 
   const stageFunnel = useMemo(
     () =>
-      DELIVERY_STAGES.map((stage) => ({
+      FLOW_STAGES.map((stage) => ({
         name: stage.label,
-        count: sites.filter((s) => normalizeStage(s.workflow_stage) === stage.key).length,
+        count: kpis.byStage(stage.key),
       })),
-    [sites],
+    [kpis],
   );
 
   const deliveryTypeMix = useMemo(() => {
@@ -200,19 +243,20 @@ function ProjectsAdminDashboard() {
 
   const attentionQueue = useMemo(() => {
     const priority = [
-      "assignment",
       "intake",
-      "acceptance",
       "survey",
+      "acceptance",
       "scm",
       "onsite_delivery",
       "material_handover",
-      "onsite",
       "installation",
     ];
     return [...sites]
       .filter((s) => ACTIVE_STAGES.has(normalizeStage(s.workflow_stage)))
       .sort((a, b) => {
+        const aNeed = needsSurveyOwner(a) ? 0 : 1;
+        const bNeed = needsSurveyOwner(b) ? 0 : 1;
+        if (aNeed !== bNeed) return aNeed - bNeed;
         const ai = priority.indexOf(normalizeStage(a.workflow_stage));
         const bi = priority.indexOf(normalizeStage(b.workflow_stage));
         if (ai !== bi) return ai - bi;
@@ -232,16 +276,44 @@ function ProjectsAdminDashboard() {
 
   return (
     <ProjectsPage>
-      <PageHeader
+      <ProjectsPageHeader
         title="Projects Dashboard"
-        description="Track site installation requests across Intake → Assign → Survey → SCM → Installation & Configuration → Acceptance."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="cursor-pointer"
+              className="cursor-pointer transition-colors duration-200"
+              asChild
+            >
+              <Link href="/projects/po-queue">
+                <ShoppingCart className="size-3.5" />
+                PO Queue
+                {kpis.poQueueLines > 0 ? (
+                  <Badge variant="secondary" className="ml-1 tabular-nums">
+                    {kpis.poQueueLines}
+                  </Badge>
+                ) : null}
+              </Link>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="cursor-pointer transition-colors duration-200"
+              asChild
+            >
+              <Link href="/projects/projects">
+                <Building2 className="size-3.5" />
+                Projects
+              </Link>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="cursor-pointer transition-colors duration-200"
               onClick={() => void load()}
               disabled={loading}
             >
@@ -267,94 +339,147 @@ function ProjectsAdminDashboard() {
         </div>
       ) : null}
 
-      <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
-        <ProjectsKpiCard
-          variant="hero"
-          label="Total sites"
-          value={String(kpis.total)}
-          hint={`${kpis.projects} projects`}
-          icon={Building2}
-          loading={loading}
-        />
-        <ProjectsKpiCard
-          variant="hero"
-          label="In delivery"
-          value={String(kpis.active)}
-          hint="Not yet completed"
-          icon={Cable}
-          loading={loading}
-        />
-        <ProjectsKpiCard
-          variant="hero"
-          label="Need owners"
-          value={String(kpis.needsOwners)}
-          hint="Assign Survey owner"
-          icon={Users}
-          tone={kpis.needsOwners > 0 ? "warning" : "default"}
-          loading={loading}
-        />
-        <ProjectsKpiCard
-          variant="hero"
-          label="Completed"
-          value={String(kpis.completed)}
-          hint="Handover finished"
-          icon={CheckCircle2}
-          tone="success"
-          loading={loading}
-        />
+      <ProjectsHeadlineBand>
+        <div className="grid divide-y divide-white/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">
+          <ProjectsHeadlineStat
+            label="Total sites"
+            value={String(kpis.total)}
+            sub={`${kpis.projects} projects`}
+            loading={loading}
+          />
+          <ProjectsHeadlineStat
+            label="In delivery"
+            value={String(kpis.active)}
+            sub="Active workflow"
+            loading={loading}
+          />
+          <ProjectsHeadlineStat
+            label="Need Survey owner"
+            value={String(kpis.needSurvey)}
+            sub="Assign from Tracking"
+            loading={loading}
+          />
+          <ProjectsHeadlineStat
+            label="Completed"
+            value={String(kpis.completed)}
+            sub="Handover finished"
+            loading={loading}
+          />
+        </div>
+      </ProjectsHeadlineBand>
+
+      <ProjectsSection title="Delivery flow" icon={Cable} bodyClassName="space-y-3">
+        <div className="erp-scroll flex flex-wrap items-center gap-1 rounded-lg border border-border/70 bg-muted/20 px-2 py-2">
+          {FLOW_STAGES.map((stage, idx) => {
+            const count = kpis.byStage(stage.key);
+            const Icon = stage.icon;
+            const isTerminal = stage.key === "completed";
+            return (
+              <div key={stage.key} className="flex items-center">
+                <Link
+                  href={stage.href}
+                  className={cn(
+                    "group inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium whitespace-nowrap transition-colors duration-200",
+                    count > 0 && !isTerminal
+                      ? "bg-primary/10 text-primary hover:bg-primary/15"
+                      : isTerminal && count > 0
+                        ? "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "flex size-5 shrink-0 items-center justify-center rounded-full border text-[10px] tabular-nums",
+                      count > 0 && !isTerminal
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : isTerminal && count > 0
+                          ? "border-emerald-600 bg-emerald-600 text-white"
+                          : "border-border/80 bg-background",
+                    )}
+                  >
+                    {isTerminal && count > 0 ? (
+                      <Check className="size-3" />
+                    ) : (
+                      <Icon className="size-3" />
+                    )}
+                  </span>
+                  <span>{stage.short}</span>
+                  <span className="tabular-nums text-[11px] opacity-80">{loading ? "—" : count}</span>
+                </Link>
+                {idx < FLOW_STAGES.length - 1 ? (
+                  <span className="mx-0.5 text-muted-foreground/50" aria-hidden>
+                    ›
+                  </span>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+        <p className="sr-only">
+          PO Queue, project intake, Survey through Acceptance, then Completed.
+        </p>
+      </ProjectsSection>
+
+      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+        {FLOW_STAGES.filter((s) => s.key !== "intake" && s.key !== "completed").map((stage) => {
+          const count = kpis.byStage(stage.key);
+          return (
+            <ProjectsKpiCard
+              key={stage.key}
+              variant="hero"
+              label={stage.label}
+              value={String(count)}
+              hint="In this step"
+              icon={stage.icon}
+              href={stage.href}
+              tone={stage.key === "acceptance" && count > 0 ? "warning" : "default"}
+              loading={loading}
+            />
+          );
+        })}
       </div>
 
-      <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
-        <ProjectsKpiCard
-          variant="hero"
-          label="Survey queue"
-          value={String(kpis.inSurvey)}
-          hint="Sites in Survey"
-          icon={MapPin}
-          href="/projects/survey"
-          loading={loading}
+      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+        <ProjectsActivityTile
+          label="PO Queue"
+          value={loading ? "-" : String(kpis.poClouds || kpis.poQueueLines)}
+          icon={ShoppingCart}
+          tint="bg-sky-50 text-sky-800"
+          href="/projects/po-queue"
         />
-        <ProjectsKpiCard
-          variant="hero"
-          label="SCM / Logistics"
-          value={String(kpis.inScm)}
-          hint="Material movement"
-          icon={Package}
-          href="/projects/scm"
-          loading={loading}
+        <ProjectsActivityTile
+          label="Projects"
+          value={loading ? "-" : String(kpis.projects)}
+          icon={Building2}
+          tint="bg-teal-50 text-teal-800"
+          href="/projects/projects"
         />
-        <ProjectsKpiCard
-          variant="hero"
-          label="Installation"
-          value={String(kpis.inInstall)}
-          hint="Install & configure"
-          icon={Server}
-          href="/projects/installation"
-          loading={loading}
+        <ProjectsActivityTile
+          label="All Sites"
+          value={loading ? "-" : String(kpis.total)}
+          icon={Cable}
+          tint="bg-slate-100 text-slate-800"
+          href="/projects/site-installations"
         />
-        <ProjectsKpiCard
-          variant="hero"
-          label="Acceptance"
-          value={String(kpis.inAcceptance)}
-          hint="Handover / HW-AT"
-          icon={CheckCircle2}
-          tone={kpis.inAcceptance > 0 ? "warning" : "success"}
-          href="/projects/acceptance"
-          loading={loading}
+        <ProjectsActivityTile
+          label="Need owners"
+          value={loading ? "-" : String(kpis.needSurvey)}
+          icon={Users}
+          tint="bg-amber-50 text-amber-900"
+          href="/projects/projects"
         />
       </div>
 
       <div className="grid gap-3 xl:grid-cols-3">
         <ProjectsSection
-          title="Delivery pipeline"
-          subtitle="Sites by workflow stage"
+          title="Pipeline by stage"
           icon={Cable}
           badge={<Badge variant="secondary">Counts</Badge>}
           className="xl:col-span-2"
         >
           <ProjectsCountBarChart data={stageFunnel} loading={loading} />
           <ol className="mt-1 flex flex-wrap gap-x-3 gap-y-1 border-t border-border/60 pt-2">
-            {DELIVERY_STAGES.map((stage, i) => (
+            {FLOW_STAGES.map((stage, i) => (
               <li key={stage.key}>
                 <Link
                   href={stage.href}
@@ -373,7 +498,6 @@ function ProjectsAdminDashboard() {
 
         <ProjectsSection
           title="Delivery scope"
-          subtitle="Sites by install type"
           icon={PieChart}
           badge={<Badge variant="secondary">Share</Badge>}
         >
@@ -405,10 +529,9 @@ function ProjectsAdminDashboard() {
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div className="flex items-center gap-2.5">
               <ProjectsIconBadge icon={Cable} />
-              <div>
-                <h2 className="text-base font-extrabold tracking-tight">Recent sites</h2>
-                <p className="text-[11px] text-muted-foreground">Newest installation requests</p>
-              </div>
+              <h2 className="text-[15px] font-semibold tracking-tight text-foreground">
+                Recent sites
+              </h2>
             </div>
             <ProjectsViewAllLink href="/projects/site-installations" />
           </div>
@@ -444,7 +567,7 @@ function ProjectsAdminDashboard() {
                 ) : recentSites.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
-                      No site installations yet. Create a site request to begin.
+                      No sites yet. Start from PO Queue.
                     </td>
                   </tr>
                 ) : (
@@ -458,7 +581,7 @@ function ProjectsAdminDashboard() {
                         <td className="max-w-50 truncate px-4 py-2.5">
                           <Link
                             href={`/projects/projects/${row.project_id}`}
-                            className="cursor-pointer font-medium text-foreground hover:underline"
+                            className="cursor-pointer font-medium text-foreground transition-colors duration-200 hover:underline"
                           >
                             {row.site_name || row.document_number}
                           </Link>
@@ -490,14 +613,11 @@ function ProjectsAdminDashboard() {
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div className="flex items-center gap-2.5">
               <ProjectsIconBadge icon={Users} />
-              <div>
-                <h2 className="text-base font-extrabold tracking-tight">Needs attention</h2>
-                <p className="text-[11px] text-muted-foreground">
-                  Active sites by stage priority
-                </p>
-              </div>
+              <h2 className="text-[15px] font-semibold tracking-tight text-foreground">
+                Needs attention
+              </h2>
             </div>
-            <ProjectsViewAllLink href="/projects/assignment" />
+            <ProjectsViewAllLink href="/projects/projects" />
           </div>
           <ul className="divide-y divide-border/60">
             {loading ? (
@@ -523,22 +643,23 @@ function ProjectsAdminDashboard() {
                   <div className="flex items-center justify-between gap-2">
                     <Link
                       href={`/projects/projects/${row.project_id}`}
-                      className="min-w-0 cursor-pointer truncate text-sm font-medium text-foreground hover:underline"
+                      className="min-w-0 cursor-pointer truncate text-sm font-medium text-foreground transition-colors duration-200 hover:underline"
                     >
                       {row.site_name || row.document_number}
                     </Link>
-                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                    <span className="inline-flex shrink-0 items-center gap-1 text-xs tabular-nums text-muted-foreground">
                       {formatDate(row.created_at)}
+                      <ArrowUpRight className="size-3 opacity-50" aria-hidden />
                     </span>
                   </div>
                   <p className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                     <span>{siteWorkflowStageLabel(row.workflow_stage)}</span>
-                    <span>·</span>
+                    <span aria-hidden>·</span>
                     <span>{siteDeliveryTypeLabel(row.delivery_type)}</span>
-                    {row.rfai_number ? (
+                    {needsSurveyOwner(row) ? (
                       <>
-                        <span>·</span>
-                        <span>RFAI {row.rfai_number}</span>
+                        <span aria-hidden>·</span>
+                        <span className="font-medium text-amber-700">Needs Survey owner</span>
                       </>
                     ) : null}
                   </p>
@@ -547,33 +668,6 @@ function ProjectsAdminDashboard() {
             )}
           </ul>
         </ProjectsListPanel>
-      </div>
-
-      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-        {DELIVERY_STAGES.filter((s) => s.key !== "completed")
-          .slice(0, 4)
-          .map((stage, i) => {
-            const count = sites.filter(
-              (s) => normalizeStage(s.workflow_stage) === stage.key,
-            ).length;
-            const Icon = stage.icon;
-            const tints = [
-              "bg-sky-50 text-sky-800",
-              "bg-indigo-50 text-indigo-800",
-              "bg-teal-50 text-teal-800",
-              "bg-amber-50 text-amber-900",
-            ] as const;
-            return (
-              <ProjectsActivityTile
-                key={stage.key}
-                label={stage.label}
-                value={loading ? "-" : String(count)}
-                icon={Icon}
-                tint={tints[i % tints.length]}
-                href={stage.href}
-              />
-            );
-          })}
       </div>
     </ProjectsPage>
   );

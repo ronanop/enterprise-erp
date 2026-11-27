@@ -1,6 +1,5 @@
 import { FolderKanban } from "lucide-react";
 
-import { siteDeliveryTypeLabel } from "@/components/projects/projects-domain";
 import type { FormSection, FormValues } from "@/components/projects/projects-record-form";
 import type { Project, SiteInstallation } from "@/services/projects-portal-service";
 import {
@@ -8,35 +7,6 @@ import {
   listCustomerOptions,
   listEmployeeOptions,
 } from "@/services/projects-portal-service";
-
-/** Older SCM shares stored type/qty only in remarks text. */
-function valueFromRemarks(remarks: string | null | undefined, label: string): string {
-  if (!remarks?.trim() || !label.trim()) return "";
-  const prefix = `${label}:`;
-  const idx = remarks.toLowerCase().indexOf(prefix.toLowerCase());
-  if (idx < 0) return "";
-  return remarks.slice(idx + prefix.length).trim().split(/\r?\n/)[0]?.trim() || "";
-}
-
-function displayQty(
-  value: number | null | undefined,
-  remarks: string | null | undefined,
-  remarkLabel: string,
-): string {
-  if (value != null && Number.isFinite(Number(value))) return String(value);
-  const fromRemarks = valueFromRemarks(remarks, remarkLabel);
-  return fromRemarks || "-";
-}
-
-function displayText(
-  value: string | null | undefined,
-  remarks: string | null | undefined,
-  remarkLabel: string,
-): string {
-  if (value?.trim()) return value.trim();
-  const fromRemarks = valueFromRemarks(remarks, remarkLabel);
-  return fromRemarks || "-";
-}
 
 function labelOrDash(
   id: string | null | undefined,
@@ -61,24 +31,7 @@ export function intakeAdminDetailRows(input: {
   const circle = site?.circle?.trim() || branchLabel?.trim() || "-";
 
   const rows: Array<{ label: string; value: string }> = [
-    { label: "Project Title", value: project.project_name?.trim() || "-" },
     { label: "Circle Name", value: circle },
-    {
-      label: "Delivery Type",
-      value: site?.delivery_type ? siteDeliveryTypeLabel(site.delivery_type) : "-",
-    },
-    {
-      label: "Rack Quantity",
-      value: displayQty(site?.rack_qty, site?.remarks, "Rack quantity"),
-    },
-    {
-      label: "Server Quantity",
-      value: displayQty(site?.server_qty, site?.remarks, "Server quantity"),
-    },
-    {
-      label: "Type",
-      value: displayText(site?.application, site?.remarks, "Server type"),
-    },
   ];
 
   if (companyPoNumber?.trim()) {
@@ -113,11 +66,6 @@ export const INTAKE_SUMMARY_EMPTY: FormValues = {
   intake_branch_label: "",
   intake_customer_label: "",
   intake_site_name: "",
-  intake_delivery_type_label: "",
-  intake_project_title: "",
-  intake_rack_qty: "",
-  intake_server_qty: "",
-  intake_server_type: "",
   intake_pm_label: "",
   intake_rfai_request: "",
   intake_rfai_number: "",
@@ -128,7 +76,10 @@ function optionLabel(
   id: string | null | undefined,
 ): string {
   if (!id) return "-";
-  return options.find((o) => o.id === id)?.label ?? id;
+  const key = String(id);
+  const match = options.find((o) => o.id === key || String(o.id) === key);
+  const label = match?.label?.trim();
+  return label || key;
 }
 
 export function intakeSummaryValues(input: {
@@ -148,11 +99,6 @@ export function intakeSummaryValues(input: {
       project.customer_name?.trim() ||
       optionLabel(customers, project.customer_id),
     intake_site_name: site.site_name?.trim() || "-",
-    intake_delivery_type_label: siteDeliveryTypeLabel(site.delivery_type),
-    intake_project_title: project.project_name?.trim() || "-",
-    intake_rack_qty: displayQty(site.rack_qty, site.remarks, "Rack quantity"),
-    intake_server_qty: displayQty(site.server_qty, site.remarks, "Server quantity"),
-    intake_server_type: displayText(site.application, site.remarks, "Server type"),
     intake_pm_label: optionLabel(employees, project.project_manager_employee_id),
     intake_rfai_request: rfaiYes ? "Yes" : "No",
     intake_rfai_number: rfaiYes ? site.rfai_number?.trim() || "-" : "-",
@@ -183,31 +129,6 @@ export function intakeSummarySection(): FormSection {
       { name: "intake_branch_label", label: "Circle Name", type: "readonly" },
       { name: "intake_customer_label", label: "Customer", type: "readonly" },
       { name: "intake_site_name", label: "Site Name", type: "readonly" },
-      {
-        name: "intake_delivery_type_label",
-        label: "Delivery Type",
-        type: "readonly",
-      },
-      {
-        name: "intake_project_title",
-        label: "Project Title",
-        type: "readonly",
-      },
-      {
-        name: "intake_rack_qty",
-        label: "Rack Quantity",
-        type: "readonly",
-      },
-      {
-        name: "intake_server_qty",
-        label: "Server Quantity",
-        type: "readonly",
-      },
-      {
-        name: "intake_server_type",
-        label: "Type",
-        type: "readonly",
-      },
       {
         name: "intake_pm_label",
         label: "Project Manager",

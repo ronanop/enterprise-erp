@@ -138,11 +138,18 @@ export function SiteStageFormGate({
           return;
         }
 
+        // Assignees may open their step as soon as they are assigned — even if
+        // the previous workflow stage is still in progress.
         if (
           isAssigneeForStage(site, stage, employeeId) &&
-          !canOpenAssignedStageForm(site, stage, site.workflow_stage) &&
-          !stageDone
+          canOpenAssignedStageForm(site, stage, site.workflow_stage)
         ) {
+          setReadOnlyMeta(editableMeta);
+          setState("allowed");
+          return;
+        }
+
+        if (isAssigneeForStage(site, stage, employeeId) && !stageDone) {
           setBlockedMessage(workflowStageNotCompleteMessage(site, stage));
           setState("blocked");
           return;

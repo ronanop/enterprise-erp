@@ -6,7 +6,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Plus, RefreshCw } from "lucide-react";
 
-import { PageHeader } from "@/components/layout/page-header";
 import {
   ProjectsErrorBanner,
   ProjectsListPanel,
@@ -17,6 +16,7 @@ import {
   useTableSort,
   type SortDir,
   type SortValue,
+  ProjectsPageHeader,
 } from "@/components/projects/projects-ui";
 import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
@@ -126,7 +126,7 @@ export function ProjectsRecordList<T extends { id: string }>({
 
   return (
     <ProjectsPage>
-      <PageHeader
+      <ProjectsPageHeader
         title={title}
         description={description}
         actions={

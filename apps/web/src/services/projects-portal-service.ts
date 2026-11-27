@@ -432,13 +432,18 @@ export async function getProjectPoPrefillByHandoff(
 /** One-click create: one project for the cloud, no intake form. */
 export async function createCloudProjectFromHandoff(
   handoffId: string,
-  options?: { rfai_number?: string | null },
+  options?: {
+    rfai_number?: string | null;
+    project_manager_employee_id?: string | null;
+  },
 ): Promise<Project> {
   return unwrap(
     await apiClient<Project>(`${PROJECT_PO_QUEUE_API}/handoffs/${handoffId}/create-cloud-project`, {
       method: "POST",
       body: {
         rfai_number: options?.rfai_number?.trim() || null,
+        project_manager_employee_id:
+          options?.project_manager_employee_id?.trim() || null,
       },
     }),
   );
@@ -462,8 +467,19 @@ export type CloudPoLine = {
   site_name?: string | null;
   line_type?: string | null;
   quantity?: number | null;
+  delivered_quantity?: number | null;
+  /** Qty received on site (against SCM delivered_quantity). */
+  onsite_delivered_quantity?: number | null;
+  /** Qty installed on site (against onsite_delivered_quantity). */
+  installed_quantity?: number | null;
   customer_po_number?: string | null;
   document_date?: string | null;
+  /** Set automatically when the line is fully delivered at SCM. */
+  delivery_date?: string | null;
+  /** Set automatically when the line is fully delivered on site. */
+  onsite_delivery_date?: string | null;
+  /** Set automatically when the line is fully installed. */
+  installed_date?: string | null;
 };
 
 export type SiteInstallation = AuditFields & {
@@ -476,6 +492,8 @@ export type SiteInstallation = AuditFields & {
   circle: string | null;
   cloud_name: string | null;
   cloud_po_lines?: CloudPoLine[];
+  /** Checklist field → ISO datetime when Yes was clicked. */
+  checkpoint_yes_at?: Record<string, string>;
   site_name: string | null;
   power_requirements: string | null;
   rfai_request_done: boolean;
@@ -515,6 +533,14 @@ export type SiteInstallation = AuditFields & {
   rack_server_stacking_date: string | null;
   rack_server_power_on_done: boolean;
   rack_server_power_on_date: string | null;
+  rack_installation_done: boolean;
+  rack_installation_date: string | null;
+  server_stacking_done: boolean;
+  server_stacking_date: string | null;
+  rack_power_on_done: boolean;
+  rack_power_on_date: string | null;
+  server_power_on_done: boolean;
+  server_power_on_date: string | null;
   dac_ilo_cabling_done: boolean;
   dac_ilo_cabling_date: string | null;
   bios_configuration_done: boolean;
@@ -593,6 +619,7 @@ export type SiteInstallationFormInput = {
   requestor_name?: string | null;
   circle?: string | null;
   cloud_name?: string | null;
+  cloud_po_lines?: CloudPoLine[] | null;
   site_name?: string | null;
   power_requirements?: string | null;
   rfai_request_done?: boolean;
@@ -632,6 +659,14 @@ export type SiteInstallationFormInput = {
   rack_server_stacking_date?: string | null;
   rack_server_power_on_done?: boolean;
   rack_server_power_on_date?: string | null;
+  rack_installation_done?: boolean;
+  rack_installation_date?: string | null;
+  server_stacking_done?: boolean;
+  server_stacking_date?: string | null;
+  rack_power_on_done?: boolean;
+  rack_power_on_date?: string | null;
+  server_power_on_done?: boolean;
+  server_power_on_date?: string | null;
   dac_ilo_cabling_done?: boolean;
   dac_ilo_cabling_date?: string | null;
   bios_configuration_done?: boolean;
@@ -1688,11 +1723,12 @@ function employeeOptionLabel(r: Record<string, unknown>): string {
 export async function listProjectMemberOptions(): Promise<Option[]> {
   const res = await resourceService.list("/projects/members");
   const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);
-  return rows.map((r) => ({
-    id: String(r.id),
-    label: String(r.label ?? r.id),
-    email: r.email ? String(r.email) : undefined,
-  }));
+  return rows.map((r) => {
+    const id = String(r.id);
+    const email = r.email ? String(r.email) : undefined;
+    const label = String(r.label ?? "").trim() || email || id;
+    return { id, label, email };
+  });
 }
 
 /** Users assigned to the Projects module (for PM assignee / owner pickers). */

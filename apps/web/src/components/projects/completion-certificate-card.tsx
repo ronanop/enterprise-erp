@@ -201,7 +201,7 @@ export function CompletionCertificateCard({
                   type="date"
                   value={signedDate}
                   onChange={(e) => setSignedDate(e.target.value)}
-                  className="h-9 cursor-pointer text-[13px]"
+                  className="h-9 max-w-full cursor-pointer text-[13px]"
                 />
               </label>
               <label className="space-y-1.5">

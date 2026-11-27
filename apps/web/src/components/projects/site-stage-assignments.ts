@@ -99,10 +99,9 @@ function previousStageReadyForNextAssignment(
 }
 
 function stageAssignmentClosed(row: StageAssignmentRow): boolean {
-  return (
-    row.work_status === "done" ||
-    progressMarksStageCompleted(row.progress_status)
-  );
+  // Only Completed progress locks the picker. Admins may assign / update the
+  // next stage owner before the current step is fully completed.
+  return progressMarksStageCompleted(row.progress_status);
 }
 
 export function assigneeFieldForStage(stage: AssignableStage) {
@@ -124,7 +123,7 @@ export function previousAssignableStage(stage: string): AssignableStage | null {
 
 /**
  * Whether Project Tracking may show an assignee picker for this stage.
- * Standalone - any open step can be assigned without waiting on prior steps.
+ * Any non-completed step can be assigned without waiting on prior steps.
  */
 export function canAssignStageFromTracking(
   stage: string,
@@ -141,7 +140,8 @@ export function canAssignStageFromTracking(
   if (!ASSIGNABLE_STAGES.includes(normalized as AssignableStage)) return false;
 
   const row = assignments.find((a) => a.stage === normalized);
-  if (!row || stageAssignmentClosed(row)) return false;
+  if (!row) return true;
+  if (stageAssignmentClosed(row)) return false;
   return true;
 }
 
@@ -224,7 +224,7 @@ export function stageAssignmentSection(deliveryType?: string): FormSection {
   return {
     title: "Assign Survey owner",
     subtitle:
-      "Select who owns Survey. Later stage owners are assigned from Project Tracking after each step completes.",
+      "Select who owns Survey. Later stage owners can be assigned from Project Tracking at any time, including before the prior step is fully completed.",
     icon: Users,
     fields: [
       {

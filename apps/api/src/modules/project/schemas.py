@@ -19,8 +19,14 @@ class CloudPoLine(BaseModel):
     site_name: str | None = None
     line_type: str | None = None
     quantity: int | None = None
+    delivered_quantity: int | None = Field(default=None, ge=0)
+    onsite_delivered_quantity: int | None = Field(default=None, ge=0)
+    installed_quantity: int | None = Field(default=None, ge=0)
     customer_po_number: str | None = None
     document_date: date | None = None
+    delivery_date: date | None = None
+    onsite_delivery_date: date | None = None
+    installed_date: date | None = None
 
 
 class SiteInstallationNestedCreate(BaseModel):
@@ -166,6 +172,7 @@ class CreateCloudProjectRequest(BaseModel):
     """Optional intake extras when creating a cloud project from the PO queue."""
 
     rfai_number: str | None = Field(default=None, max_length=100)
+    project_manager_employee_id: UUID | None = None
 
 
 class ProjectPoQueueShareCreate(BaseModel):
@@ -1033,6 +1040,14 @@ class SiteInstallationCreate(BaseModel):
     rack_server_stacking_date: date | None = None
     rack_server_power_on_done: bool | None = None
     rack_server_power_on_date: date | None = None
+    rack_installation_done: bool | None = None
+    rack_installation_date: date | None = None
+    server_stacking_done: bool | None = None
+    server_stacking_date: date | None = None
+    rack_power_on_done: bool | None = None
+    rack_power_on_date: date | None = None
+    server_power_on_done: bool | None = None
+    server_power_on_date: date | None = None
     dac_ilo_cabling_done: bool | None = None
     dac_ilo_cabling_date: date | None = None
     bios_configuration_done: bool | None = None
@@ -1111,6 +1126,7 @@ class SiteInstallationUpdate(BaseModel):
     requestor_name: str | None = Field(default=None, max_length=255)
     circle: str | None = Field(default=None, max_length=100)
     cloud_name: str | None = Field(default=None, max_length=255)
+    cloud_po_lines: list[CloudPoLine] | None = None
     site_name: str | None = Field(default=None, max_length=255)
     power_requirements: str | None = None
     rfai_request_done: bool | None = None
@@ -1150,6 +1166,14 @@ class SiteInstallationUpdate(BaseModel):
     rack_server_stacking_date: date | None = None
     rack_server_power_on_done: bool | None = None
     rack_server_power_on_date: date | None = None
+    rack_installation_done: bool | None = None
+    rack_installation_date: date | None = None
+    server_stacking_done: bool | None = None
+    server_stacking_date: date | None = None
+    rack_power_on_done: bool | None = None
+    rack_power_on_date: date | None = None
+    server_power_on_done: bool | None = None
+    server_power_on_date: date | None = None
     dac_ilo_cabling_done: bool | None = None
     dac_ilo_cabling_date: date | None = None
     bios_configuration_done: bool | None = None
@@ -1235,6 +1259,7 @@ class SiteInstallationResponse(OrmModel):
     circle: str | None
     cloud_name: str | None
     cloud_po_lines: list[CloudPoLine] = Field(default_factory=list)
+    checkpoint_yes_at: dict[str, str] = Field(default_factory=dict)
     site_name: str | None
     power_requirements: str | None
     rfai_request_done: bool
@@ -1274,6 +1299,14 @@ class SiteInstallationResponse(OrmModel):
     rack_server_stacking_date: date | None = None
     rack_server_power_on_done: bool
     rack_server_power_on_date: date | None = None
+    rack_installation_done: bool = False
+    rack_installation_date: date | None = None
+    server_stacking_done: bool = False
+    server_stacking_date: date | None = None
+    rack_power_on_done: bool = False
+    rack_power_on_date: date | None = None
+    server_power_on_done: bool = False
+    server_power_on_date: date | None = None
     dac_ilo_cabling_done: bool
     dac_ilo_cabling_date: date | None = None
     bios_configuration_done: bool

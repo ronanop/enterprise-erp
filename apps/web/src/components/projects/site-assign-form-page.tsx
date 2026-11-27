@@ -84,7 +84,7 @@ export function SiteAssignFormPage({ projectId }: { projectId: string }) {
         ...stageAssignmentSection(deliveryType),
         title: "Assign Survey owner",
         subtitle:
-          "Step 2 - Select the Survey owner. SCM, Installation, and Acceptance owners are assigned later from Project Tracking after each step completes.",
+          "Step 2 - Select the Survey owner. Later stage owners can be assigned from Project Tracking at any time, including before the prior step is fully completed.",
         icon: Users,
       },
     ],
@@ -94,7 +94,7 @@ export function SiteAssignFormPage({ projectId }: { projectId: string }) {
   return (
     <ProjectsRecordForm
       title="Assign Survey owner"
-      description="Select who owns Survey. Later stage owners are assigned one-by-one from Project Tracking after the previous step is completed."
+      description="Select who owns Survey. Later stage owners can be assigned from Project Tracking at any time, including before the prior step is fully completed."
       backHref={`/projects/projects/${projectId}`}
       backLabel="Back to project"
       submitLabel="Save & continue to Survey"

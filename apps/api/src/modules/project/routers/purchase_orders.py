@@ -92,6 +92,7 @@ def create_cloud_project_from_handoff(
         ctx,
         handoff_id,
         rfai_number=payload.rfai_number,
+        project_manager_employee_id=payload.project_manager_employee_id,
     )
     data = ProjectService(db).to_response(ctx, row)
     return APIResponse(message="Project created", data=data)

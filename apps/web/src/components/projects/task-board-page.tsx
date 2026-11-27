@@ -4,13 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { LayoutGrid, Plus, RefreshCw } from "lucide-react";
 
-import { PageHeader } from "@/components/layout/page-header";
 import { PriorityBadge } from "@/components/projects/projects-badges";
 import { TASK_STATUSES } from "@/components/projects/projects-domain";
 import {
   ProjectsErrorBanner,
   ProjectsPage,
   ProjectsSection,
+  ProjectsPageHeader,
 } from "@/components/projects/projects-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -99,7 +99,7 @@ export function TaskBoardPage() {
 
   return (
     <ProjectsPage>
-      <PageHeader
+      <ProjectsPageHeader
         title="Task Board"
         description="Delivery work across every project, grouped by task state. Open a task to update progress or reassign it."
         actions={

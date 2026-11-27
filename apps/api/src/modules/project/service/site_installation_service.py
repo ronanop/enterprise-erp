@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from core.exceptions import ConflictException, ForbiddenException, NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
@@ -69,7 +73,7 @@ class SiteInstallationService:
         if row is None:
             raise NotFoundException("Site installation not found")
         self._assignment.ensure_project_access(ctx, row.project_id, row.company_id)
-        return row
+        return self._heal_incomplete_qty_stages(ctx, row)
 
     def get_by_project(self, ctx: TenantContext, project_id: UUID) -> PrjSiteInstallation:
         project = self._projects.get(ctx, project_id)
@@ -79,7 +83,7 @@ class SiteInstallationService:
         row = self._repo.get_by_project(ctx, project_id)
         if row is None:
             raise NotFoundException("Site installation not found for project")
-        return row
+        return self._heal_incomplete_qty_stages(ctx, row)
 
     def get_or_bootstrap(
         self, ctx: TenantContext, project_id: UUID, **fields
@@ -91,9 +95,21 @@ class SiteInstallationService:
         self._assignment.ensure_project_access(ctx, project_id, project.company_id)
         existing = self._repo.get_by_project(ctx, project_id)
         if existing is not None:
-            return self._ensure_cloud_po_lines(ctx, existing)
+            return self._heal_incomplete_qty_stages(
+                ctx, self._ensure_cloud_po_lines(ctx, existing)
+            )
         self._module_admin.ensure_admin(ctx)
         return self._create_for_project(ctx, project, **fields)
+
+    def _heal_incomplete_qty_stages(
+        self, ctx: TenantContext, row: PrjSiteInstallation
+    ) -> PrjSiteInstallation:
+        """Re-open SCM / Onsite Delivery when remaining qty > 0 (Partial-style)."""
+        updates = engine.incomplete_qty_stage_heal_updates(row)
+        if not updates:
+            return row
+        updated = self._repo.update(ctx, row.id, **updates)
+        return updated if updated is not None else row
 
     def _ensure_cloud_po_lines(
         self, ctx: TenantContext, row: PrjSiteInstallation
@@ -445,23 +461,42 @@ class SiteInstallationService:
                     "Delivery type can only change during Intake"
                 )
         self._apply_material_line_side_effects(fields)
+        self._reject_completed_progress_with_remaining_qty(row, fields)
         self._stamp_assignee_dates(row, fields)
         self._stamp_progress_finished_dates(row, fields)
+        self._stamp_checkpoint_yes_at(row, fields)
         # Snapshot before mutate for No-answer detection
         stage_key = self._infer_saved_stage(row, fields)
         updated = self._repo.update(ctx, row_id, **fields)
         if updated is None:
             raise NotFoundException("Site installation not found")
-        # Isolate alert side-effects so a flush failure cannot poison this UoW.
+        # Isolate each alert so one SMTP/savepoint failure cannot skip the rest
+        # (assignment mail was previously dropped when a sibling notify failed).
+        self._run_isolated_alert(
+            "stage_completion",
+            lambda: self._notify_stage_completion(
+                ctx, project, row, updated, fields, stage_key
+            ),
+        )
+        self._run_isolated_alert(
+            "stage_saved",
+            lambda: self._notify_admins_stage_saved(
+                ctx, project, row, updated, fields, stage_key
+            ),
+        )
+        self._run_isolated_alert(
+            "stage_assigned",
+            lambda: self._notify_assignees_on_assign(ctx, project, row, updated, fields),
+        )
+        return updated
+
+    def _run_isolated_alert(self, label: str, fn: Callable[[], None]) -> None:
+        """Run one notification fan-out inside its own savepoint; never roll back the save."""
         try:
             with self._db.begin_nested():
-                self._notify_admins_stage_saved(
-                    ctx, project, row, updated, fields, stage_key
-                )
-                self._notify_assignees_on_assign(ctx, project, row, updated, fields)
+                fn()
         except Exception:  # noqa: BLE001 - alerts must not roll back the save
-            pass
-        return updated
+            logger.exception("Site installation alert failed (%s)", label)
 
     @staticmethod
     def _normalize_lines(raw: object) -> list[dict]:
@@ -487,6 +522,30 @@ class SiteInstallationService:
                 out.append({"type": typ, "quantity": qty, "date": line_date})
         return out
 
+    @staticmethod
+    def _json_safe_value(value: object) -> object:
+        if hasattr(value, "isoformat"):
+            return value.isoformat()
+        return value
+
+    @classmethod
+    def _normalize_cloud_po_lines(cls, raw: object) -> list[dict]:
+        """Coerce CloudPoLine models/dates into JSONB-safe dicts."""
+        if not isinstance(raw, list):
+            return []
+        out: list[dict] = []
+        for item in raw:
+            if hasattr(item, "model_dump"):
+                item = item.model_dump(mode="json")
+            if not isinstance(item, dict):
+                continue
+            line = {
+                key: cls._json_safe_value(value)
+                for key, value in item.items()
+            }
+            out.append(line)
+        return out
+
     def _apply_material_line_side_effects(self, fields: dict) -> None:
         if "cable_lines" in fields:
             lines = self._normalize_lines(fields["cable_lines"])
@@ -504,6 +563,51 @@ class SiteInstallationService:
             lines = self._normalize_lines(fields["industrial_socket_lines"])
             fields["industrial_socket_lines"] = lines
             fields["industrial_socket"] = bool(lines)
+        if "cloud_po_lines" in fields:
+            fields["cloud_po_lines"] = self._normalize_cloud_po_lines(
+                fields["cloud_po_lines"]
+            )
+
+    @staticmethod
+    def _reject_completed_progress_with_remaining_qty(
+        row: PrjSiteInstallation, fields: dict
+    ) -> None:
+        """Block Completed on SCM / Onsite / Installation while PO remaining qty > 0."""
+        scm_status = fields.get("scm_progress_status")
+        onsite_status = fields.get("onsite_delivery_progress_status")
+        install_status = fields.get("installation_progress_status")
+        if (
+            scm_status != engine.PROGRESS_COMPLETED_STATUS
+            and onsite_status != engine.PROGRESS_COMPLETED_STATUS
+            and install_status != engine.PROGRESS_COMPLETED_STATUS
+        ):
+            return
+
+        from types import SimpleNamespace
+
+        merged = SimpleNamespace(
+            cloud_po_lines=fields.get("cloud_po_lines", row.cloud_po_lines)
+        )
+
+        if scm_status == engine.PROGRESS_COMPLETED_STATUS:
+            if not engine.cloud_po_lines_are_fully_delivered(merged):
+                raise InvalidSiteInstallationState(
+                    "Cannot mark SCM Completed until every PO quantity is delivered. "
+                    "Use Partial completed so the next stage can still be assigned."
+                )
+        if onsite_status == engine.PROGRESS_COMPLETED_STATUS:
+            if not engine.cloud_po_lines_are_fully_onsite(merged):
+                raise InvalidSiteInstallationState(
+                    "Cannot mark Onsite Delivery Completed until every PO quantity "
+                    "is received on site. Use Partial completed so the next stage "
+                    "can still be assigned."
+                )
+        if install_status == engine.PROGRESS_COMPLETED_STATUS:
+            if not engine.cloud_po_lines_are_fully_installed(merged):
+                raise InvalidSiteInstallationState(
+                    "Cannot mark Installation Completed until every PO quantity "
+                    "is installed. Use Partial completed for this delivery wave."
+                )
 
     @staticmethod
     def _stamp_progress_finished_dates(row: PrjSiteInstallation, fields: dict) -> None:
@@ -520,6 +624,34 @@ class SiteInstallationService:
                 continue
             if getattr(row, finished_field, None) is None:
                 fields[finished_field] = today
+
+    @staticmethod
+    def _stamp_checkpoint_yes_at(row: PrjSiteInstallation, fields: dict) -> None:
+        """Record ISO datetime when a checklist Yes is newly clicked; clear on No/unset."""
+        touched = [
+            name
+            for name in engine.CHECKPOINT_YES_STAMP_FIELDS
+            if name in fields
+        ]
+        if not touched:
+            return
+        existing = getattr(row, "checkpoint_yes_at", None)
+        yes_at: dict[str, str] = (
+            dict(existing) if isinstance(existing, dict) else {}
+        )
+        now_iso = datetime.now(timezone.utc).isoformat()
+        changed = False
+        for name in touched:
+            new_val = fields.get(name)
+            old_val = getattr(row, name, None)
+            if new_val is True and old_val is not True:
+                yes_at[name] = now_iso
+                changed = True
+            elif new_val is not True and name in yes_at:
+                yes_at.pop(name, None)
+                changed = True
+        if changed:
+            fields["checkpoint_yes_at"] = yes_at
 
     @staticmethod
     def _stamp_assignee_dates(row: PrjSiteInstallation, fields: dict) -> None:
@@ -606,6 +738,162 @@ class SiteInstallationService:
             return "Assignee"
         return (user.display_name or user.email or "Assignee").strip() or "Assignee"
 
+    def _notify_stage_completion(
+        self,
+        ctx: TenantContext,
+        project: PrjProject,
+        before: PrjSiteInstallation,
+        after: PrjSiteInstallation,
+        fields: dict,
+        stage_key: str | None,
+    ) -> None:
+        """Email + in-app alert to step owner and project manager when a step is completed.
+
+        Fires when progress newly becomes Partial completed or Completed (milestone unlock).
+        """
+        if stage_key is None:
+            return
+        progress_field = engine.STAGE_PROGRESS_FIELDS.get(stage_key)
+        if not progress_field or progress_field not in fields:
+            return
+        new_status = fields.get(progress_field)
+        if new_status not in engine.PROGRESS_UNLOCK_STATUSES:
+            return
+        previous = getattr(before, progress_field, None)
+        if previous is None and stage_key in {
+            SiteWorkflowStage.ONSITE_DELIVERY.value,
+            SiteWorkflowStage.MATERIAL_HANDOVER.value,
+        }:
+            previous = getattr(before, "onsite_progress_status", None)
+        if previous == new_status:
+            return
+
+        targets = self._stage_completion_mail_targets(ctx, project, after, stage_key)
+        if not targets:
+            return
+
+        stage_label = self._stage_label_for_site(after, stage_key)
+        progress_label = self._progress_status_label(str(new_status))
+        site_name = after.site_name or after.document_number
+        actor = self._actor_display_name(ctx)
+        segment = engine.STAGE_FORM_SEGMENTS.get(stage_key, "")
+        form_path = (
+            f"/projects/projects/{after.project_id}/{segment}"
+            if segment
+            else f"/projects/projects/{after.project_id}"
+        )
+        saved_at = after.updated_at or datetime.now(timezone.utc)
+        if saved_at.tzinfo is None:
+            saved_at = saved_at.replace(tzinfo=timezone.utc)
+        remarks = None
+        remarks_field = engine.STAGE_REMARKS_FIELDS.get(stage_key)
+        if remarks_field:
+            raw = getattr(after, remarks_field, None)
+            if isinstance(raw, str) and raw.strip():
+                remarks = raw.strip()
+
+        message = (
+            f"{stage_label} has been marked {progress_label} on site {site_name}."
+        )
+        payload_base = {
+            "kind": "site_stage_completed",
+            "stage": stage_key,
+            "stage_label": stage_label,
+            "progress_status": new_status,
+            "progress_status_label": progress_label,
+            "site_installation_id": str(after.id),
+            "document_number": after.document_number,
+            "site_name": after.site_name,
+            "project_id": str(after.project_id),
+            "project_name": project.project_name,
+            "form_path": form_path,
+            "message": message,
+            "remarks": remarks,
+            "saved_at": saved_at.isoformat(),
+            "actor_user_id": str(ctx.user_id) if ctx.user_id else None,
+            "actor_name": actor,
+        }
+
+        notif_svc = NotificationService(self._db)
+        for target in targets:
+            if target.get("user_id") is not None:
+                notif_svc.create(
+                    ctx,
+                    company_id=after.company_id,
+                    branch_id=after.branch_id,
+                    project_id=after.project_id,
+                    notification_type="other",
+                    recipient_user_id=target["user_id"],
+                    recipient_employee_id=target.get("employee_id"),
+                    payload_json=dict(payload_base),
+                    delivery_status="sent",
+                    sent_at=datetime.now(timezone.utc),
+                    status="active",
+                )
+            self._maybe_email_stage_completed(ctx, str(target.get("email") or ""), payload_base)
+
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="prj_site_installation",
+            entity_id=after.id,
+            operation=f"stage_completed_alert:{stage_key}",
+            performed_by=ctx.user_id,
+        )
+
+    def _stage_completion_mail_targets(
+        self,
+        ctx: TenantContext,
+        project: PrjProject,
+        site: PrjSiteInstallation,
+        stage_key: str,
+    ) -> list[dict]:
+        """Assigned step owner + project manager emails (excluding the acting user)."""
+        employee_ids: list[UUID] = []
+
+        assignee_field = engine.STAGE_ASSIGNEE_FIELDS.get(stage_key)
+        assignee_id = getattr(site, assignee_field, None) if assignee_field else None
+        if assignee_id is None and stage_key == SiteWorkflowStage.ONSITE_DELIVERY.value:
+            assignee_id = getattr(site, "onsite_assignee_employee_id", None)
+        if assignee_id is not None:
+            employee_ids.append(assignee_id)
+
+        pm_id = project.project_manager_employee_id
+        if pm_id is not None and pm_id not in employee_ids:
+            employee_ids.append(pm_id)
+
+        actor_email = ""
+        if ctx.user_id is not None:
+            from sqlalchemy import select
+
+            from modules.foundation.models.security import SecUser
+
+            actor = self._db.scalar(
+                select(SecUser).where(
+                    SecUser.id == ctx.user_id,
+                    SecUser.tenant_id == ctx.tenant_id,
+                    SecUser.is_deleted.is_(False),
+                )
+            )
+            if actor is not None:
+                actor_email = (actor.email or "").strip().lower()
+
+        by_email: dict[str, dict] = {}
+        for emp_id in employee_ids:
+            resolved = self._resolve_employee_recipient(ctx, emp_id)
+            email = (
+                (resolved.email if resolved else "") or self._employee_email(ctx, emp_id)
+            ).strip().lower()
+            if not email:
+                continue
+            if actor_email and email == actor_email:
+                continue
+            by_email[email] = {
+                "email": email,
+                "user_id": resolved.user_id if resolved else None,
+                "employee_id": emp_id,
+            }
+        return list(by_email.values())
+
     def _notify_admins_stage_saved(
         self,
         ctx: TenantContext,
@@ -627,6 +915,9 @@ class SiteInstallationService:
         checklist_names = {name for name, _ in engine.STAGE_CHECKLIST_NO_FIELDS.get(stage_key, ())}
         relevant = False
         if progress_field and progress_field in fields:
+            # Completion has its own owner+PM mail path
+            if fields.get(progress_field) in engine.PROGRESS_UNLOCK_STATUSES:
+                return
             relevant = True
         if remarks_field and remarks_field in fields:
             relevant = True
@@ -737,19 +1028,29 @@ class SiteInstallationService:
 
         by_user: dict[UUID, ProjectModuleAdminRecipient] = {}
         for admin in self._module_admin.list_admin_recipients(ctx.tenant_id):
-            by_user[admin.user_id] = admin
+            if admin.user_id is not None:
+                by_user[admin.user_id] = admin
 
         pm_id = project.project_manager_employee_id
         if pm_id is not None:
             pm = self._resolve_employee_recipient(ctx, pm_id)
-            if pm is not None:
+            if pm is not None and pm.user_id is not None:
                 by_user[pm.user_id] = pm
 
         actor_id = ctx.user_id
-        return [r for r in by_user.values() if actor_id is None or r.user_id != actor_id]
+        return [
+            r
+            for r in by_user.values()
+            if r.user_id is not None and (actor_id is None or r.user_id != actor_id)
+        ]
 
     def _resolve_employee_recipient(self, ctx: TenantContext, employee_id: UUID):
-        """Map master employee → active foundation user for alert delivery."""
+        """Map master employee → foundation user email (CRM-style) for alerts.
+
+        Prefer linked / matching SecUser email. If the employee has no login
+        account but has a master email, still return that address so Hostinger
+        SMTP assignment mail can go out (in-app requires user_id).
+        """
         from sqlalchemy import select
 
         from modules.foundation.models.security import SecUser
@@ -766,6 +1067,12 @@ class SiteInstallationService:
         if employee is None:
             return None
 
+        display = (
+            f"{employee.first_name or ''} {employee.last_name or ''}".strip()
+            or "Assignee"
+        )
+        employee_email = (employee.email or "").strip().lower()
+
         user = None
         if employee.user_id is not None:
             user = self._db.scalar(
@@ -773,30 +1080,36 @@ class SiteInstallationService:
                     SecUser.id == employee.user_id,
                     SecUser.tenant_id == ctx.tenant_id,
                     SecUser.is_deleted.is_(False),
-                    SecUser.status == "active",
                 )
             )
-        if user is None and employee.email:
-            email = employee.email.strip().lower()
-            if email:
-                from sqlalchemy import func
+        if user is None and employee_email:
+            from sqlalchemy import func
 
-                user = self._db.scalar(
-                    select(SecUser).where(
-                        SecUser.tenant_id == ctx.tenant_id,
-                        SecUser.is_deleted.is_(False),
-                        SecUser.status == "active",
-                        func.lower(SecUser.email) == email,
-                    )
+            user = self._db.scalar(
+                select(SecUser).where(
+                    SecUser.tenant_id == ctx.tenant_id,
+                    SecUser.is_deleted.is_(False),
+                    func.lower(SecUser.email) == employee_email,
                 )
-        if user is None:
+            )
+
+        if user is not None:
+            email = (user.email or employee_email or "").strip().lower()
+            if not email:
+                return None
+            return ProjectModuleAdminRecipient(
+                user_id=user.id if (user.status or "").lower() == "active" else None,
+                email=email,
+                display_name=(user.display_name or "").strip() or display,
+                employee_id=employee.id,
+            )
+
+        if not employee_email:
             return None
         return ProjectModuleAdminRecipient(
-            user_id=user.id,
-            email=(user.email or employee.email or "").strip().lower(),
-            display_name=(user.display_name or "").strip()
-            or f"{employee.first_name or ''} {employee.last_name or ''}".strip()
-            or "Project Manager",
+            user_id=None,
+            email=employee_email,
+            display_name=display,
             employee_id=employee.id,
         )
 
@@ -890,23 +1203,32 @@ class SiteInstallationService:
         }
 
         recipient = self._resolve_employee_recipient(ctx, recipient_employee_id)
-        NotificationService(self._db).create(
-            ctx,
-            company_id=site.company_id,
-            branch_id=site.branch_id,
-            project_id=site.project_id,
-            notification_type="other",
-            recipient_user_id=recipient.user_id if recipient else None,
-            recipient_employee_id=recipient_employee_id,
-            payload_json=dict(payload),
-            delivery_status="sent",
-            sent_at=datetime.now(timezone.utc),
-            status="active",
-        )
+        # Prefer linked user email (CRM-style); fall back to master employee email.
+        to_email = (
+            (recipient.email if recipient else "")
+            or self._employee_email(ctx, recipient_employee_id)
+        ).strip()
+        try:
+            NotificationService(self._db).create(
+                ctx,
+                company_id=site.company_id,
+                branch_id=site.branch_id,
+                project_id=site.project_id,
+                notification_type="other",
+                recipient_user_id=recipient.user_id if recipient else None,
+                recipient_employee_id=recipient_employee_id,
+                payload_json=dict(payload),
+                delivery_status="sent",
+                sent_at=datetime.now(timezone.utc),
+                status="active",
+            )
+        except Exception:  # noqa: BLE001 - in-app must not block SMTP assignment mail
+            logger.exception(
+                "In-app stage assigned alert failed employee=%s stage=%s",
+                recipient_employee_id,
+                stage_key,
+            )
 
-        to_email = (recipient.email if recipient else "") or self._employee_email(
-            ctx, recipient_employee_id
-        )
         self._maybe_email_stage_assigned(ctx, to_email, payload)
 
         self._audit.log_entity_change(
@@ -924,9 +1246,22 @@ class SiteInstallationService:
         from core.config import settings
 
         if not settings.project_stage_email_notifications_enabled:
+            logger.info(
+                "Stage assigned email skipped: PROJECT_STAGE_EMAIL_NOTIFICATIONS_ENABLED=false"
+            )
+            return
+        if not settings.smtp_configured:
+            logger.warning(
+                "Stage assigned email skipped: SMTP not configured "
+                "(set SMTP_HOST / SMTP_FROM_ADDRESS for Hostinger)"
+            )
             return
         to = (to_email or "").strip()
         if not to:
+            logger.warning(
+                "Stage assigned email skipped: no recipient email for stage=%s",
+                payload.get("stage"),
+            )
             return
         stage_label = str(payload.get("stage_label") or "Stage")
         site_name = str(payload.get("site_name") or payload.get("document_number") or "site")
@@ -950,6 +1285,7 @@ class SiteInstallationService:
                 NotificationService as FoundationNotificationService,
             )
 
+            # Same Hostinger SMTP path CRM uses (Foundation NotificationService → SmtpEmailAdapter).
             FoundationNotificationService(self._db).send_email(
                 tenant_id=ctx.tenant_id,
                 to_address=to,
@@ -960,7 +1296,71 @@ class SiteInstallationService:
                 created_by=ctx.user_id,
             )
         except Exception:  # noqa: BLE001 - email is best-effort
-            pass
+            logger.exception(
+                "Stage assigned email failed to=%s stage=%s",
+                to,
+                payload.get("stage"),
+            )
+
+    def _maybe_email_stage_completed(
+        self, ctx: TenantContext, to_email: str, payload: dict
+    ) -> None:
+        """Send milestone/step completion mail to step owner or project manager."""
+        from core.config import settings
+
+        if not settings.project_stage_email_notifications_enabled:
+            return
+        if not settings.smtp_configured:
+            logger.warning("Stage completion email skipped: SMTP not configured")
+            return
+        to = (to_email or "").strip()
+        if not to:
+            return
+        stage_label = str(payload.get("stage_label") or "Stage")
+        progress = str(payload.get("progress_status_label") or "Completed")
+        site_name = str(payload.get("site_name") or payload.get("document_number") or "site")
+        project_name = str(payload.get("project_name") or "")
+        actor = str(payload.get("actor_name") or "Assignee")
+        saved_at = str(payload.get("saved_at") or "")
+        remarks = payload.get("remarks")
+        form_path = str(payload.get("form_path") or "/projects")
+        deep_link = f"{settings.frontend_url.rstrip('/')}{form_path}"
+
+        lines = [
+            f"<p><strong>{stage_label}</strong> milestone has been marked "
+            f"<strong>{progress}</strong>.</p>",
+            f"<p>Site: {site_name}<br/>Project: {project_name}<br/>"
+            f"Completed by: {actor}<br/>At: {saved_at}</p>",
+        ]
+        if remarks:
+            lines.append(f"<p>Remarks: {remarks}</p>")
+        lines.append(f'<p><a href="{deep_link}">Open stage</a></p>')
+        body_html = "\n".join(lines)
+        subject = f"[Projects] {stage_label} {progress} ({site_name})"
+
+        try:
+            from modules.foundation.service.notification_service import (
+                NotificationService as FoundationNotificationService,
+            )
+
+            FoundationNotificationService(self._db).send_email(
+                tenant_id=ctx.tenant_id,
+                to_address=to,
+                subject=subject,
+                body_html=body_html,
+                event_type="project.site_stage_completed",
+                payload_json=dict(payload),
+                created_by=ctx.user_id,
+            )
+        except Exception as exc:  # noqa: BLE001 - email is best-effort
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "Stage completion email failed to=%s stage=%s: %s",
+                to,
+                payload.get("stage"),
+                exc,
+            )
 
     def _maybe_email_stage_saved(
         self, ctx: TenantContext, to_email: str, payload: dict
@@ -968,6 +1368,9 @@ class SiteInstallationService:
         from core.config import settings
 
         if not settings.project_stage_email_notifications_enabled:
+            return
+        if not settings.smtp_configured:
+            logger.warning("Stage saved email skipped: SMTP not configured")
             return
         to = (to_email or "").strip()
         if not to:
@@ -1014,8 +1417,15 @@ class SiteInstallationService:
                 payload_json=dict(payload),
                 created_by=ctx.user_id,
             )
-        except Exception:  # noqa: BLE001 - email is best-effort
-            pass
+        except Exception as exc:  # noqa: BLE001 - email is best-effort
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "Stage save email failed to=%s stage=%s: %s",
+                to,
+                payload.get("stage"),
+                exc,
+            )
 
     def list_stage_save_alerts(self, ctx: TenantContext, *, limit: int = 50) -> list[dict]:
         """Stage-save alerts addressed to the signed-in user (admins and project managers)."""
@@ -1106,12 +1516,6 @@ class SiteInstallationService:
             raise InvalidSiteInstallationState("Cancelled site installation cannot advance")
 
         engine.assert_advance_gates(row, action)
-        if action == "complete_acceptance" and not row.completion_certificate_signed:
-            # Without a signed work completion certificate the service invoice
-            # cannot be raised and the job cannot be used in tender submissions.
-            raise InvalidSiteInstallationState(
-                "Record the customer-signed completion certificate before closing Acceptance"
-            )
         updates: dict = {
             **engine.stage_date_updates_for_action(action, date.today()),
         }

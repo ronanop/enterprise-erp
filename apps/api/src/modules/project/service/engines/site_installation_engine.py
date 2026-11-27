@@ -22,6 +22,7 @@ from typing import Any
 
 from modules.project.domain.enums import (
     SiteDeliveryType,
+    SiteInstallationStatus,
     SiteWorkflowStage,
     delivery_includes_bios,
     delivery_includes_os,
@@ -188,12 +189,35 @@ def is_stage_unlocked_by_progress(record: Any, stage: str) -> bool:
 
 
 def assignee_work_status(record: Any, assigned_stage: str, current_stage: str) -> str:
-    """My Jobs / Completed Jobs - only Completed progress is ``done``."""
-    if is_stage_assignee_completed(record, assigned_stage):
+    """My Jobs / Completed Jobs - only Completed progress is ``done``.
+
+    SCM and Onsite Delivery stay ``in_progress`` while PO remaining qty > 0,
+    matching Partial-completed open behaviour even if progress/workflow advanced early.
+    """
+    qty_keeps_open = False
+    if assigned_stage == SiteWorkflowStage.SCM.value:
+        qty_keeps_open = cloud_po_lines_have_scm_remaining(record)
+    elif assigned_stage == SiteWorkflowStage.ONSITE_DELIVERY.value:
+        qty_keeps_open = cloud_po_lines_have_onsite_remaining(record)
+    elif assigned_stage == SiteWorkflowStage.INSTALLATION.value:
+        qty_keeps_open = cloud_po_lines_have_install_remaining(record)
+
+    if not qty_keeps_open and is_stage_assignee_completed(record, assigned_stage):
         return "done"
     effective = resolve_legacy_onsite_stage(record) if current_stage == SiteWorkflowStage.ONSITE.value else current_stage
     delivery = getattr(record, "delivery_type", SiteDeliveryType.SERVER_OS_RACK.value)
-    return stage_work_status(assigned_stage, effective, delivery)
+    status = stage_work_status(assigned_stage, effective, delivery)
+    if qty_keeps_open and status == "done":
+        status = "in_progress"
+    # Early assignment: once a future stage has an owner, treat it as actionable.
+    if status == "pending":
+        field = STAGE_ASSIGNEE_FIELDS.get(assigned_stage)
+        assignee_val = getattr(record, field, None) if field else None
+        if assignee_val is None and assigned_stage == SiteWorkflowStage.ONSITE_DELIVERY.value:
+            assignee_val = getattr(record, "onsite_assignee_employee_id", None)
+        if assignee_val is not None:
+            return "in_progress"
+    return status
 
 
 def can_open_stage_form(record: Any, assigned_stage: str, current_stage: str) -> bool:
@@ -255,6 +279,37 @@ STAGE_REMARKS_FIELDS: dict[str, str] = {
     SiteWorkflowStage.ACCEPTANCE.value: "acceptance_remarks",
 }
 
+# All Yes/No checklist bool fields that stamp checkpoint_yes_at when Yes is clicked.
+CHECKPOINT_YES_STAMP_FIELDS: frozenset[str] = frozenset(
+    {
+        "space_available",
+        "power_available",
+        "survey_completed",
+        "mo_request",
+        "im_material",
+        "material_handover_done",
+        "rack_installation_done",
+        "server_stacking_done",
+        "rack_power_on_done",
+        "server_power_on_done",
+        "rack_server_stacking_done",
+        "rack_server_power_on_done",
+        "dac_ilo_cabling_done",
+        "lld_done",
+        "bios_configuration_done",
+        "firmware_config_done",
+        "os_installation_done",
+        "vm_installation_done",
+        "nw_config_done",
+        "tools_integration_done",
+        "mbss_done",
+        "vascan_done",
+        "handover_to_cloud_done",
+        "hwat_request_done",
+        "hwat_signoff_received",
+    }
+)
+
 # Yes/No checklist fields that can be answered No - labels for admin alerts.
 STAGE_CHECKLIST_NO_FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
     SiteWorkflowStage.SURVEY.value: (
@@ -267,18 +322,18 @@ STAGE_CHECKLIST_NO_FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
     ),
     SiteWorkflowStage.MATERIAL_HANDOVER.value: (
         ("im_material", "IM Material"),
-        ("power_on_material", "Power-on Material"),
         ("material_handover_done", "Material Handover (WH → Site)"),
     ),
     SiteWorkflowStage.ONSITE.value: (
         ("mo_request", "MO Request"),
         ("im_material", "IM Material"),
-        ("power_on_material", "Power-on Material"),
         ("material_handover_done", "Material Handover (WH → Site)"),
     ),
     SiteWorkflowStage.INSTALLATION.value: (
-        ("rack_server_stacking_done", "Rack / Server Stacking"),
-        ("rack_server_power_on_done", "Rack / Server Power On"),
+        ("rack_installation_done", "Rack Installation"),
+        ("server_stacking_done", "Server Stacking"),
+        ("rack_power_on_done", "Rack Power On"),
+        ("server_power_on_done", "Server Power On"),
         ("dac_ilo_cabling_done", "DAC / ILO Cabling"),
         ("lld_done", "LLD Availability"),
         ("bios_configuration_done", "BIOS Configuration"),
@@ -418,8 +473,8 @@ def stage_work_status(stage: str, current: str, delivery_type: str) -> str:
 def _require_stage_assignees(record: Any, delivery: str) -> None:
     """Assignment gate: only Survey owner is required to leave the assign step.
 
-    Later stage owners are assigned one-by-one after the previous stage completes
-    (from Project Tracking).
+    Later stage owners may be assigned any time from Project Tracking, including
+    before the previous step is fully completed.
     """
     del delivery
     field = STAGE_ASSIGNEE_FIELDS[SiteWorkflowStage.SURVEY.value]
@@ -489,6 +544,217 @@ def _require_true_with_date(record: Any, flag: str, date_field: str, label: str)
         raise InvalidSiteInstallationState(f"{label} date is required before advancing")
 
 
+def _line_int(line: dict, key: str) -> int:
+    try:
+        return int(line.get(key) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _cloud_po_lines_meaningful(record: Any) -> list[dict]:
+    lines = getattr(record, "cloud_po_lines", None) or []
+    if not isinstance(lines, list):
+        return []
+    out: list[dict] = []
+    for line in lines:
+        if not isinstance(line, dict):
+            continue
+        if _line_int(line, "quantity") > 0:
+            out.append(line)
+    return out
+
+
+def cloud_po_lines_are_fully_delivered(record: Any) -> bool:
+    """True when every PO line with qty > 0 is fully SCM-delivered (or no lines)."""
+    meaningful = _cloud_po_lines_meaningful(record)
+    if not meaningful:
+        return True
+    for line in meaningful:
+        if _line_int(line, "delivered_quantity") < _line_int(line, "quantity"):
+            return False
+    return True
+
+
+def cloud_po_lines_are_fully_onsite(record: Any) -> bool:
+    """True when every original PO qty has been received on site."""
+    meaningful = _cloud_po_lines_meaningful(record)
+    if not meaningful:
+        return False
+    for line in meaningful:
+        if _line_int(line, "onsite_delivered_quantity") < _line_int(line, "quantity"):
+            return False
+    return True
+
+
+def cloud_po_lines_have_scm_remaining(record: Any) -> bool:
+    """True when at least one PO line still needs SCM delivery."""
+    meaningful = _cloud_po_lines_meaningful(record)
+    if not meaningful:
+        return False
+    return not cloud_po_lines_are_fully_delivered(record)
+
+
+def cloud_po_lines_have_onsite_remaining(record: Any) -> bool:
+    """True when at least one PO line still needs onsite receipt."""
+    meaningful = _cloud_po_lines_meaningful(record)
+    if not meaningful:
+        return False
+    return not cloud_po_lines_are_fully_onsite(record)
+
+
+def cloud_po_lines_are_fully_installed(record: Any) -> bool:
+    """True when every original PO qty has been installed on site."""
+    meaningful = _cloud_po_lines_meaningful(record)
+    if not meaningful:
+        return False
+    for line in meaningful:
+        if _line_int(line, "installed_quantity") < _line_int(line, "quantity"):
+            return False
+    return True
+
+
+def cloud_po_lines_have_install_remaining(record: Any) -> bool:
+    """True when at least one PO line still needs installation."""
+    meaningful = _cloud_po_lines_meaningful(record)
+    if not meaningful:
+        return False
+    return not cloud_po_lines_are_fully_installed(record)
+
+
+def _require_cloud_po_lines_fully_delivered(record: Any) -> None:
+    """SCM cannot complete until every type/qty line is fully delivered."""
+    lines = getattr(record, "cloud_po_lines", None) or []
+    if not isinstance(lines, list) or not lines:
+        return
+    for index, line in enumerate(lines):
+        if not isinstance(line, dict):
+            continue
+        qty = _line_int(line, "quantity")
+        if qty <= 0:
+            continue
+        delivered = _line_int(line, "delivered_quantity")
+        if delivered < qty:
+            label = str(line.get("line_type") or "").strip() or f"Line {index + 1}"
+            raise InvalidSiteInstallationState(
+                f"Deliver all quantities before completing SCM "
+                f"({label}: {delivered}/{qty} delivered)"
+            )
+
+
+def _require_cloud_po_lines_fully_delivered_onsite(record: Any) -> None:
+    """Onsite Delivery cannot complete until every original PO qty is on site."""
+    lines = getattr(record, "cloud_po_lines", None) or []
+    if not isinstance(lines, list) or not lines:
+        raise InvalidSiteInstallationState(
+            "No cloud PO lines to receive on site"
+        )
+    meaningful = 0
+    for index, line in enumerate(lines):
+        if not isinstance(line, dict):
+            continue
+        qty = _line_int(line, "quantity")
+        if qty <= 0:
+            continue
+        meaningful += 1
+        onsite_delivered = _line_int(line, "onsite_delivered_quantity")
+        if onsite_delivered < qty:
+            label = str(line.get("line_type") or "").strip() or f"Line {index + 1}"
+            raise InvalidSiteInstallationState(
+                f"Receive all quantities on site before completing Onsite Delivery "
+                f"({label}: {onsite_delivered}/{qty} on site)"
+            )
+    if meaningful == 0:
+        raise InvalidSiteInstallationState(
+            "No cloud PO quantities to receive on site"
+        )
+
+
+def _require_cloud_po_lines_fully_installed(record: Any) -> None:
+    """Installation cannot complete until every original PO qty is installed."""
+    lines = getattr(record, "cloud_po_lines", None) or []
+    if not isinstance(lines, list) or not lines:
+        return
+    meaningful = 0
+    for index, line in enumerate(lines):
+        if not isinstance(line, dict):
+            continue
+        qty = _line_int(line, "quantity")
+        if qty <= 0:
+            continue
+        meaningful += 1
+        installed = _line_int(line, "installed_quantity")
+        if installed < qty:
+            label = str(line.get("line_type") or "").strip() or f"Line {index + 1}"
+            raise InvalidSiteInstallationState(
+                f"Install all quantities before completing Installation "
+                f"({label}: {installed}/{qty} installed)"
+            )
+    if meaningful == 0:
+        return
+
+
+def incomplete_qty_stage_heal_updates(record: Any) -> dict[str, Any]:
+    """Keep SCM / Onsite / Installation open until remaining qty is 0.
+
+    Rows wrongly marked Completed under older gates are downgraded to Partial
+    completed and, when the workflow already advanced, rewound so the earliest
+    incomplete qty step stays the active open stage.
+    """
+    status = getattr(record, "status", None)
+    stage = getattr(record, "workflow_stage", None)
+    if status == SiteInstallationStatus.COMPLETED.value:
+        return {}
+    if stage == SiteWorkflowStage.COMPLETED.value:
+        return {}
+
+    updates: dict[str, Any] = {}
+
+    if cloud_po_lines_have_scm_remaining(record):
+        if stage_progress_status(record, SiteWorkflowStage.SCM.value) == PROGRESS_COMPLETED_STATUS:
+            updates["scm_progress_status"] = "partial_completed"
+
+    if cloud_po_lines_have_onsite_remaining(record):
+        if (
+            stage_progress_status(record, SiteWorkflowStage.ONSITE_DELIVERY.value)
+            == PROGRESS_COMPLETED_STATUS
+        ):
+            updates["onsite_delivery_progress_status"] = "partial_completed"
+            updates["onsite_delivery_finished_date"] = None
+
+        effective = (
+            resolve_legacy_onsite_stage(record)
+            if stage == SiteWorkflowStage.ONSITE.value
+            else stage
+        )
+        if isinstance(effective, str):
+            onsite_i = _stage_index(SiteWorkflowStage.ONSITE_DELIVERY.value)
+            cur_i = _stage_index(effective)
+            # Past Onsite Delivery but qty still remaining → reopen that step
+            if cur_i > onsite_i >= 0:
+                updates["workflow_stage"] = SiteWorkflowStage.ONSITE_DELIVERY.value
+
+    elif cloud_po_lines_have_install_remaining(record):
+        if (
+            stage_progress_status(record, SiteWorkflowStage.INSTALLATION.value)
+            == PROGRESS_COMPLETED_STATUS
+        ):
+            updates["installation_progress_status"] = "partial_completed"
+            updates["installation_finished_date"] = None
+
+        effective = (
+            resolve_legacy_onsite_stage(record)
+            if stage == SiteWorkflowStage.ONSITE.value
+            else stage
+        )
+        if isinstance(effective, str):
+            install_i = _stage_index(SiteWorkflowStage.INSTALLATION.value)
+            cur_i = _stage_index(effective)
+            if cur_i > install_i >= 0:
+                updates["workflow_stage"] = SiteWorkflowStage.INSTALLATION.value
+
+    return updates
+
+
 def _normalize_stage(stage: str) -> str:
     """Map legacy configuration stage onto installation."""
     if stage == SiteWorkflowStage.CONFIGURATION.value:
@@ -555,23 +821,38 @@ def workflow_stage_after_action(current_stage: str, action: str, delivery_type: 
 def _assert_installation_and_config_gates(record: Any, delivery: str) -> None:
     if delivery_is_rack_only(delivery):
         _require_true_with_date(
-            record, "rack_server_stacking_done", "rack_server_stacking_date", "Rack Installation"
+            record, "rack_installation_done", "rack_installation_date", "Rack Installation"
         )
+        _require_cloud_po_lines_fully_installed(record)
         return
 
     if delivery_includes_server(delivery):
         has_rack = delivery_includes_rack(delivery)
+        if has_rack:
+            _require_true_with_date(
+                record,
+                "rack_installation_done",
+                "rack_installation_date",
+                "Rack Installation",
+            )
         _require_true_with_date(
             record,
-            "rack_server_stacking_done",
-            "rack_server_stacking_date",
-            "Rack Installation + Server Stacking" if has_rack else "Server Stacking",
+            "server_stacking_done",
+            "server_stacking_date",
+            "Server Stacking",
         )
+        if has_rack:
+            _require_true_with_date(
+                record,
+                "rack_power_on_done",
+                "rack_power_on_date",
+                "Rack Power On",
+            )
         _require_true_with_date(
             record,
-            "rack_server_power_on_done",
-            "rack_server_power_on_date",
-            "Rack + Server Power On" if has_rack else "Server Power On",
+            "server_power_on_done",
+            "server_power_on_date",
+            "Server Power On",
         )
         _require_true_with_date(
             record,
@@ -610,6 +891,8 @@ def _assert_installation_and_config_gates(record: Any, delivery: str) -> None:
         _require_true_with_date(record, "mbss_done", "mbss_date", "MBSS")
         _require_true_with_date(record, "vascan_done", "vascan_date", "VASCAN")
 
+    _require_cloud_po_lines_fully_installed(record)
+
 
 def _require_stage_attachment(record: Any, field: str, label: str) -> None:
     value = getattr(record, field, None)
@@ -620,6 +903,7 @@ def _require_stage_attachment(record: Any, field: str, label: str) -> None:
 
 
 def _assert_onsite_delivery_gates(record: Any, delivery: str) -> None:
+    del delivery
     attachment = STAGE_ATTACHMENT_FIELDS[SiteWorkflowStage.ONSITE_DELIVERY.value]
     # Fall back to legacy attachment column when split column empty
     if not (isinstance(getattr(record, attachment, None), str) and getattr(record, attachment).strip()):
@@ -629,14 +913,11 @@ def _assert_onsite_delivery_gates(record: Any, delivery: str) -> None:
                 "Onsite Delivery attachment is required before continuing"
             )
     _require_true_with_date(record, "mo_request", "mo_request_date", "MO Request")
-    if delivery_includes_server(delivery):
-        _require(record, "server_on_site_delivery_date", "Server On-site Delivery Date")
-    if delivery_includes_rack(delivery):
-        _require(record, "rack_on_site_delivery_date", "Rack On-site Delivery Date")
-    _require(record, "pdu_on_site_delivery_date", "PDU On-site Delivery Date")
+    _require_cloud_po_lines_fully_delivered_onsite(record)
 
 
 def _assert_material_handover_gates(record: Any, delivery: str) -> None:
+    del delivery
     attachment = STAGE_ATTACHMENT_FIELDS[SiteWorkflowStage.MATERIAL_HANDOVER.value]
     if not (isinstance(getattr(record, attachment, None), str) and getattr(record, attachment).strip()):
         legacy = getattr(record, "onsite_attachment_name", None)
@@ -645,10 +926,6 @@ def _assert_material_handover_gates(record: Any, delivery: str) -> None:
                 "Material Handover attachment is required before continuing"
             )
     _require_true_with_date(record, "im_material", "im_material_date", "IM Material")
-    if not delivery_is_rack_only(delivery):
-        _require_true_with_date(
-            record, "power_on_material", "power_on_material_date", "Power-on Material"
-        )
     _require_true_with_date(
         record, "material_handover_done", "material_handover_date", "Material Handover"
     )
@@ -720,10 +997,7 @@ def assert_advance_gates(record: Any, action: str) -> None:
                 record, "industrial_socket_lines", "Industrial Socket", require_date=True
             )
             _require_material_lines(record, "lug_lines", "Lugs", require_date=True)
-        if delivery_includes_server(delivery) and getattr(record, "server_qty", None) is None:
-            raise InvalidSiteInstallationState("Server QTY is required before advancing")
-        if delivery_includes_rack(delivery) and getattr(record, "rack_qty", None) is None:
-            raise InvalidSiteInstallationState("Rack Qty is required before advancing")
+        _require_cloud_po_lines_fully_delivered(record)
         return
 
     if action == "complete_onsite_delivery":
@@ -739,10 +1013,6 @@ def assert_advance_gates(record: Any, action: str) -> None:
         _require_stage_attachment(record, "onsite_attachment_name", "On-site")
         _require_true_with_date(record, "mo_request", "mo_request_date", "MO Request")
         _require_true_with_date(record, "im_material", "im_material_date", "IM Material")
-        if not delivery_is_rack_only(delivery):
-            _require_true_with_date(
-                record, "power_on_material", "power_on_material_date", "Power-on Material"
-            )
         _require_true_with_date(
             record, "material_handover_done", "material_handover_date", "Material Handover"
         )

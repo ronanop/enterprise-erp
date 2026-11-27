@@ -1,15 +1,32 @@
 "use client";
 
 import { useCallback, useMemo, useRef } from "react";
-import { Truck, Warehouse } from "lucide-react";
+import { Package, Truck } from "lucide-react";
 
 import {
+  cloudPoLinesFullyDeliveredOnsite,
+  draftsFromCloudPoLines,
+  draftsToCloudPoLines,
+  parseCloudPoDeliveryDrafts,
+  serializeCloudPoDeliveryDrafts,
+} from "@/components/projects/cloud-po-delivery-lines";
+import {
+  linesFromMaterial,
+  serializeTypeQtyLines,
+  parseTypeQtyLines,
+  typeQtyLinesToMaterial,
+} from "@/components/projects/material-type-qty-lines";
+import {
+  CABLE_TYPES,
+  INDUSTRIAL_SOCKET_TYPES,
+  LUG_TYPES,
   deliveryIncludesRack,
-  deliveryIncludesServer,
 } from "@/components/projects/projects-domain";
 import {
+  dateIfAnswered,
   orNull,
   ProjectsRecordForm,
+  yesNoFromBoolDate,
   type FormSection,
   type FormValues,
 } from "@/components/projects/projects-record-form";
@@ -36,18 +53,20 @@ import {
 import { useSiteStageFormReadOnlyMeta } from "@/components/projects/site-stage-form-read-only-context";
 import { SiteStageExportButton } from "@/components/projects/site-stage-export-button";
 
+const EMPTY_LINES = serializeTypeQtyLines([
+  { type: "", otherLabel: "", quantity: "", delivered: "", date: "" },
+]);
+
 const EMPTY: FormValues = {
   ...INTAKE_SUMMARY_EMPTY,
   delivery_type: "",
   stage_assignee_label: "",
   mo_request: "",
   mo_request_date: "",
-  server_on_site_delivery_done: "",
-  server_on_site_delivery_date: "",
-  rack_on_site_delivery_done: "",
-  rack_on_site_delivery_date: "",
-  pdu_on_site_delivery_done: "",
-  pdu_on_site_delivery_date: "",
+  cloud_po_lines: "[]",
+  cable_lines: EMPTY_LINES,
+  socket_lines: EMPTY_LINES,
+  lug_lines: EMPTY_LINES,
   onsite_delivery_progress_status: "",
   onsite_delivery_attachment_name: "",
   onsite_delivery_remarks: "",
@@ -63,10 +82,6 @@ function dateOrEmpty(v: string | null | undefined): string {
 
 function isRack(values: FormValues): boolean {
   return deliveryIncludesRack(values.delivery_type);
-}
-
-function isServer(values: FormValues): boolean {
-  return deliveryIncludesServer(values.delivery_type);
 }
 
 export function SiteOnsiteDeliveryFormPage({ projectId }: { projectId: string }) {
@@ -91,14 +106,18 @@ export function SiteOnsiteDeliveryFormPage({ projectId }: { projectId: string })
       }),
       delivery_type: site.delivery_type ?? "",
       stage_assignee_label: owner.stage_assignee_label,
-      mo_request: site.mo_request ? "true" : "",
+      mo_request: yesNoFromBoolDate(site.mo_request, site.mo_request_date),
       mo_request_date: dateOrEmpty(site.mo_request_date),
-      server_on_site_delivery_done: site.server_on_site_delivery_date ? "true" : "false",
-      server_on_site_delivery_date: dateOrEmpty(site.server_on_site_delivery_date),
-      rack_on_site_delivery_done: site.rack_on_site_delivery_date ? "true" : "false",
-      rack_on_site_delivery_date: dateOrEmpty(site.rack_on_site_delivery_date),
-      pdu_on_site_delivery_done: site.pdu_on_site_delivery_date ? "true" : "false",
-      pdu_on_site_delivery_date: dateOrEmpty(site.pdu_on_site_delivery_date),
+      cloud_po_lines: serializeCloudPoDeliveryDrafts(draftsFromCloudPoLines(site)),
+      cable_lines: serializeTypeQtyLines(
+        linesFromMaterial(site.cable_lines, CABLE_TYPES),
+      ),
+      socket_lines: serializeTypeQtyLines(
+        linesFromMaterial(site.industrial_socket_lines, INDUSTRIAL_SOCKET_TYPES),
+      ),
+      lug_lines: serializeTypeQtyLines(
+        linesFromMaterial(site.lug_lines, LUG_TYPES),
+      ),
       onsite_delivery_progress_status:
         site.onsite_delivery_progress_status ?? site.onsite_progress_status ?? "",
       onsite_delivery_attachment_name:
@@ -111,23 +130,29 @@ export function SiteOnsiteDeliveryFormPage({ projectId }: { projectId: string })
 
   const onSave = useCallback(
     async (v: FormValues) => {
-      const server = isServer(v);
+      const drafts = parseCloudPoDeliveryDrafts(v.cloud_po_lines);
+      const fullyOnsite = cloudPoLinesFullyDeliveredOnsite(drafts);
       const rack = isRack(v);
+
+      if (isProgressCompleteForAdvance(v.onsite_delivery_progress_status) && !fullyOnsite) {
+        throw new Error(
+          "Cannot mark Onsite Delivery Completed until every PO quantity is received on site. Use Partial completed so the next stage can still be assigned.",
+        );
+      }
 
       await updateSiteInstallationByProject(projectId, {
         mo_request: asBool(v.mo_request),
-        mo_request_date: asBool(v.mo_request) ? orNull(v.mo_request_date) : null,
-        server_on_site_delivery_date:
-          server && asBool(v.server_on_site_delivery_done)
-            ? orNull(v.server_on_site_delivery_date)
-            : null,
-        rack_on_site_delivery_date:
-          rack && asBool(v.rack_on_site_delivery_done)
-            ? orNull(v.rack_on_site_delivery_date)
-            : null,
-        pdu_on_site_delivery_date: asBool(v.pdu_on_site_delivery_done)
-          ? orNull(v.pdu_on_site_delivery_date)
-          : null,
+        mo_request_date: dateIfAnswered(v.mo_request, v.mo_request_date),
+        cloud_po_lines: draftsToCloudPoLines(drafts),
+        ...(rack
+          ? {
+              cable_lines: typeQtyLinesToMaterial(parseTypeQtyLines(v.cable_lines)),
+              industrial_socket_lines: typeQtyLinesToMaterial(
+                parseTypeQtyLines(v.socket_lines),
+              ),
+              lug_lines: typeQtyLinesToMaterial(parseTypeQtyLines(v.lug_lines)),
+            }
+          : {}),
         onsite_delivery_progress_status: orNull(v.onsite_delivery_progress_status),
         onsite_delivery_attachment_name: orNull(v.onsite_delivery_attachment_name),
         onsite_delivery_remarks: orNull(v.onsite_delivery_remarks),
@@ -135,7 +160,7 @@ export function SiteOnsiteDeliveryFormPage({ projectId }: { projectId: string })
 
       loadedValuesRef.current = v;
 
-      if (isProgressCompleteForAdvance(v.onsite_delivery_progress_status)) {
+      if (isProgressCompleteForAdvance(v.onsite_delivery_progress_status) && fullyOnsite) {
         await advanceSiteInstallation(projectId, "complete_onsite_delivery");
       }
 
@@ -164,55 +189,53 @@ export function SiteOnsiteDeliveryFormPage({ projectId }: { projectId: string })
             label: "MO Request Date",
             type: "date",
             required: true,
-            visibleWhen: (v) => v.mo_request === "true",
+            visibleWhen: (v) => v.mo_request === "true" || v.mo_request === "false",
           },
         ],
       },
       {
-        title: "On-site deliveries",
-        subtitle: "Mark Yes/No for each on-site delivery; enter the date when Yes.",
-        icon: Warehouse,
+        title: "On-site types & quantities",
+        icon: Package,
         fields: [
           {
-            name: "server_on_site_delivery_done",
-            label: "Server On-site Delivery",
-            type: "yesno",
-            clearFieldsOnChange: ["server_on_site_delivery_date"],
-            visibleWhen: isServer,
+            name: "cloud_po_lines",
+            label: "Type / Qty onsite delivery",
+            type: "cloud_po_lines",
+            deliveryMode: "onsite",
+            full: true,
           },
           {
-            name: "server_on_site_delivery_date",
-            label: "Server On-site Delivery Date",
-            type: "date",
+            name: "cable_lines",
+            label: "Cable",
+            type: "type_qty_lines",
             required: true,
-            visibleWhen: (v) => isServer(v) && v.server_on_site_delivery_done === "true",
-          },
-          {
-            name: "rack_on_site_delivery_done",
-            label: "Rack On-site Delivery",
-            type: "yesno",
-            clearFieldsOnChange: ["rack_on_site_delivery_date"],
+            full: true,
+            showDate: true,
+            datesOnly: true,
+            options: CABLE_TYPES,
             visibleWhen: isRack,
           },
           {
-            name: "rack_on_site_delivery_date",
-            label: "Rack On-site Delivery Date",
-            type: "date",
+            name: "socket_lines",
+            label: "Industrial Socket",
+            type: "type_qty_lines",
             required: true,
-            visibleWhen: (v) => isRack(v) && v.rack_on_site_delivery_done === "true",
+            full: true,
+            showDate: true,
+            datesOnly: true,
+            options: INDUSTRIAL_SOCKET_TYPES,
+            visibleWhen: isRack,
           },
           {
-            name: "pdu_on_site_delivery_done",
-            label: "PDU On-site Delivery",
-            type: "yesno",
-            clearFieldsOnChange: ["pdu_on_site_delivery_date"],
-          },
-          {
-            name: "pdu_on_site_delivery_date",
-            label: "PDU On-site Delivery Date",
-            type: "date",
+            name: "lug_lines",
+            label: "Lugs",
+            type: "type_qty_lines",
             required: true,
-            visibleWhen: (v) => v.pdu_on_site_delivery_done === "true",
+            full: true,
+            showDate: true,
+            datesOnly: true,
+            options: LUG_TYPES,
+            visibleWhen: isRack,
           },
         ],
       },
@@ -229,7 +252,7 @@ export function SiteOnsiteDeliveryFormPage({ projectId }: { projectId: string })
   return (
     <ProjectsRecordForm
       title="Onsite Delivery"
-      description="Step 4 - MO request and on-site deliveries (server / rack / PDU)."
+      description="Step 4 - MO request and on-site receipt of all PO quantities and site materials."
       backHref={
         stageFormMeta.readOnly
           ? (stageFormMeta.backHref ?? `/projects/projects/${projectId}`)

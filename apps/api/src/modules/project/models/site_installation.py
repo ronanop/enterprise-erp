@@ -81,6 +81,8 @@ class PrjSiteInstallation(Base, *PrjDetailMixin):
     cloud_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Snapshot of tracker PO lines for this cloud (shown on project detail).
     cloud_po_lines: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    # Map of checklist field name → ISO datetime when Yes was clicked.
+    checkpoint_yes_at: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     site_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     power_requirements: Mapped[str | None] = mapped_column(Text, nullable=True)
     rfai_request_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -131,6 +133,15 @@ class PrjSiteInstallation(Base, *PrjDetailMixin):
     rack_server_stacking_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     rack_server_power_on_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     dac_ilo_cabling_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Split install checkboxes (Rack / Server stacking & power-on)
+    rack_installation_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    server_stacking_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    rack_power_on_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    server_power_on_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    rack_installation_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    server_stacking_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    rack_power_on_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    server_power_on_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     # Configuration
     bios_configuration_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

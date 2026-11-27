@@ -18,7 +18,7 @@ PROJECT_MODULE_KEY = "projects"
 
 @dataclass(frozen=True)
 class ProjectModuleAdminRecipient:
-    user_id: UUID
+    user_id: UUID | None
     email: str
     display_name: str
     employee_id: UUID | None

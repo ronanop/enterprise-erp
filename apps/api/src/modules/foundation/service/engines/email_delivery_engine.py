@@ -38,6 +38,19 @@ class EmailDeliveryEngine:
         self._db = db
         self._adapter = adapter or SmtpEmailAdapter()
 
+    def _persist(self) -> None:
+        """Persist delivery status without poisoning outer savepoints.
+
+        Project (and other) callers wrap alerts in ``begin_nested()``. A full
+        ``commit()`` inside that savepoint aborts the alert block and silently
+        drops later emails (e.g. stage-assigned). Flush while nested; commit
+        only for standalone sessions (Celery worker tasks).
+        """
+        if self._db.in_nested_transaction():
+            self._db.flush()
+            return
+        self._db.commit()
+
     def deliver(self, event_id: UUID, delivery_id: UUID) -> dict:
         event = self._db.get(NtfEvent, event_id)
         delivery = self._db.get(NtfDelivery, delivery_id)
@@ -52,14 +65,14 @@ class EmailDeliveryEngine:
             delivery.delivered_at = utcnow()
             delivery.provider_response = "non_email_channel_stub"
             event.status = "sent"
-            self._db.commit()
+            self._persist()
             return {"status": "delivered", "channel": delivery.channel}
 
         if not self._adapter.configured:
             delivery.status = "failed"
             delivery.provider_response = "smtp_not_configured"
             event.status = "failed"
-            self._db.commit()
+            self._persist()
             return {"status": "failed", "message": "SMTP email not configured"}
 
         template = self._db.get(NtfTemplate, event.template_id)
@@ -78,7 +91,7 @@ class EmailDeliveryEngine:
             delivery.status = "failed"
             delivery.provider_response = "missing_recipient_address"
             event.status = "failed"
-            self._db.commit()
+            self._persist()
             return {"status": "failed", "message": "missing recipient"}
 
         mail_attachments: list[EmailAttachment] = []
@@ -117,7 +130,7 @@ class EmailDeliveryEngine:
             delivery.status = "delivered"
             delivery.delivered_at = utcnow()
             event.status = "sent"
-            self._db.commit()
+            self._persist()
             return {
                 "status": "delivered",
                 "event_id": str(event_id),
@@ -129,7 +142,7 @@ class EmailDeliveryEngine:
         delivery.delivered_at = utcnow()  # attempt timestamp for failed-row sorting / Time column
         delivery.attempt_no = (delivery.attempt_no or 1) + 0
         event.status = "failed"
-        self._db.commit()
+        self._persist()
         return {
             "status": "failed",
             "event_id": str(event_id),

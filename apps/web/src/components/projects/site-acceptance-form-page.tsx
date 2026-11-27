@@ -3,7 +3,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { CloudUpload } from "lucide-react";
 
-import { CompletionCertificateCard } from "@/components/projects/completion-certificate-card";
 import {
   deliveryIncludesOs,
   deliveryIsRackOnly,
@@ -11,7 +10,9 @@ import {
 } from "@/components/projects/projects-domain";
 import {
   ProjectsRecordForm,
+  dateIfAnswered,
   orNull,
+  yesNoFromBoolDate,
   type FormSection,
   type FormValues,
 } from "@/components/projects/projects-record-form";
@@ -94,11 +95,20 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
       os_installation_done: site.os_installation_done ? "Done" : "Pending",
       mbss_done: site.mbss_done ? "Done" : "Pending",
       vascan_done: site.vascan_done ? "Done" : "Pending",
-      handover_to_cloud_done: site.handover_to_cloud_done ? "true" : "",
+      handover_to_cloud_done: yesNoFromBoolDate(
+        site.handover_to_cloud_done,
+        site.handover_to_cloud_date,
+      ),
       handover_to_cloud_date: dateOrEmpty(site.handover_to_cloud_date),
-      hwat_request_done: site.hwat_request_done ? "true" : "",
+      hwat_request_done: yesNoFromBoolDate(
+        site.hwat_request_done,
+        site.hwat_request_date,
+      ),
       hwat_request_date: dateOrEmpty(site.hwat_request_date),
-      hwat_signoff_received: site.hwat_signoff_received ? "true" : "",
+      hwat_signoff_received: yesNoFromBoolDate(
+        site.hwat_signoff_received,
+        site.hwat_signoff_date,
+      ),
       hwat_signoff_date: dateOrEmpty(site.hwat_signoff_date),
       acceptance_progress_status: site.acceptance_progress_status ?? "",
       acceptance_attachment_name: site.acceptance_attachment_name ?? "",
@@ -116,14 +126,18 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
 
       await updateSiteInstallationByProject(projectId, {
         handover_to_cloud_done: asBool(v.handover_to_cloud_done),
-        handover_to_cloud_date: asBool(v.handover_to_cloud_done)
-          ? orNull(v.handover_to_cloud_date)
-          : null,
+        handover_to_cloud_date: dateIfAnswered(
+          v.handover_to_cloud_done,
+          v.handover_to_cloud_date,
+        ),
         hwat_request_done: hwat ? asBool(v.hwat_request_done) : false,
-        hwat_request_date: hwat && asBool(v.hwat_request_done) ? orNull(v.hwat_request_date) : null,
+        hwat_request_date: hwat
+          ? dateIfAnswered(v.hwat_request_done, v.hwat_request_date)
+          : null,
         hwat_signoff_received: hwat ? asBool(v.hwat_signoff_received) : false,
-        hwat_signoff_date:
-          hwat && asBool(v.hwat_signoff_received) ? orNull(v.hwat_signoff_date) : null,
+        hwat_signoff_date: hwat
+          ? dateIfAnswered(v.hwat_signoff_received, v.hwat_signoff_date)
+          : null,
         acceptance_progress_status: orNull(v.acceptance_progress_status),
         acceptance_attachment_name: orNull(v.acceptance_attachment_name),
         acceptance_remarks: orNull(v.acceptance_remarks),
@@ -255,9 +269,6 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
       emptyValues={EMPTY}
       load={load}
       onSave={onSave}
-      afterSections={
-        <CompletionCertificateCard projectId={projectId} readOnly={stageFormMeta.readOnly} />
-      }
       headerActions={
         stageFormMeta.readOnly ? (
           <SiteStageExportButton projectId={projectId} stage="acceptance" />

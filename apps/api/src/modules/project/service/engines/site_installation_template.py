@@ -79,10 +79,10 @@ SITE_INSTALLATION_WBS: tuple[WbsPhaseSpec, ...] = (
         stage=SiteWorkflowStage.SCM.value,
         milestone=WbsMilestoneSpec(
             code="MS-WH",
-            name="Warehouse Delivery",
+            name="Types, quantities & site materials",
             tasks=(
+                WbsTaskSpec("Track PO type / qty delivery"),
                 WbsTaskSpec("Confirm site materials types & quantities"),
-                WbsTaskSpec("Track server / rack / PDU WH delivery"),
             ),
         ),
     ),

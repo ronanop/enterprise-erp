@@ -3,10 +3,11 @@
 import { useCallback, useMemo, useRef } from "react";
 import { Package } from "lucide-react";
 
-import { deliveryIsRackOnly } from "@/components/projects/projects-domain";
 import {
+  dateIfAnswered,
   orNull,
   ProjectsRecordForm,
+  yesNoFromBoolDate,
   type FormSection,
   type FormValues,
 } from "@/components/projects/projects-record-form";
@@ -39,8 +40,6 @@ const EMPTY: FormValues = {
   stage_assignee_label: "",
   im_material: "",
   im_material_date: "",
-  power_on_material: "",
-  power_on_material_date: "",
   material_handover_done: "",
   material_handover_date: "",
   material_handover_to_name: "",
@@ -55,10 +54,6 @@ function asBool(v: string | undefined): boolean {
 
 function dateOrEmpty(v: string | null | undefined): string {
   return v ? String(v).slice(0, 10) : "";
-}
-
-function isRackOnly(values: FormValues): boolean {
-  return deliveryIsRackOnly(values.delivery_type);
 }
 
 export function SiteMaterialHandoverFormPage({ projectId }: { projectId: string }) {
@@ -83,11 +78,12 @@ export function SiteMaterialHandoverFormPage({ projectId }: { projectId: string 
       }),
       delivery_type: site.delivery_type ?? "",
       stage_assignee_label: owner.stage_assignee_label,
-      im_material: site.im_material ? "true" : "",
+      im_material: yesNoFromBoolDate(site.im_material, site.im_material_date),
       im_material_date: dateOrEmpty(site.im_material_date),
-      power_on_material: site.power_on_material ? "true" : "",
-      power_on_material_date: dateOrEmpty(site.power_on_material_date),
-      material_handover_done: site.material_handover_done ? "true" : "",
+      material_handover_done: yesNoFromBoolDate(
+        site.material_handover_done,
+        site.material_handover_date,
+      ),
       material_handover_date: dateOrEmpty(site.material_handover_date),
       material_handover_to_name: site.material_handover_to_name ?? "",
       material_handover_progress_status: site.material_handover_progress_status ?? "",
@@ -100,20 +96,14 @@ export function SiteMaterialHandoverFormPage({ projectId }: { projectId: string 
 
   const onSave = useCallback(
     async (v: FormValues) => {
-      const rackOnly = isRackOnly(v);
-
       await updateSiteInstallationByProject(projectId, {
         im_material: asBool(v.im_material),
-        im_material_date: asBool(v.im_material) ? orNull(v.im_material_date) : null,
-        power_on_material: rackOnly ? false : asBool(v.power_on_material),
-        power_on_material_date:
-          rackOnly || !asBool(v.power_on_material)
-            ? null
-            : orNull(v.power_on_material_date),
+        im_material_date: dateIfAnswered(v.im_material, v.im_material_date),
         material_handover_done: asBool(v.material_handover_done),
-        material_handover_date: asBool(v.material_handover_done)
-          ? orNull(v.material_handover_date)
-          : null,
+        material_handover_date: dateIfAnswered(
+          v.material_handover_done,
+          v.material_handover_date,
+        ),
         material_handover_to_name: asBool(v.material_handover_done)
           ? orNull(v.material_handover_to_name)
           : null,
@@ -156,20 +146,6 @@ export function SiteMaterialHandoverFormPage({ projectId }: { projectId: string 
             visibleWhen: (v) => v.im_material === "true",
           },
           {
-            name: "power_on_material",
-            label: "Power-on Material",
-            type: "yesno",
-            clearFieldsOnChange: ["power_on_material_date"],
-            visibleWhen: (v) => !isRackOnly(v),
-          },
-          {
-            name: "power_on_material_date",
-            label: "Power-on Material Date",
-            type: "date",
-            required: true,
-            visibleWhen: (v) => !isRackOnly(v) && v.power_on_material === "true",
-          },
-          {
             name: "material_handover_done",
             label: "Material Handover (WH → Site)",
             type: "yesno",
@@ -205,7 +181,7 @@ export function SiteMaterialHandoverFormPage({ projectId }: { projectId: string 
   return (
     <ProjectsRecordForm
       title="Material Handover"
-      description="Step 5 - IM material, power-on material, and WH → site handover."
+      description="Step 5 - IM material and WH → site handover."
       backHref={
         stageFormMeta.readOnly
           ? (stageFormMeta.backHref ?? `/projects/projects/${projectId}`)

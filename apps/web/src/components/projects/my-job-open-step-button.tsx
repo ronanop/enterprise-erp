@@ -30,7 +30,7 @@ export function MyJobOpenStepButton({
           return;
         }
         onBlocked?.(
-          "Complete the previous step (Partial completed or Completed) before opening this one.",
+          "You are not assigned to this step yet. Ask the project admin to assign you from Project Tracking.",
         );
       }}
     >

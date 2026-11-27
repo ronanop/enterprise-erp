@@ -64,16 +64,10 @@ export function ProjectsSidebar() {
     () => filterProjectsNavGroups(PROJECTS_NAV_GROUPS, projectModuleAdmin),
     [projectModuleAdmin],
   );
-  const paneCount = groups.reduce(
-    (n, g) => n + g.items.reduce((m, item) => m + 1 + (item.children?.length ?? 0), 0),
-    0,
-  );
-
   return (
     <ModuleSidebar
       moduleKey="projects"
       title="Project Delivery"
-      subtitle={`Site installation · ${paneCount} panes`}
       icon={FolderKanban}
       aria-label="Projects workspace"
       groups={groups}

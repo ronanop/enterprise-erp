@@ -3,8 +3,10 @@
 import { Plus, Trash2 } from "lucide-react";
 
 import { FinanceSelect } from "@/components/finance/journals/finance-form-field";
+import { todayISODate } from "@/components/projects/projects-record-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { MATERIAL_TYPE_OTHERS } from "@/components/projects/projects-domain";
 import type { MaterialLine } from "@/services/projects-portal-service";
 
@@ -42,6 +44,11 @@ export function resolvedMaterialType(line: TypeQtyLineDraft): string {
   return line.type.trim();
 }
 
+function deliveryAnswerFromDate(date: string | null | undefined): string {
+  if (!date) return "";
+  return date > todayISODate() ? "false" : "true";
+}
+
 export function linesFromMaterial(
   lines: MaterialLine[] | null | undefined,
   options?: Array<{ value: string }> | null,
@@ -51,12 +58,13 @@ export function linesFromMaterial(
   return lines.map((line) => {
     const rawType = (line.type ?? "").trim();
     const isKnown = Boolean(rawType) && known.has(rawType);
+    const date = line.date ?? "";
     return {
       type: !rawType ? "" : isKnown ? rawType : MATERIAL_TYPE_OTHERS,
       otherLabel: !rawType || isKnown ? "" : rawType,
       quantity: line.quantity != null ? String(line.quantity) : "",
-      delivered: line.date ? "true" : "false",
-      date: line.date ?? "",
+      delivered: deliveryAnswerFromDate(date),
+      date,
     };
   });
 }
@@ -95,8 +103,8 @@ export function typeQtyLinesToMaterial(lines: TypeQtyLineDraft[]): MaterialLine[
     const type = resolvedMaterialType(line);
     if (!type || type === MATERIAL_TYPE_OTHERS) continue;
     const n = Number(line.quantity);
-    const date =
-      line.delivered === "true" ? line.date.trim() : "";
+    const answered = line.delivered === "true" || line.delivered === "false";
+    const date = answered ? line.date.trim() : "";
     if (!Number.isFinite(n) || n < 1) continue;
     out.push({
       type,
@@ -116,13 +124,9 @@ export function hasValidTypeQtyLines(
   return parseTypeQtyLines(raw).some((line) => {
     const type = resolvedMaterialType(line);
     const n = Number(line.quantity);
-    const needsDate =
-      requireDate && line.delivered !== "false";
-    const dateOk = !needsDate
-      ? true
-      : line.delivered === "true"
-        ? Boolean(line.date.trim())
-        : Boolean(line.date.trim());
+    const answered = line.delivered === "true" || line.delivered === "false";
+    // Yes (completed) or No (expected) both need a date when requireDate is on.
+    const dateOk = !requireDate || (answered && Boolean(line.date.trim()));
     return (
       Boolean(type) &&
       type !== MATERIAL_TYPE_OTHERS &&
@@ -173,10 +177,15 @@ export function TypeQtyLinesEditor({
         if (i !== index) return line;
         if (datesOnly) {
           const next = { ...line, ...patch };
-          if (patch.delivered !== undefined && patch.delivered !== "true") {
-            next.date = "";
+          if (patch.delivered !== undefined) {
+            if (patch.delivered === "true") {
+              next.date = todayISODate();
+            } else {
+              // No / unset → clear so Expected date can be picked.
+              next.date = "";
+            }
           }
-          if (patch.date !== undefined) {
+          if (patch.date !== undefined && next.delivered !== "true") {
             next.date = patch.date;
           }
           return next;
@@ -286,7 +295,10 @@ export function TypeQtyLinesEditor({
                 />
                 {datesOnly ? (
                   <div
-                    className={`flex flex-wrap items-center gap-3 text-sm text-foreground ${disabled ? "pointer-events-none" : ""}`}
+                    className={cn(
+                      "flex flex-wrap items-center gap-3 text-sm text-foreground",
+                      disabled && "pointer-events-none",
+                    )}
                   >
                     <label className="flex cursor-pointer items-center gap-1.5">
                       <input
@@ -296,7 +308,7 @@ export function TypeQtyLinesEditor({
                         disabled={disabled}
                         onChange={() =>
                           updateRow(index, {
-                            delivered: line.delivered === "true" ? "false" : "true",
+                            delivered: line.delivered === "true" ? "" : "true",
                           })
                         }
                       />
@@ -318,12 +330,30 @@ export function TypeQtyLinesEditor({
                     </label>
                   </div>
                 ) : null}
-                {showDate && (!datesOnly || line.delivered === "true") ? (
+                {showDate &&
+                  (!datesOnly ||
+                    line.delivered === "true" ||
+                    line.delivered === "false") ? (
                   <Input
                     type="date"
                     value={line.date}
-                    disabled={disabled}
-                    className="h-8 w-36 shrink-0"
+                    disabled={disabled || (datesOnly && line.delivered === "true")}
+                    readOnly={datesOnly && line.delivered === "true"}
+                    aria-readonly={datesOnly && line.delivered === "true" ? true : undefined}
+                    aria-label={
+                      line.delivered === "false"
+                        ? `Expected delivery date for ${displayTypeLabel}`
+                        : `Delivery date for ${displayTypeLabel}`
+                    }
+                    placeholder={
+                      line.delivered === "false" ? "Expected date" : undefined
+                    }
+                    className={cn(
+                      "h-8 shrink-0",
+                      datesOnly &&
+                      line.delivered === "true" &&
+                      "cursor-default opacity-100",
+                    )}
                     onChange={(e) => updateRow(index, { date: e.target.value })}
                   />
                 ) : null}

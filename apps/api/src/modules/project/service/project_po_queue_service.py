@@ -437,6 +437,7 @@ class ProjectPoQueueService:
         handoff_id: UUID,
         *,
         rfai_number: str | None = None,
+        project_manager_employee_id: UUID | None = None,
     ):
         """Create one project for the handoff cloud — no intake form."""
         from modules.project.domain.enums import SiteDeliveryType
@@ -447,6 +448,7 @@ class ProjectPoQueueService:
             raise NotFoundException("PO queue entry not found")
         self.ensure_seed_handoff_linkable(ctx, handoff_id)
         rfai = (rfai_number or "").strip() or None
+        pm_id = project_manager_employee_id
 
         cloud = (getattr(row, "cloud_name", None) or "").strip()
         if not cloud:
@@ -533,16 +535,15 @@ class ProjectPoQueueService:
         ]
 
         prefill = self._seed_prefill(ctx, row)
-        project = ProjectService(self._db).create(
-            ctx,
-            branch_id=row.branch_id,
-            company_id=row.company_id,
-            po_queue_handoff_id=row.id,
-            project_name=cloud[:255],
-            customer_id=prefill.customer_id,
-            description=description,
-            currency_code=prefill.currency_code or "INR",
-            site_installation={
+        create_kwargs: dict = {
+            "branch_id": row.branch_id,
+            "company_id": row.company_id,
+            "po_queue_handoff_id": row.id,
+            "project_name": cloud[:255],
+            "customer_id": prefill.customer_id,
+            "description": description,
+            "currency_code": prefill.currency_code or "INR",
+            "site_installation": {
                 "delivery_type": delivery,
                 "site_name": site_name[:255],
                 "circle": circle_name,
@@ -554,7 +555,10 @@ class ProjectPoQueueService:
                 "rfai_request_done": bool(rfai),
                 "rfai_number": rfai,
             },
-        )
+        }
+        if pm_id is not None:
+            create_kwargs["project_manager_employee_id"] = pm_id
+        project = ProjectService(self._db).create(ctx, **create_kwargs)
         return project
 
     def sync_from_sheet_tracker(

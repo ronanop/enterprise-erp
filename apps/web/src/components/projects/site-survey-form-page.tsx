@@ -16,8 +16,10 @@ import {
   deliveryIncludesRack,
 } from "@/components/projects/projects-domain";
 import {
+  dateIfAnswered,
   orNull,
   ProjectsRecordForm,
+  yesNoFromBoolDate,
   type FormSection,
   type FormValues,
 } from "@/components/projects/projects-record-form";
@@ -78,10 +80,6 @@ function isRack(values: FormValues): boolean {
   return deliveryIncludesRack(values.delivery_type);
 }
 
-function dateOrNull(v: string | undefined): string | null {
-  return orNull(v);
-}
-
 export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
   const stageFormMeta = useSiteStageFormReadOnlyMeta();
   const loadedValuesRef = useRef<FormValues | null>(null);
@@ -115,11 +113,20 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
       lug_lines: serializeTypeQtyLines(
         linesFromMaterial(site.lug_lines, LUG_TYPES),
       ),
-      survey_completed: site.survey_completed ? "true" : "",
+      survey_completed: yesNoFromBoolDate(
+        site.survey_completed,
+        site.survey_completed_date,
+      ),
       survey_completed_date: site.survey_completed_date ?? "",
-      space_available: site.space_available ? "true" : "",
+      space_available: yesNoFromBoolDate(
+        site.space_available,
+        site.space_available_date,
+      ),
       space_available_date: site.space_available_date ?? "",
-      power_available: site.power_available ? "true" : "",
+      power_available: yesNoFromBoolDate(
+        site.power_available,
+        site.power_available_date,
+      ),
       power_available_date: site.power_available_date ?? "",
       tile_details: site.tile_details ?? "",
       survey_progress_status: site.survey_progress_status ?? "",
@@ -135,17 +142,20 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
       const rack = isRack(v);
       const readiness = {
         survey_completed: asBool(v.survey_completed),
-        survey_completed_date: asBool(v.survey_completed)
-          ? dateOrNull(v.survey_completed_date)
-          : null,
+        survey_completed_date: dateIfAnswered(
+          v.survey_completed,
+          v.survey_completed_date,
+        ),
         space_available: asBool(v.space_available),
-        space_available_date: asBool(v.space_available)
-          ? dateOrNull(v.space_available_date)
-          : null,
+        space_available_date: dateIfAnswered(
+          v.space_available,
+          v.space_available_date,
+        ),
         power_available: asBool(v.power_available),
-        power_available_date: asBool(v.power_available)
-          ? dateOrNull(v.power_available_date)
-          : null,
+        power_available_date: dateIfAnswered(
+          v.power_available,
+          v.power_available_date,
+        ),
         tile_details: orNull(v.tile_details),
         survey_progress_status: orNull(v.survey_progress_status),
         survey_attachment_name: orNull(v.survey_attachment_name),
@@ -251,7 +261,8 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
             label: "Space Available Date",
             type: "date",
             required: true,
-            visibleWhen: (v) => v.space_available === "true",
+            visibleWhen: (v) =>
+              v.space_available === "true" || v.space_available === "false",
           },
           {
             name: "power_available",
@@ -265,7 +276,8 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
             label: "Power Available Date",
             type: "date",
             required: true,
-            visibleWhen: (v) => v.power_available === "true",
+            visibleWhen: (v) =>
+              v.power_available === "true" || v.power_available === "false",
           },
           {
             name: "survey_completed",
@@ -279,7 +291,8 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
             label: "Survey Completed Date",
             type: "date",
             required: true,
-            visibleWhen: (v) => v.survey_completed === "true",
+            visibleWhen: (v) =>
+              v.survey_completed === "true" || v.survey_completed === "false",
           },
         ],
       },

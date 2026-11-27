@@ -3,12 +3,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, Pencil, Plus, RefreshCw, Table2, X } from "lucide-react";
 
-import { PageHeader } from "@/components/layout/page-header";
 import {
   emptyTrackerGrid,
   TrackerGridEditor,
 } from "@/components/projects/tracker-grid-editor";
-import { ProjectsErrorBanner, ProjectsListPanel, ProjectsPage } from "@/components/projects/projects-ui";
+import {
+  ProjectsErrorBanner,
+  ProjectsListPanel,
+  ProjectsPage,
+  ProjectsPageHeader,
+} from "@/components/projects/projects-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -156,7 +160,7 @@ export function ProjectTrackerPage() {
 
   return (
     <ProjectsPage>
-      <PageHeader
+      <ProjectsPageHeader
         title="Tracker"
         description="Build an Excel-like tracker table per project. Each save keeps a new version."
         actions={

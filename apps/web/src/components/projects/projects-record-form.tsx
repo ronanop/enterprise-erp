@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -16,7 +16,7 @@ import {
   FinanceSelect,
   FinanceTextarea,
 } from "@/components/finance/journals/finance-form-field";
-import { PageHeader } from "@/components/layout/page-header";
+import { CloudPoDeliveryLinesEditor } from "@/components/projects/cloud-po-delivery-lines";
 import {
   hasValidTypeQtyLines,
   TypeQtyLinesEditor,
@@ -25,6 +25,7 @@ import {
   ProjectsErrorBanner,
   ProjectsPage,
   ProjectsSection,
+  ProjectsPageHeader,
 } from "@/components/projects/projects-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,6 +59,111 @@ export function intOrNull(value: string | undefined): number | null {
   return Number.isFinite(n) ? Math.trunc(n) : null;
 }
 
+/** Local calendar date as `YYYY-MM-DD` for date inputs. */
+export function todayISODate(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** True when a yes/no field has an explicit Yes or No selection. */
+export function answeredYesNo(value: string | undefined): boolean {
+  return value === "true" || value === "false";
+}
+
+/**
+ * Persist a checkpoint date when Yes or No is answered (Yes = completed,
+ * No = expected). Clears the date when the answer is unset.
+ */
+export function dateIfAnswered(
+  answer: string | undefined,
+  date: string | undefined,
+): string | null {
+  return answeredYesNo(answer) ? orNull(date) : null;
+}
+
+/** Load yes/no from a stored boolean + optional expected/completed date. */
+export function yesNoFromBoolDate(
+  done: boolean,
+  date: string | null | undefined,
+): string {
+  if (done) return "true";
+  if (date) return "false";
+  return "";
+}
+
+/**
+ * Load yes/no for date-only checkpoints (no done flag): future date ⇒ No
+ * (expected), today/past ⇒ Yes (completed).
+ */
+export function yesNoFromDateOnly(date: string | null | undefined): string {
+  if (!date) return "";
+  return date > todayISODate() ? "false" : "true";
+}
+
+function isLinkedDateField(name: string): boolean {
+  return name.endsWith("_date");
+}
+
+/**
+ * File picker that avoids `sr-only` + label/`htmlFor`, which scrolls the page
+ * to the clipped input and leaves a blank viewport.
+ */
+function StageFilePicker({
+  current,
+  accept,
+  disabled,
+  onPick,
+}: {
+  current: string;
+  accept?: string;
+  disabled?: boolean;
+  onPick: (fileName: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+      {!disabled ? (
+        <>
+          <input
+            ref={inputRef}
+            type="file"
+            className="hidden"
+            tabIndex={-1}
+            accept={accept}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              onPick(file?.name ?? "");
+              // Allow re-selecting the same file name later.
+              e.target.value = "";
+            }}
+          />
+          <Button
+            type="button"
+            size="sm"
+            className="h-10 w-fit shrink-0 cursor-pointer px-4"
+            onClick={() => inputRef.current?.click()}
+          >
+            Choose file
+          </Button>
+        </>
+      ) : null}
+      <p
+        className={cn(
+          "min-w-0 truncate text-sm",
+          current ? "font-medium text-foreground" : "text-muted-foreground",
+        )}
+        title={current || undefined}
+      >
+        {current || "No file chosen"}
+      </p>
+    </div>
+  );
+}
+
 export type FieldSpec = {
   name: string;
   label: string;
@@ -71,6 +177,7 @@ export type FieldSpec = {
   | "checkbox"
   | "yesno"
   | "type_qty_lines"
+  | "cloud_po_lines"
   | "file";
   required?: boolean;
   /** Fixed choices (domain enums). */
@@ -95,6 +202,10 @@ export type FieldSpec = {
   showDate?: boolean;
   /** For type_qty_lines - lock type/qty; only dates editable (SCM). */
   datesOnly?: boolean;
+  /** For cloud_po_lines - SCM / onsite receipt / installation qty tracking. */
+  deliveryMode?: "scm" | "onsite" | "install";
+  /** Force this control disabled even when the form is editable (reference sections). */
+  readOnly?: boolean;
   /** Hide field unless predicate returns true. */
   visibleWhen?: (values: FormValues) => boolean;
   /** Clear these fields when this yesno/select/checkbox value changes. */
@@ -236,7 +347,63 @@ export function ProjectsRecordForm({
     });
   }
 
+  /**
+   * Yes → stamp linked `*_date` fields with today (locked in UI).
+   * No → clear linked dates so the expected-date picker is empty/editable;
+   *      also clear any non-date linked fields (e.g. handover person).
+   * Unset → clear all linked fields.
+   */
+  function setYesNo(field: FieldSpec, nextValue: string) {
+    if (formReadOnly) return;
+    const linked = field.clearFieldsOnChange ?? [];
+    setValues((v) => {
+      const next = { ...v, [field.name]: nextValue };
+      for (const key of linked) {
+        if (nextValue === "true" && isLinkedDateField(key)) {
+          next[key] = todayISODate();
+        } else {
+          next[key] = "";
+        }
+      }
+      return next;
+    });
+  }
+
+  /** Paired date shows for both Yes and No; other gates (e.g. isServer) still apply. */
+  function isPairedDateVisible(checkbox: FieldSpec, date: FieldSpec): boolean {
+    const answer = values[checkbox.name];
+    if (!answeredYesNo(answer)) return false;
+    if (!date.visibleWhen) return true;
+    return date.visibleWhen({ ...values, [checkbox.name]: "true" });
+  }
+
+  function pairedDateLabel(checkboxName: string, date: FieldSpec): string {
+    if (values[checkboxName] === "false") {
+      return date.label.replace(/\s*Date\s*$/i, "").trim()
+        ? `Expected ${date.label.replace(/\s*Date\s*$/i, "").trim()} Date`
+        : "Expected Date";
+    }
+    return date.label;
+  }
+
   function isFieldVisible(field: FieldSpec): boolean {
+    // Dates linked to a yes/no are visible for both Yes and No (expected date).
+    if (field.type === "date") {
+      for (const section of sections) {
+        for (const f of section.fields) {
+          if (
+            f.type === "yesno" &&
+            (f.clearFieldsOnChange ?? []).includes(field.name)
+          ) {
+            const parentVisible = f.visibleWhen ? f.visibleWhen(values) : true;
+            if (!parentVisible) return false;
+            if (!answeredYesNo(values[f.name])) return false;
+            if (!field.visibleWhen) return true;
+            return field.visibleWhen({ ...values, [f.name]: "true" });
+          }
+        }
+      }
+    }
     return field.visibleWhen ? field.visibleWhen(values) : true;
   }
 
@@ -256,6 +423,7 @@ export function ProjectsRecordForm({
     const spanFull =
       field.full ||
       field.type === "type_qty_lines" ||
+      field.type === "cloud_po_lines" ||
       field.type === "textarea" ||
       field.type === "file";
     if (!spanFull) return undefined;
@@ -263,6 +431,23 @@ export function ProjectsRecordForm({
   }
 
   function renderFieldControl(field: FieldSpec) {
+    const controlDisabled = formReadOnly || Boolean(field.readOnly);
+    if (field.type === "cloud_po_lines") {
+      return (
+        <CloudPoDeliveryLinesEditor
+          value={values[field.name] ?? ""}
+          disabled={controlDisabled}
+          mode={
+            field.deliveryMode === "onsite"
+              ? "onsite"
+              : field.deliveryMode === "install"
+                ? "install"
+                : "scm"
+          }
+          onChange={(next) => set(field.name, next)}
+        />
+      );
+    }
     if (field.type === "type_qty_lines") {
       return (
         <TypeQtyLinesEditor
@@ -271,7 +456,7 @@ export function ProjectsRecordForm({
           addLabel={field.addLabel ?? "Add type"}
           showDate={field.showDate !== false}
           datesOnly={Boolean(field.datesOnly)}
-          disabled={formReadOnly}
+          disabled={controlDisabled}
           onChange={(next) => set(field.name, next)}
         />
       );
@@ -332,41 +517,13 @@ export function ProjectsRecordForm({
     }
     if (field.type === "file") {
       const current = (values[field.name] ?? "").trim();
-      const inputId = `file-${field.name}`;
       return (
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-          {!formReadOnly ? (
-            <>
-              <Input
-                id={inputId}
-                className="sr-only"
-                type="file"
-                tabIndex={-1}
-                aria-hidden="true"
-                accept={field.placeholder || undefined}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  set(field.name, file?.name ?? "");
-                }}
-              />
-              <label
-                htmlFor={inputId}
-                className="inline-flex h-10 w-fit shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md border border-primary/40 bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors duration-200 hover:bg-primary/90 focus-within:outline-none focus-within:ring-2 focus-within:ring-ring/40"
-              >
-                Choose file
-              </label>
-            </>
-          ) : null}
-          <p
-            className={cn(
-              "min-w-0 truncate text-sm",
-              current ? "font-medium text-foreground" : "text-muted-foreground",
-            )}
-            title={current || undefined}
-          >
-            {current || "No file chosen"}
-          </p>
-        </div>
+        <StageFilePicker
+          current={current}
+          accept={field.placeholder || undefined}
+          disabled={formReadOnly}
+          onPick={(fileName) => set(field.name, fileName)}
+        />
       );
     }
     if (field.type === "yesno") {
@@ -384,11 +541,7 @@ export function ProjectsRecordForm({
               checked={values[field.name] === "true"}
               disabled={formReadOnly}
               onChange={() =>
-                set(
-                  field.name,
-                  values[field.name] === "true" ? "" : "true",
-                  field.clearFieldsOnChange,
-                )
+                setYesNo(field, values[field.name] === "true" ? "" : "true")
               }
             />
             <span>Yes</span>
@@ -400,11 +553,7 @@ export function ProjectsRecordForm({
               checked={values[field.name] === "false"}
               disabled={formReadOnly}
               onChange={() =>
-                set(
-                  field.name,
-                  values[field.name] === "false" ? "" : "false",
-                  field.clearFieldsOnChange,
-                )
+                setYesNo(field, values[field.name] === "false" ? "" : "false")
               }
             />
             <span>No</span>
@@ -437,6 +586,23 @@ export function ProjectsRecordForm({
         </label>
       );
     }
+    if (field.type === "date") {
+      return (
+        <Input
+          className={cn(
+            "min-w-0 cursor-pointer",
+            formReadOnly && READ_ONLY_CONTROL_CLASS,
+          )}
+          type="date"
+          value={values[field.name] ?? ""}
+          placeholder={field.placeholder}
+          min={field.min}
+          max={field.max}
+          disabled={formReadOnly}
+          onChange={(e) => set(field.name, e.target.value)}
+        />
+      );
+    }
     return (
       <Input
         className={cn("min-w-0 w-full", formReadOnly && READ_ONLY_CONTROL_CLASS)}
@@ -452,14 +618,34 @@ export function ProjectsRecordForm({
     );
   }
 
-  function renderField(field: FieldSpec, className?: string) {
+  function renderField(
+    field: FieldSpec,
+    className?: string,
+    opts?: { labelOverride?: string; forceReadOnly?: boolean },
+  ) {
+    const label = opts?.labelOverride ?? field.label;
+    const controlField =
+      opts?.forceReadOnly && field.type === "date"
+        ? { ...field }
+        : field;
     return (
       <FinanceField
         key={field.name}
-        label={isFieldRequired(field) ? `${field.label} *` : field.label}
+        label={isFieldRequired(field) ? `${label} *` : label}
         className={cn("min-w-0", className)}
       >
-        {renderFieldControl(field)}
+        {opts?.forceReadOnly && field.type === "date" ? (
+          <Input
+            className={cn("min-w-0 cursor-default", READ_ONLY_CONTROL_CLASS)}
+            type="date"
+            value={values[field.name] ?? ""}
+            disabled
+            readOnly
+            aria-readonly="true"
+          />
+        ) : (
+          renderFieldControl(controlField)
+        )}
       </FinanceField>
     );
   }
@@ -593,7 +779,7 @@ export function ProjectsRecordForm({
         {backLabel}
       </Link>
 
-      <PageHeader title={title} description={description} actions={headerActions} />
+      <ProjectsPageHeader title={title} description={description} actions={headerActions} />
 
       {error ? <ProjectsErrorBanner>{error}</ProjectsErrorBanner> : null}
 
@@ -623,21 +809,27 @@ export function ProjectsRecordForm({
               {groupFieldBlocks(section.fields).map((block) => {
                 if (block.kind === "pair") {
                   if (!isFieldVisible(block.checkbox)) return null;
-                  const dateVisible = isFieldVisible(block.date);
+                  const answer = values[block.checkbox.name];
+                  const dateVisible = isPairedDateVisible(block.checkbox, block.date);
                   return (
                     <div
                       key={block.checkbox.name}
                       className={cn(
                         "grid min-w-0 grid-cols-1 items-start gap-x-8 gap-y-5",
                         // Always reserve full row width so checkboxes stay in the left column;
-                        // date appears in the right column only when the checkbox is checked.
+                        // date appears in the right column when Yes (today, locked) or No (expected).
                         section.columns === 3
                           ? "sm:col-span-2 xl:col-span-3 sm:grid-cols-2"
                           : "sm:col-span-2 sm:grid-cols-2",
                       )}
                     >
                       {renderField(block.checkbox)}
-                      {dateVisible ? renderField(block.date) : (
+                      {dateVisible ? (
+                        renderField(block.date, undefined, {
+                          labelOverride: pairedDateLabel(block.checkbox.name, block.date),
+                          forceReadOnly: answer === "true",
+                        })
+                      ) : (
                         <div className="hidden sm:block" aria-hidden="true" />
                       )}
                     </div>

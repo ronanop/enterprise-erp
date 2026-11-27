@@ -6,11 +6,13 @@ import { Package, Truck, Warehouse } from "lucide-react";
 import {
   deliveryIncludesRack,
   deliveryIncludesServer,
-  deliveryIsRackOnly,
 } from "@/components/projects/projects-domain";
 import {
+  dateIfAnswered,
   orNull,
   ProjectsRecordForm,
+  yesNoFromBoolDate,
+  yesNoFromDateOnly,
   type FormSection,
   type FormValues,
 } from "@/components/projects/projects-record-form";
@@ -50,8 +52,6 @@ const EMPTY: FormValues = {
   pdu_on_site_delivery_date: "",
   im_material: "",
   im_material_date: "",
-  power_on_material: "",
-  power_on_material_date: "",
   material_handover_done: "",
   material_handover_date: "",
   material_handover_to_name: "",
@@ -76,10 +76,6 @@ function isServer(values: FormValues): boolean {
   return deliveryIncludesServer(values.delivery_type);
 }
 
-function isRackOnly(values: FormValues): boolean {
-  return deliveryIsRackOnly(values.delivery_type);
-}
-
 export function SiteOnsiteFormPage({ projectId }: { projectId: string }) {
   const stageFormMeta = useSiteStageFormReadOnlyMeta();
   const loadedValuesRef = useRef<FormValues | null>(null);
@@ -102,19 +98,22 @@ export function SiteOnsiteFormPage({ projectId }: { projectId: string }) {
       }),
       delivery_type: site.delivery_type ?? "",
       stage_assignee_label: owner.stage_assignee_label,
-      mo_request: site.mo_request ? "true" : "",
+      mo_request: yesNoFromBoolDate(site.mo_request, site.mo_request_date),
       mo_request_date: dateOrEmpty(site.mo_request_date),
-      server_on_site_delivery_done: site.server_on_site_delivery_date ? "true" : "false",
+      server_on_site_delivery_done: yesNoFromDateOnly(
+        site.server_on_site_delivery_date,
+      ),
       server_on_site_delivery_date: dateOrEmpty(site.server_on_site_delivery_date),
-      rack_on_site_delivery_done: site.rack_on_site_delivery_date ? "true" : "false",
+      rack_on_site_delivery_done: yesNoFromDateOnly(site.rack_on_site_delivery_date),
       rack_on_site_delivery_date: dateOrEmpty(site.rack_on_site_delivery_date),
-      pdu_on_site_delivery_done: site.pdu_on_site_delivery_date ? "true" : "false",
+      pdu_on_site_delivery_done: yesNoFromDateOnly(site.pdu_on_site_delivery_date),
       pdu_on_site_delivery_date: dateOrEmpty(site.pdu_on_site_delivery_date),
-      im_material: site.im_material ? "true" : "",
+      im_material: yesNoFromBoolDate(site.im_material, site.im_material_date),
       im_material_date: dateOrEmpty(site.im_material_date),
-      power_on_material: site.power_on_material ? "true" : "",
-      power_on_material_date: dateOrEmpty(site.power_on_material_date),
-      material_handover_done: site.material_handover_done ? "true" : "",
+      material_handover_done: yesNoFromBoolDate(
+        site.material_handover_done,
+        site.material_handover_date,
+      ),
       material_handover_date: dateOrEmpty(site.material_handover_date),
       material_handover_to_name: site.material_handover_to_name ?? "",
       onsite_progress_status: site.onsite_progress_status ?? "",
@@ -129,33 +128,30 @@ export function SiteOnsiteFormPage({ projectId }: { projectId: string }) {
     async (v: FormValues) => {
       const rack = isRack(v);
       const server = isServer(v);
-      const rackOnly = isRackOnly(v);
 
       await updateSiteInstallationByProject(projectId, {
         mo_request: asBool(v.mo_request),
-        mo_request_date: asBool(v.mo_request) ? orNull(v.mo_request_date) : null,
-        server_on_site_delivery_date:
-          server && asBool(v.server_on_site_delivery_done)
-            ? orNull(v.server_on_site_delivery_date)
-            : null,
-        rack_on_site_delivery_date:
-          rack && asBool(v.rack_on_site_delivery_done)
-            ? orNull(v.rack_on_site_delivery_date)
-            : null,
-        pdu_on_site_delivery_date: asBool(v.pdu_on_site_delivery_done)
-          ? orNull(v.pdu_on_site_delivery_date)
+        mo_request_date: dateIfAnswered(v.mo_request, v.mo_request_date),
+        server_on_site_delivery_date: server
+          ? dateIfAnswered(
+            v.server_on_site_delivery_done,
+            v.server_on_site_delivery_date,
+          )
           : null,
+        rack_on_site_delivery_date: rack
+          ? dateIfAnswered(v.rack_on_site_delivery_done, v.rack_on_site_delivery_date)
+          : null,
+        pdu_on_site_delivery_date: dateIfAnswered(
+          v.pdu_on_site_delivery_done,
+          v.pdu_on_site_delivery_date,
+        ),
         im_material: asBool(v.im_material),
-        im_material_date: asBool(v.im_material) ? orNull(v.im_material_date) : null,
-        power_on_material: rackOnly ? false : asBool(v.power_on_material),
-        power_on_material_date:
-          rackOnly || !asBool(v.power_on_material)
-            ? null
-            : orNull(v.power_on_material_date),
+        im_material_date: dateIfAnswered(v.im_material, v.im_material_date),
         material_handover_done: asBool(v.material_handover_done),
-        material_handover_date: asBool(v.material_handover_done)
-          ? orNull(v.material_handover_date)
-          : null,
+        material_handover_date: dateIfAnswered(
+          v.material_handover_done,
+          v.material_handover_date,
+        ),
         material_handover_to_name: asBool(v.material_handover_done)
           ? orNull(v.material_handover_to_name)
           : null,
@@ -263,20 +259,6 @@ export function SiteOnsiteFormPage({ projectId }: { projectId: string }) {
             type: "date",
             required: true,
             visibleWhen: (v) => v.im_material === "true",
-          },
-          {
-            name: "power_on_material",
-            label: "Power-on Material",
-            type: "yesno",
-            clearFieldsOnChange: ["power_on_material_date"],
-            visibleWhen: (v) => !isRackOnly(v),
-          },
-          {
-            name: "power_on_material_date",
-            label: "Power-on Material Date",
-            type: "date",
-            required: true,
-            visibleWhen: (v) => !isRackOnly(v) && v.power_on_material === "true",
           },
           {
             name: "material_handover_done",

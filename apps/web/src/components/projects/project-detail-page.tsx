@@ -6,13 +6,16 @@ import {
   ArrowLeft,
   Cloud,
   FolderKanban,
-  Pencil,
+  Package,
   RefreshCw,
   ShoppingCart,
 } from "lucide-react";
 
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
-import { PageHeader } from "@/components/layout/page-header";
+import {
+  draftsFromCloudPoLines,
+  remainingQty,
+} from "@/components/projects/cloud-po-delivery-lines";
 import { projectTypeLabel } from "@/components/projects/projects-domain";
 import {
   ProjectsDetailGrid,
@@ -22,6 +25,7 @@ import {
   ProjectsListToolbar,
   ProjectsPage,
   ProjectsSection,
+  ProjectsPageHeader,
 } from "@/components/projects/projects-ui";
 import { intakeAdminDetailRows } from "@/components/projects/site-intake-summary";
 import {
@@ -32,6 +36,7 @@ import { ProjectExcelExportButton } from "@/components/projects/site-stage-expor
 import { useProjectsLookups } from "@/components/projects/use-projects-lookups";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { ApiClientError } from "@/services/api-client";
 import {
   completeProject,
@@ -39,7 +44,6 @@ import {
   getProject,
   getSiteInstallationByProject,
   listBranchOptions,
-  type CloudPoLine,
   type Project,
   type SiteInstallation,
 } from "@/services/projects-portal-service";
@@ -112,14 +116,14 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
     }
   }
 
-  const cloudPoLines = useMemo<CloudPoLine[]>(() => {
-    const lines = Array.isArray(site?.cloud_po_lines) ? site.cloud_po_lines : [];
-    return [...lines].sort((a, b) => {
+  const cloudPoLines = useMemo(() => {
+    if (!site) return [];
+    return [...draftsFromCloudPoLines(site)].sort((a, b) => {
       const po = (a.customer_po_number || "").localeCompare(b.customer_po_number || "");
       if (po !== 0) return po;
       return (a.line_type || "").localeCompare(b.line_type || "");
     });
-  }, [site?.cloud_po_lines]);
+  }, [site]);
 
   if (loading && !project) {
     return (
@@ -180,19 +184,10 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
             Refresh
           </Button>
           <ProjectExcelExportButton projectId={project.id} />
-          {projectModuleAdmin ? (
-            <Link
-              href={`/projects/projects/${project.id}/edit`}
-              className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-border/80 bg-card px-3 text-sm font-medium shadow-sm transition-colors duration-200 hover:bg-muted"
-            >
-              <Pencil className="size-3.5" />
-              Edit
-            </Link>
-          ) : null}
         </div>
       </div>
 
-      <PageHeader
+      <ProjectsPageHeader
         title={`${project.project_name} · ${project.project_code}`}
         description={`${projectTypeLabel(project.project_type)} · ${formatDate(
           project.planned_start_date,
@@ -224,59 +219,132 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
       <SiteInstallationWorkflow projectId={project.id} />
 
       {showCloudPoTable ? (
-        <ProjectsListPanel>
-          <ProjectsListToolbar
-            title={cloudName || project.project_name}
-            subtitle={`All POs for this cloud · ${cloudPoLines.length} line${cloudPoLines.length === 1 ? "" : "s"}`}
-            icon={cloudName ? Cloud : ShoppingCart}
-            count={cloudPoLines.length}
-          />
-          <div className="erp-scroll overflow-x-auto">
-            {cloudPoLines.length === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-                No PO lines stored for this cloud yet.
-              </p>
-            ) : (
-              <table className="w-full min-w-[880px] text-left text-[13px]">
-                <thead className="border-b border-border/70 bg-muted/80 text-[11px] text-muted-foreground">
-                  <tr>
-                    <th className="whitespace-nowrap px-3 py-2 font-semibold">Project</th>
-                    <th className="whitespace-nowrap px-3 py-2 font-semibold">Circle</th>
-                    <th className="whitespace-nowrap px-3 py-2 font-semibold">Site</th>
-                    <th className="whitespace-nowrap px-3 py-2 font-semibold">Type</th>
-                    <th className="whitespace-nowrap px-3 py-2 font-semibold">Qty</th>
-                    <th className="whitespace-nowrap px-3 py-2 font-semibold">PO</th>
-                    <th className="whitespace-nowrap px-3 py-2 font-semibold">PO Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cloudPoLines.map((row, index) => (
-                    <tr
-                      key={`${row.customer_po_number || "po"}-${row.line_type || ""}-${index}`}
-                      className="border-b border-border/40"
-                    >
-                      <td className="max-w-[180px] truncate px-3 py-2 font-medium">
-                        {row.project_name || "—"}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2">{row.circle_name || "—"}</td>
-                      <td className="max-w-[160px] truncate px-3 py-2">{row.site_name || "—"}</td>
-                      <td className="whitespace-nowrap px-3 py-2">{row.line_type || "—"}</td>
-                      <td className="whitespace-nowrap px-3 py-2 tabular-nums">
-                        {row.quantity != null && row.quantity > 0 ? row.quantity : "—"}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2 font-mono text-xs tabular-nums">
-                        {row.customer_po_number || "—"}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
-                        {formatDate(row.document_date)}
-                      </td>
+        <>
+          <ProjectsListPanel>
+            <ProjectsListToolbar
+              title={cloudName || project.project_name}
+              subtitle={`All POs for this cloud · ${cloudPoLines.length} line${cloudPoLines.length === 1 ? "" : "s"}`}
+              icon={cloudName ? Cloud : ShoppingCart}
+              count={cloudPoLines.length}
+            />
+            <div className="erp-scroll overflow-x-auto">
+              {cloudPoLines.length === 0 ? (
+                <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  No PO lines stored for this cloud yet.
+                </p>
+              ) : (
+                <table className="w-full min-w-[880px] text-left text-[13px]">
+                  <thead className="border-b border-border/70 bg-muted/80 text-[11px] text-muted-foreground">
+                    <tr>
+                      <th className="whitespace-nowrap px-3 py-2 font-semibold">Project</th>
+                      <th className="whitespace-nowrap px-3 py-2 font-semibold">Circle</th>
+                      <th className="whitespace-nowrap px-3 py-2 font-semibold">Site</th>
+                      <th className="whitespace-nowrap px-3 py-2 font-semibold">Type</th>
+                      <th className="whitespace-nowrap px-3 py-2 font-semibold">Qty</th>
+                      <th className="whitespace-nowrap px-3 py-2 font-semibold">PO</th>
+                      <th className="whitespace-nowrap px-3 py-2 font-semibold">PO Date</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </ProjectsListPanel>
+                  </thead>
+                  <tbody>
+                    {cloudPoLines.map((row, index) => {
+                      const qty = Number(row.quantity) || 0;
+                      return (
+                        <tr
+                          key={`${row.customer_po_number || "po"}-${row.line_type || ""}-${index}`}
+                          className="border-b border-border/40"
+                        >
+                          <td className="max-w-[180px] truncate px-3 py-2 font-medium">
+                            {row.project_name || "—"}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2">{row.circle_name || "—"}</td>
+                          <td className="max-w-[160px] truncate px-3 py-2">{row.site_name || "—"}</td>
+                          <td className="whitespace-nowrap px-3 py-2">{row.line_type || "—"}</td>
+                          <td className="whitespace-nowrap px-3 py-2 tabular-nums">
+                            {qty > 0 ? qty : "—"}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2 font-mono text-xs tabular-nums">
+                            {row.customer_po_number || "—"}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
+                            {formatDate(row.document_date || null)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </ProjectsListPanel>
+
+          <ProjectsListPanel>
+            <ProjectsListToolbar
+              title="Delivery & installation progress"
+              subtitle="SCM delivered · Onsite received · Installed · Remaining to install"
+              icon={Package}
+              count={cloudPoLines.filter((r) => Number(r.quantity) > 0).length}
+            />
+            <div className="erp-scroll overflow-x-auto">
+              {cloudPoLines.filter((r) => Number(r.quantity) > 0).length === 0 ? (
+                <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  No type / quantity lines to track yet.
+                </p>
+              ) : (
+                <table className="w-full min-w-[720px] text-left text-[13px]">
+                  <thead className="border-b border-border/70 bg-muted/80 text-[11px] uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="whitespace-nowrap px-3 py-2 font-semibold">Type</th>
+                      <th className="whitespace-nowrap px-3 py-2 font-semibold">Qty</th>
+                      <th className="whitespace-nowrap px-3 py-2 font-semibold">SCM delivered</th>
+                      <th className="whitespace-nowrap px-3 py-2 font-semibold">Onsite delivered</th>
+                      <th className="whitespace-nowrap px-3 py-2 font-semibold">Installed</th>
+                      <th className="whitespace-nowrap px-3 py-2 font-semibold">Remaining</th>
+                      <th className="whitespace-nowrap px-3 py-2 font-semibold">PO</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cloudPoLines
+                      .filter((row) => Number(row.quantity) > 0)
+                      .map((row, index) => {
+                        const qty = Number(row.quantity) || 0;
+                        const scm = Number(row.delivered_quantity) || 0;
+                        const onsite = Number(row.onsite_delivered_quantity) || 0;
+                        const installed = Number(row.installed_quantity) || 0;
+                        const remaining = remainingQty(qty, installed);
+                        return (
+                          <tr
+                            key={`progress-${row.customer_po_number || "po"}-${row.line_type || ""}-${index}`}
+                            className="border-b border-border/40"
+                          >
+                            <td className="whitespace-nowrap px-3 py-2 font-medium">
+                              {row.line_type || "—"}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2 tabular-nums">{qty}</td>
+                            <td className="whitespace-nowrap px-3 py-2 tabular-nums">{scm}</td>
+                            <td className="whitespace-nowrap px-3 py-2 tabular-nums">{onsite}</td>
+                            <td className="whitespace-nowrap px-3 py-2 tabular-nums">{installed}</td>
+                            <td
+                              className={cn(
+                                "whitespace-nowrap px-3 py-2 tabular-nums",
+                                remaining > 0
+                                  ? "font-medium text-amber-700"
+                                  : "text-emerald-700",
+                              )}
+                            >
+                              {remaining}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2 font-mono text-xs tabular-nums text-muted-foreground">
+                              {row.customer_po_number || "—"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </ProjectsListPanel>
+        </>
       ) : (
         <ProjectsSection
           title="Project Details"

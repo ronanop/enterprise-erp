@@ -28,8 +28,8 @@ import {
   ProjectsSection,
   ProjectsViewAllLink,
   ProjectsWarnBanner,
+  ProjectsPageHeader,
 } from "@/components/projects/projects-ui";
-import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { isAuthenticated } from "@/lib/auth";
@@ -150,7 +150,7 @@ export function ProjectsMemberDashboard() {
 
   return (
     <ProjectsPage>
-      <PageHeader
+      <ProjectsPageHeader
         title="My Delivery Dashboard"
         description="Your assigned site steps - open work, waiting steps, completed jobs, and follow-ups."
         actions={

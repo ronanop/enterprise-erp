@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Clock3, IndianRupee, RefreshCw, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 
-import { PageHeader } from "@/components/layout/page-header";
 import {
   ProjectsErrorBanner,
   ProjectsKpiCard,
@@ -14,6 +13,7 @@ import {
   ProjectsSortableTh,
   sortRows,
   useTableSort,
+  ProjectsPageHeader,
 } from "@/components/projects/projects-ui";
 import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
@@ -138,7 +138,7 @@ export function ProjectProfitabilityPage() {
 
   return (
     <ProjectsPage>
-      <PageHeader
+      <ProjectsPageHeader
         title="Project Profitability"
         description="Budget versus actual cost for every project, with effort logged and overrun exposure."
         actions={

@@ -170,7 +170,9 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
           valueFromRemarks(site?.remarks, "Server type") ||
           "",
         site_name: site?.site_name ?? "",
-        project_manager_employee_id: record.project_manager_employee_id,
+        project_manager_employee_id: record.project_manager_employee_id
+          ? String(record.project_manager_employee_id)
+          : "",
         rfai_request_done: site?.rfai_request_done ? "true" : "false",
         rfai_number: site?.rfai_number ?? "",
       };

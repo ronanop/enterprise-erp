@@ -1,8 +1,15 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
-import { Cable, Warehouse } from "lucide-react";
+import { Package } from "lucide-react";
 
+import {
+  cloudPoLinesFullyDelivered,
+  draftsFromCloudPoLines,
+  draftsToCloudPoLines,
+  parseCloudPoDeliveryDrafts,
+  serializeCloudPoDeliveryDrafts,
+} from "@/components/projects/cloud-po-delivery-lines";
 import {
   linesFromMaterial,
   serializeTypeQtyLines,
@@ -14,10 +21,8 @@ import {
   INDUSTRIAL_SOCKET_TYPES,
   LUG_TYPES,
   deliveryIncludesRack,
-  deliveryIncludesServer,
 } from "@/components/projects/projects-domain";
 import {
-  intOrNull,
   orNull,
   ProjectsRecordForm,
   type FormSection,
@@ -39,7 +44,10 @@ import {
   resolveStageOwnerDisplay,
   stageOwnerBannerSection,
 } from "@/components/projects/site-stage-assignments";
-import { isProgressCompleteForAdvance, stageClosingSections } from "@/components/projects/site-stage-attachment";
+import {
+  isProgressCompleteForAdvance,
+  stageClosingSections,
+} from "@/components/projects/site-stage-attachment";
 import { useSiteStageFormReadOnlyMeta } from "@/components/projects/site-stage-form-read-only-context";
 import { SiteStageExportButton } from "@/components/projects/site-stage-export-button";
 
@@ -54,33 +62,14 @@ const EMPTY: FormValues = {
   cable_lines: EMPTY_LINES,
   socket_lines: EMPTY_LINES,
   lug_lines: EMPTY_LINES,
-  server_qty: "",
-  rack_qty: "",
-  server_wh_delivery_done: "",
-  server_wh_delivery_date: "",
-  rack_wh_delivery_done: "",
-  rack_wh_delivery_date: "",
-  pdu_wh_delivery_done: "",
-  pdu_wh_delivery_date: "",
+  cloud_po_lines: "[]",
   scm_progress_status: "",
   scm_attachment_name: "",
   scm_remarks: "",
 };
 
-function asBool(v: string | undefined): boolean {
-  return v === "true";
-}
-
-function dateOrEmpty(v: string | null | undefined): string {
-  return v ? String(v).slice(0, 10) : "";
-}
-
 function isRack(values: FormValues): boolean {
   return deliveryIncludesRack(values.delivery_type);
-}
-
-function isServer(values: FormValues): boolean {
-  return deliveryIncludesServer(values.delivery_type);
 }
 
 export function SiteScmFormPage({ projectId }: { projectId: string }) {
@@ -114,14 +103,7 @@ export function SiteScmFormPage({ projectId }: { projectId: string }) {
         lug_lines: serializeTypeQtyLines(
           linesFromMaterial(site.lug_lines, LUG_TYPES),
         ),
-        server_qty: site.server_qty != null ? String(site.server_qty) : "",
-        rack_qty: site.rack_qty != null ? String(site.rack_qty) : "",
-        server_wh_delivery_done: site.server_wh_delivery_date ? "true" : "false",
-        server_wh_delivery_date: dateOrEmpty(site.server_wh_delivery_date),
-        rack_wh_delivery_done: site.rack_wh_delivery_date ? "true" : "false",
-        rack_wh_delivery_date: dateOrEmpty(site.rack_wh_delivery_date),
-        pdu_wh_delivery_done: site.pdu_wh_delivery_date ? "true" : "false",
-        pdu_wh_delivery_date: dateOrEmpty(site.pdu_wh_delivery_date),
+        cloud_po_lines: serializeCloudPoDeliveryDrafts(draftsFromCloudPoLines(site)),
         scm_progress_status: site.scm_progress_status ?? "",
         scm_attachment_name: site.scm_attachment_name ?? "",
         scm_remarks: site.scm_remarks ?? "",
@@ -132,7 +114,16 @@ export function SiteScmFormPage({ projectId }: { projectId: string }) {
   const onSave = useCallback(
     async (v: FormValues) => {
       const rack = isRack(v);
-      const server = isServer(v);
+      const poLines = draftsToCloudPoLines(parseCloudPoDeliveryDrafts(v.cloud_po_lines));
+      const fullyDelivered = cloudPoLinesFullyDelivered(
+        parseCloudPoDeliveryDrafts(v.cloud_po_lines),
+      );
+
+      if (isProgressCompleteForAdvance(v.scm_progress_status) && !fullyDelivered) {
+        throw new Error(
+          "Cannot mark SCM Completed until every type quantity is fully delivered. Use Partial completed so the next stage can still be assigned.",
+        );
+      }
 
       await updateSiteInstallationByProject(projectId, {
         ...(rack
@@ -148,23 +139,13 @@ export function SiteScmFormPage({ projectId }: { projectId: string }) {
             industrial_socket_lines: [],
             lug_lines: [],
           }),
-        server_qty: server ? intOrNull(v.server_qty) : null,
-        rack_qty: rack ? intOrNull(v.rack_qty) : null,
-        server_wh_delivery_date:
-          server && asBool(v.server_wh_delivery_done)
-            ? orNull(v.server_wh_delivery_date)
-            : null,
-        rack_wh_delivery_date:
-          rack && asBool(v.rack_wh_delivery_done) ? orNull(v.rack_wh_delivery_date) : null,
-        pdu_wh_delivery_date: asBool(v.pdu_wh_delivery_done)
-          ? orNull(v.pdu_wh_delivery_date)
-          : null,
+        cloud_po_lines: poLines,
         scm_progress_status: orNull(v.scm_progress_status),
         scm_attachment_name: orNull(v.scm_attachment_name),
         scm_remarks: orNull(v.scm_remarks),
       });
 
-      if (isProgressCompleteForAdvance(v.scm_progress_status)) {
+      if (isProgressCompleteForAdvance(v.scm_progress_status) && fullyDelivered) {
         await advanceSiteInstallation(projectId, "complete_scm");
       }
 
@@ -178,11 +159,17 @@ export function SiteScmFormPage({ projectId }: { projectId: string }) {
       intakeSummarySection(),
       stageOwnerBannerSection(),
       {
-        title: "Site materials delivery",
+        title: "Types, quantities & site materials",
         subtitle:
-          "Types and quantities come from Survey (read-only). Mark Yes/No and enter the delivery date when Yes.",
-        icon: Cable,
+          "Enter delivered qty for each PO type (remaining is calculated). Site materials come from Survey — mark Yes/No and the delivery date when Yes. SCM can only be Completed when remaining is 0 for every PO line; use Partial completed to unlock the next stage sooner.",
+        icon: Package,
         fields: [
+          {
+            name: "cloud_po_lines",
+            label: "Type / Qty delivery",
+            type: "cloud_po_lines",
+            full: true,
+          },
           {
             name: "cable_lines",
             label: "Cable",
@@ -216,72 +203,6 @@ export function SiteScmFormPage({ projectId }: { projectId: string }) {
             options: LUG_TYPES,
             visibleWhen: isRack,
           },
-          {
-            name: "server_qty",
-            label: "Server Qty",
-            type: "number",
-            required: true,
-            min: "0",
-            step: "1",
-            visibleWhen: isServer,
-          },
-          {
-            name: "rack_qty",
-            label: "Rack Qty",
-            type: "number",
-            required: true,
-            min: "0",
-            step: "1",
-            visibleWhen: isRack,
-          },
-        ],
-      },
-      {
-        title: "Warehouse delivery",
-        subtitle: "Mark Yes/No for each WH delivery; enter the date when Yes.",
-        icon: Warehouse,
-        fields: [
-          {
-            name: "server_wh_delivery_done",
-            label: "Server WH Delivery",
-            type: "yesno",
-            clearFieldsOnChange: ["server_wh_delivery_date"],
-            visibleWhen: isServer,
-          },
-          {
-            name: "server_wh_delivery_date",
-            label: "Server WH Delivery Date",
-            type: "date",
-            required: true,
-            visibleWhen: (v) => isServer(v) && v.server_wh_delivery_done === "true",
-          },
-          {
-            name: "rack_wh_delivery_done",
-            label: "Rack WH Delivery",
-            type: "yesno",
-            clearFieldsOnChange: ["rack_wh_delivery_date"],
-            visibleWhen: isRack,
-          },
-          {
-            name: "rack_wh_delivery_date",
-            label: "Rack WH Delivery Date",
-            type: "date",
-            required: true,
-            visibleWhen: (v) => isRack(v) && v.rack_wh_delivery_done === "true",
-          },
-          {
-            name: "pdu_wh_delivery_done",
-            label: "PDU WH Delivery",
-            type: "yesno",
-            clearFieldsOnChange: ["pdu_wh_delivery_date"],
-          },
-          {
-            name: "pdu_wh_delivery_date",
-            label: "PDU WH Delivery Date",
-            type: "date",
-            required: true,
-            visibleWhen: (v) => v.pdu_wh_delivery_done === "true",
-          },
         ],
       },
       ...stageClosingSections(
@@ -297,7 +218,7 @@ export function SiteScmFormPage({ projectId }: { projectId: string }) {
   return (
     <ProjectsRecordForm
       title="SCM / Logistics"
-      description="Step 3 - Site materials, quantities, and warehouse delivery. Next: Onsite Delivery, then Material Handover."
+      description="Step 3 - Types/quantities and site materials delivery. Next: Onsite Delivery."
       backHref={
         stageFormMeta.readOnly
           ? (stageFormMeta.backHref ?? `/projects/projects/${projectId}`)
